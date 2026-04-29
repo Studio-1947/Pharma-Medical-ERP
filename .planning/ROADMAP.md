@@ -24,7 +24,13 @@ A brownfield completion project. The infrastructure (NestJS, schema, module stub
   2. Two simultaneous checkout requests produce invoice numbers that differ by exactly 1 (no duplicates), verified by running two parallel curl calls and inspecting the response
   3. `TaxService.calculate(247.50, 12)` returns cgst=14.85, sgst=14.85, total=29.70 — no floating-point drift
   4. `pnpm db:seed` completes without error; admin@mederp.com login succeeds; two branches, 20 products across all schedule types, and 3 staff users are visible in the database
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 01-01-PLAN.md — Add cgstAmt/sgstAmt/igstAmt, reservedQty, customerGstin via Drizzle migration
+- [ ] 01-02-PLAN.md — Install decimal.js, rewrite TaxService with precision arithmetic (TDD)
+- [ ] 01-03-PLAN.md — Create RedisModule, inject into BillingRepository, replace SELECT COUNT+1 with INCR
+- [ ] 01-04-PLAN.md — Create seed script: 2 branches, 20 medicines, 4 users, 2 suppliers
 
 ### Phase 2: Billing Pipeline Compliance
 **Goal**: A cashier can complete a legally compliant checkout — Schedule H drugs blocked without Rx, GST split stored per line, stock reserved and committed atomically, split payments accepted, and returns processed
@@ -91,7 +97,7 @@ A brownfield completion project. The infrastructure (NestJS, schema, module stub
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Schema and Infrastructure Fixes | 0/TBD | Not started | - |
+| 1. Schema and Infrastructure Fixes | 0/4 | Not started | - |
 | 2. Billing Pipeline Compliance | 0/TBD | Not started | - |
 | 3. Backend Modules | 0/TBD | Not started | - |
 | 4. Reports and Background Jobs | 0/TBD | Not started | - |
