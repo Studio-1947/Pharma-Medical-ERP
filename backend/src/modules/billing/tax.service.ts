@@ -1,4 +1,5 @@
 import { Injectable } from "@nestjs/common";
+import Decimal from "decimal.js";
 
 export interface TaxBreakdown {
   taxableAmount: number;
@@ -21,26 +22,48 @@ export class TaxService {
     taxPct: number,
     interState = false,
   ): { lineTotal: number; taxAmount: number; breakdown: TaxBreakdown } {
-    const gross = unitPrice * quantity;
-    const discount = (gross * discountPct) / 100;
-    const taxableAmount = gross - discount;
-    const totalTax = (taxableAmount * taxPct) / 100;
-    const lineTotal = taxableAmount + totalTax;
+    const gross = new Decimal(unitPrice).times(quantity);
+    const discount = gross.times(discountPct).dividedBy(100);
+    const taxableAmount = gross.minus(discount);
+    const totalTax = taxableAmount.times(taxPct).dividedBy(100);
+    const lineTotal = taxableAmount.plus(totalTax);
+    const halfTax = totalTax.dividedBy(2);
 
     const breakdown: TaxBreakdown = interState
-      ? { taxableAmount, cgst: 0, sgst: 0, igst: totalTax, totalTax }
-      : { taxableAmount, cgst: totalTax / 2, sgst: totalTax / 2, igst: 0, totalTax };
+      ? {
+          taxableAmount: taxableAmount.toNumber(),
+          cgst: 0,
+          sgst: 0,
+          igst: totalTax.toNumber(),
+          totalTax: totalTax.toNumber(),
+        }
+      : {
+          taxableAmount: taxableAmount.toNumber(),
+          cgst: halfTax.toNumber(),
+          sgst: halfTax.toNumber(),
+          igst: 0,
+          totalTax: totalTax.toNumber(),
+        };
 
-    return { lineTotal, taxAmount: totalTax, breakdown };
+    return { lineTotal: lineTotal.toNumber(), taxAmount: totalTax.toNumber(), breakdown };
   }
 
   /**
    * Aggregates tax breakdowns from all line items into invoice totals.
    */
   aggregateInvoiceTotals(lines: { lineTotal: number; taxAmount: number; taxableAmount: number }[]) {
-    const subtotal = lines.reduce((s, l) => s + l.taxableAmount, 0);
-    const taxAmount = lines.reduce((s, l) => s + l.taxAmount, 0);
-    const totalAmount = lines.reduce((s, l) => s + l.lineTotal, 0);
+    const subtotal = lines.reduce(
+      (s, l) => new Decimal(s).plus(l.taxableAmount).toNumber(),
+      0,
+    );
+    const taxAmount = lines.reduce(
+      (s, l) => new Decimal(s).plus(l.taxAmount).toNumber(),
+      0,
+    );
+    const totalAmount = lines.reduce(
+      (s, l) => new Decimal(s).plus(l.lineTotal).toNumber(),
+      0,
+    );
     return { subtotal, taxAmount, totalAmount };
   }
 }
