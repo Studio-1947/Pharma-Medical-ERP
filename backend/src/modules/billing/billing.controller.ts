@@ -1,0 +1,52 @@
+import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import { BillingService } from "./billing.service";
+import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
+import { RolesGuard } from "../../common/guards/roles.guard";
+import { Roles } from "../../common/decorators/roles.decorator";
+import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
+import { createInvoiceSchema, queryInvoiceSchema, voidInvoiceSchema, recordPaymentSchema } from "@pharmerp/types";
+
+@ApiTags("billing")
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Controller("billing")
+export class BillingController {
+  constructor(private readonly service: BillingService) {}
+
+  @Get("invoices")
+  @Roles("admin", "pharmacist", "cashier", "reports_analyst")
+  findAll(@Query() q: unknown) { return this.service.findAll(queryInvoiceSchema.parse(q)); }
+
+  @Get("invoices/:id")
+  @Roles("admin", "pharmacist", "cashier")
+  findOne(@Param("id") id: string) { return this.service.findOne(id); }
+
+  @Post("invoices")
+  @Roles("admin", "pharmacist", "cashier")
+  @ApiOperation({ summary: "Create invoice — atomically decrements stock (FEFO)" })
+  create(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
+    return this.service.create(createInvoiceSchema.parse(body), user.sub);
+  }
+
+  @Post("invoices/:id/void")
+  @Roles("admin", "pharmacist")
+  @ApiOperation({ summary: "Void invoice and return stock" })
+  voidInvoice(@Param("id") id: string, @Body() body: unknown, @CurrentUser() user: JwtPayload) {
+    return this.service.voidInvoice(id, voidInvoiceSchema.parse(body), user.sub);
+  }
+
+  @Post("payments")
+  @Roles("admin", "pharmacist", "cashier")
+  @ApiOperation({ summary: "Record a payment against an invoice" })
+  recordPayment(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
+    return this.service.recordPayment(recordPaymentSchema.parse(body), user.sub);
+  }
+
+  @Get("reports/end-of-day")
+  @Roles("admin", "reports_analyst")
+  @ApiOperation({ summary: "End-of-day sales summary for a branch" })
+  eod(@Query("branchId") branchId: string, @Query("date") date?: string) {
+    return this.service.endOfDaySummary(branchId, date);
+  }
+}

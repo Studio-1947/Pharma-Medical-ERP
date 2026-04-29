@@ -1,0 +1,25 @@
+{
+  "name": "pharmerp",
+  "version": "0.0.1",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "db:generate": "pnpm --filter backend drizzle-kit generate",
+    "db:migrate": "pnpm --filter backend drizzle-kit migrate",
+    "db:push": "pnpm --filter backend drizzle-kit push",
+    "db:studio": "pnpm --filter backend drizzle-kit studio"
+  },
+  "workspaces": [
+    "backend",
+    "frontend",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "turbo": "^2.0.0"
+  }
+}
