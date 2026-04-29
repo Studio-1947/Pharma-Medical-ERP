@@ -6,7 +6,8 @@
       "Bash(git commit -m ' *)",
       "Bash(python3 *)",
       "Bash(powershell *)",
-      "Bash(echo \"exit $?\")"
+      "Bash(echo \"exit $?\")",
+      "Skill(gsd:plan-phase)"
     ]
   }
 }

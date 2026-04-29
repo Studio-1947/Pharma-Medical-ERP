@@ -109,6 +109,7 @@ export const inventoryBatches = pgTable(
     batchNo: varchar("batch_no", { length: 100 }).notNull(),
     expiryDate: date("expiry_date").notNull(),
     quantity: integer("quantity").notNull().default(0),
+    reservedQty: integer("reserved_qty").notNull().default(0),
     costPrice: numeric("cost_price", { precision: 12, scale: 2 }).notNull(),
     mrpAtEntry: numeric("mrp_at_entry", { precision: 12, scale: 2 }).notNull(),
     status: batchStatusEnum("status").notNull().default("active"),

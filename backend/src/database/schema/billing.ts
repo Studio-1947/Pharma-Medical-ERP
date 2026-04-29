@@ -82,6 +82,7 @@ export const salesInvoices = pgTable(
     status: invoiceStatusEnum("status").notNull().default("draft"),
     notes: text("notes"),
     isOfflineSync: boolean("is_offline_sync").notNull().default(false),
+    customerGstin: varchar("customer_gstin", { length: 15 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),
@@ -115,6 +116,9 @@ export const salesInvoiceItems = pgTable("sales_invoice_items", {
     .default("0"),
   taxPct: numeric("tax_pct", { precision: 5, scale: 2 }).notNull().default("0"),
   lineTotal: numeric("line_total", { precision: 12, scale: 2 }).notNull(),
+  cgstAmt: numeric("cgst_amt", { precision: 12, scale: 2 }).notNull().default("0"),
+  sgstAmt: numeric("sgst_amt", { precision: 12, scale: 2 }).notNull().default("0"),
+  igstAmt: numeric("igst_amt", { precision: 12, scale: 2 }).notNull().default("0"),
 });
 
 export const payments = pgTable("payments", {
