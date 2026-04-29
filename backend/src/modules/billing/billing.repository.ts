@@ -1,23 +1,30 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import Redis from "ioredis";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
+import { REDIS_CLIENT } from "../../common/redis/redis.module";
 import type { QueryInvoiceDto } from "@pharmerp/types";
 
 @Injectable()
 export class BillingRepository {
-  constructor(private readonly drizzle: DrizzleService) {}
-  private get db() { return this.drizzle.db; }
+  constructor(
+    private readonly drizzle: DrizzleService,
+    @Inject(REDIS_CLIENT) private readonly redis: Redis,
+  ) {}
+  private get db() {
+    return this.drizzle.db;
+  }
 
   async nextInvoiceNumber(branchId: string, branchCode: string): Promise<string> {
-    const today = new Date().toISOString().split("T")[0]!;
-    const result = await this.db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(schema.salesInvoices)
-      .where(and(eq(schema.salesInvoices.branchId, branchId), sql`DATE(created_at) = CURRENT_DATE`));
-    const count = result[0]?.count ?? 0;
-    const seq = String(count + 1).padStart(4, "0");
-    return `${branchCode.toUpperCase()}-${today.replace(/-/g, "")}-${seq}`;
+    const today = new Date().toISOString().split("T")[0]!; // YYYY-MM-DD
+    const key = `invoice_seq:${branchId}:${today}`;
+    const seq = await this.redis.incr(key);
+    if (seq === 1) {
+      // Set TTL on first use of this day's key. 48hr covers midnight race conditions.
+      await this.redis.expire(key, 86400 * 2);
+    }
+    return `${branchCode.toUpperCase()}-${today.replace(/-/g, "")}-${String(seq).padStart(4, "0")}`;
   }
 
   async createInvoiceWithItems(

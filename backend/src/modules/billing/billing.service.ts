@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import { eq } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import { BillingRepository } from "./billing.repository";
 import { TaxService } from "./tax.service";
@@ -48,7 +49,17 @@ export class BillingService {
     const discountAmount = parseFloat(dto.discountAmount ?? "0");
     const finalTotal = totalAmount - discountAmount;
 
-    const invoiceNo = await this.repo.nextInvoiceNumber(dto.branchId, "MAIN");
+    // Look up branch code for invoice number prefix
+    const [branch] = await this.drizzle.db
+      .select({ code: schema.branches.code })
+      .from(schema.branches)
+      .where(eq(schema.branches.id, dto.branchId));
+
+    if (!branch) {
+      throw new NotFoundException(`Branch ${dto.branchId} not found`);
+    }
+
+    const invoiceNo = await this.repo.nextInvoiceNumber(dto.branchId, branch.code);
 
     const result = await this.drizzle.db.transaction(async (tx) => {
       // Decrement stock for each item
