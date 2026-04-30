@@ -44,10 +44,14 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       }
     }
 
+    const isDev = process.env.NODE_ENV === "development";
+
     reply.status(status).send({
       success: false,
       message,
       errors,
+      stack: isDev && exception instanceof Error ? exception.stack : undefined,
+      originalError: isDev && exception instanceof Error ? exception.message : undefined,
       path: request.url,
       timestamp: new Date().toISOString(),
     });

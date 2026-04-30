@@ -36,9 +36,12 @@ export function SignupForm() {
       await apiClient.post("/auth/register", data);
       router.push("/login?registered=true");
     } catch (err: any) {
+      const errorData = err?.response?.data;
       setError("root", {
-        message:
-          err?.response?.data?.message ?? "Registration failed. Please try again.",
+        message: errorData?.message ?? "Registration failed. Please try again.",
+        // @ts-ignore - passing extra fields for UI display
+        originalError: errorData?.originalError,
+        stack: errorData?.stack,
       });
     }
   };
@@ -132,8 +135,21 @@ export function SignupForm() {
       </div>
 
       {errors.root && (
-        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-2 rounded-lg text-sm">
-          {errors.root.message}
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-2 rounded-lg text-sm space-y-2">
+          <p className="font-semibold">{errors.root.message}</p>
+          {(errors.root as any).originalError && (
+            <p className="text-xs opacity-80 bg-destructive/5 p-2 rounded border border-destructive/10 font-mono">
+              <strong>Error:</strong> {(errors.root as any).originalError}
+            </p>
+          )}
+          {(errors.root as any).stack && process.env.NODE_ENV === "development" && (
+            <details className="text-[10px] opacity-70">
+              <summary className="cursor-pointer hover:underline">View Stack Trace</summary>
+              <pre className="mt-2 p-2 bg-black/5 rounded overflow-x-auto whitespace-pre-wrap">
+                {(errors.root as any).stack}
+              </pre>
+            </details>
+          )}
         </div>
       )}
 

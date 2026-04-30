@@ -32,9 +32,12 @@ export function LoginForm() {
       setUser({ id: payload.sub, email: payload.email, role: payload.role, branchId: payload.branchId });
       router.push("/dashboard");
     } catch (err: any) {
+      const errorData = err?.response?.data;
       setError("root", {
-        message:
-          err?.response?.data?.message ?? "Login failed. Check credentials.",
+        message: errorData?.message ?? "Login failed. Check credentials.",
+        // @ts-ignore - passing extra fields for UI display
+        originalError: errorData?.originalError,
+        stack: errorData?.stack,
       });
     }
   };
@@ -73,7 +76,22 @@ export function LoginForm() {
       </div>
 
       {errors.root && (
-        <p className="text-red-500 text-sm">{errors.root.message}</p>
+        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-2 rounded-lg text-sm space-y-2">
+          <p className="font-semibold">{errors.root.message}</p>
+          {(errors.root as any).originalError && (
+            <p className="text-xs opacity-80 bg-destructive/5 p-2 rounded border border-destructive/10 font-mono">
+              <strong>Error:</strong> {(errors.root as any).originalError}
+            </p>
+          )}
+          {(errors.root as any).stack && process.env.NODE_ENV === "development" && (
+            <details className="text-[10px] opacity-70">
+              <summary className="cursor-pointer hover:underline">View Stack Trace</summary>
+              <pre className="mt-2 p-2 bg-black/5 rounded overflow-x-auto whitespace-pre-wrap">
+                {(errors.root as any).stack}
+              </pre>
+            </details>
+          )}
+        </div>
       )}
 
       <button
