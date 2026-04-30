@@ -6,3 +6,4 @@ export * from "./dtos/invoice.dto";
 export * from "./dtos/batch.dto";
 export * from "./dtos/warehouse.dto";
 export * from "./dtos/billing.dto";
+export * from "./dtos/user.dto";

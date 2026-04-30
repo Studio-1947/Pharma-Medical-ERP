@@ -13,9 +13,13 @@ import {
   Truck,
   BarChart2,
   Settings,
+  ShieldCheck,
 } from "lucide-react";
 
-const navItems = [
+import { useAuthStore } from "@/stores/auth.store";
+import { UserRole } from "@pharmerp/types";
+
+const baseNavItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/inventory", label: "Inventory", icon: Package },
   { href: "/billing", label: "Billing & POS", icon: Receipt },
@@ -24,11 +28,19 @@ const navItems = [
   { href: "/procurement", label: "Procurement", icon: ShoppingCart },
   { href: "/distribution", label: "Distribution", icon: Truck },
   { href: "/analytics", label: "Analytics", icon: BarChart2 },
-  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
+  const { user } = useAuthStore();
+
+  const isAdmin = user?.role === UserRole.SUPER_ADMIN || user?.role === UserRole.ADMIN;
+
+  const navItems = [
+    ...baseNavItems,
+    ...(isAdmin ? [{ href: "/staff", label: "Staff Management", icon: ShieldCheck }] : []),
+    { href: "/settings", label: "Settings", icon: Settings },
+  ];
 
   return (
     <aside className="w-60 shrink-0 bg-gray-900 text-gray-100 flex flex-col">

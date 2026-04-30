@@ -26,6 +26,8 @@ export class AuthRepository {
   async createUser(data: {
     email: string;
     passwordHash: string;
+    firstName: string;
+    lastName: string;
     role?: string;
     branchId?: string;
   }) {
@@ -34,6 +36,8 @@ export class AuthRepository {
       .values({
         email: data.email,
         passwordHash: data.passwordHash,
+        firstName: data.firstName,
+        lastName: data.lastName,
         role: (data.role as any) ?? "cashier",
         branchId: data.branchId,
       })

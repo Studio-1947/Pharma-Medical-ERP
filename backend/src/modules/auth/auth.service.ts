@@ -33,6 +33,8 @@ export class AuthService {
     const user = await this.repo.createUser({
       email: dto.email,
       passwordHash,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
       role: dto.role,
       branchId: dto.branchId,
     });

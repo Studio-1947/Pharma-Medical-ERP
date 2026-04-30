@@ -186,6 +186,9 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
+      date-fns:
+        specifier: ^3.6.0
+        version: 3.6.0
       dexie:
         specifier: ^4.0.7
         version: 4.4.2

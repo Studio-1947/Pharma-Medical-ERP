@@ -14,6 +14,8 @@ export const users = pgTable("users", {
   id: uuid("id").primaryKey().defaultRandom(),
   email: varchar("email", { length: 255 }).notNull().unique(),
   passwordHash: varchar("password_hash", { length: 255 }).notNull(),
+  firstName: varchar("first_name", { length: 100 }),
+  lastName: varchar("last_name", { length: 100 }),
   role: userRoleEnum("role").notNull().default("cashier"),
   branchId: uuid("branch_id"),
   isActive: boolean("is_active").notNull().default(true),

@@ -93,4 +93,8 @@ export const queryKeys = {
     list: (params: object) => ["invoices", "list", params] as const,
     detail: (id: string) => ["invoices", id] as const,
   },
+  users: {
+    all: () => ["users"] as const,
+    detail: (id: string) => ["users", id] as const,
+  },
 };

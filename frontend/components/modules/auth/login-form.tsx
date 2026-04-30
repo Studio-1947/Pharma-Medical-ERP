@@ -2,13 +2,16 @@
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { loginSchema, type LoginDto } from "@pharmerp/types";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
+import Link from "next/link";
 
 export function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isRegistered = searchParams.get("registered") === "true";
   const { setTokens, setUser } = useAuthStore();
 
   const {
@@ -38,6 +41,11 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      {isRegistered && (
+        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm mb-4 animate-in fade-in slide-in-from-top-1">
+          Registration successful! Please sign in with your credentials.
+        </div>
+      )}
       <div>
         <label className="block text-sm font-medium mb-1">Email</label>
         <input
@@ -75,6 +83,15 @@ export function LoginForm() {
       >
         {isSubmitting ? "Signing in..." : "Sign in"}
       </button>
+
+      <div className="text-center mt-4">
+        <p className="text-sm text-muted-foreground">
+          Don't have an account?{" "}
+          <Link href="/signup" className="text-primary hover:underline font-medium">
+            Sign up
+          </Link>
+        </p>
+      </div>
     </form>
   );
 }

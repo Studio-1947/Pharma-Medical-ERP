@@ -13,6 +13,8 @@ export const registerSchema = z.object({
     .min(8)
     .regex(/[A-Z]/, "must contain uppercase")
     .regex(/[0-9]/, "must contain number"),
+  firstName: z.string().min(2, "Required"),
+  lastName: z.string().min(2, "Required"),
   role: z.string().optional(),
   branchId: z.string().uuid().optional(),
 });
