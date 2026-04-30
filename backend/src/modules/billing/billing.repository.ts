@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, desc, eq, gte, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import Redis from "ioredis";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
@@ -79,6 +79,40 @@ export class BillingRepository {
       updatedAt: new Date(),
     }).where(eq(schema.salesInvoices.id, data.invoiceId));
     return payment!;
+  }
+
+  async findReturnedQuantities(originalInvoiceId: string): Promise<Record<string, number>> {
+    // Find all return invoices linked to this original invoice
+    const returnInvoices = await this.db
+      .select({ id: schema.salesInvoices.id })
+      .from(schema.salesInvoices)
+      .where(
+        and(
+          eq(schema.salesInvoices.originalInvoiceId, originalInvoiceId),
+          eq(schema.salesInvoices.isReturn, true),
+        )
+      );
+
+    if (returnInvoices.length === 0) return {};
+
+    const returnInvoiceIds = returnInvoices.map((r) => r.id);
+
+    // Sum quantities per (medicineId, batchId) pair across all return invoices
+    const returnedItems = await this.db
+      .select({
+        medicineId: schema.salesInvoiceItems.medicineId,
+        batchId: schema.salesInvoiceItems.batchId,
+        totalReturned: sql<number>`sum(${schema.salesInvoiceItems.quantity})::int`,
+      })
+      .from(schema.salesInvoiceItems)
+      .where(inArray(schema.salesInvoiceItems.invoiceId, returnInvoiceIds))
+      .groupBy(schema.salesInvoiceItems.medicineId, schema.salesInvoiceItems.batchId);
+
+    // Return as a map keyed by "medicineId:batchId" for lookup by the service
+    return returnedItems.reduce((acc, row) => {
+      acc[`${row.medicineId}:${row.batchId}`] = row.totalReturned ?? 0;
+      return acc;
+    }, {} as Record<string, number>);
   }
 
   async endOfDaySummary(branchId: string, date: string) {

@@ -5,7 +5,17 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
-import { createInvoiceSchema, queryInvoiceSchema, voidInvoiceSchema, recordPaymentSchema } from "@pharmerp/types";
+import { 
+  CreateInvoiceDto, 
+  QueryInvoiceDto, 
+  VoidInvoiceDto, 
+  ReturnInvoiceDto,
+  createInvoiceSchema,
+  queryInvoiceSchema,
+  voidInvoiceSchema,
+  returnInvoiceSchema,
+  recordPaymentSchema
+} from "@pharmerp/types";
 
 @ApiTags("billing")
 @ApiBearerAuth()
@@ -34,6 +44,17 @@ export class BillingController {
   @ApiOperation({ summary: "Void invoice and return stock" })
   voidInvoice(@Param("id") id: string, @Body() body: unknown, @CurrentUser() user: JwtPayload) {
     return this.service.voidInvoice(id, voidInvoiceSchema.parse(body), user.sub);
+  }
+
+  @Post("invoices/:id/return")
+  @Roles("admin", "pharmacist")
+  @ApiOperation({ summary: "Create return invoice — restocks batches, creates refund payment" })
+  createReturn(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.createReturn(id, returnInvoiceSchema.parse(body), user.sub);
   }
 
   @Post("payments")

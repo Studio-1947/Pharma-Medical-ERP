@@ -1,12 +1,18 @@
 import { Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
-import { eq } from "drizzle-orm";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import Decimal from "decimal.js";
 import { DrizzleService } from "../../database/drizzle.service";
 import { BillingRepository } from "./billing.repository";
 import { TaxService } from "./tax.service";
 import { BatchRepository } from "../inventory/batch.repository";
 import { StockMovementRepository } from "../inventory/stock-movement.repository";
 import * as schema from "../../database/schema";
-import type { CreateInvoiceDto, QueryInvoiceDto, VoidInvoiceDto, RecordPaymentDto } from "@pharmerp/types";
+import type { 
+  CreateInvoiceDto, 
+  QueryInvoiceDto, 
+  VoidInvoiceDto, 
+  ReturnInvoiceDto 
+} from "@pharmerp/types";
 
 @Injectable()
 export class BillingService {
@@ -27,102 +33,177 @@ export class BillingService {
   }
 
   /**
-   * Creates an invoice atomically:
-   * 1. Calculate line totals with GST
-   * 2. Decrement batch quantities (FEFO already selected by client from GET /batches)
-   * 3. Log stock movements
-   * 4. Insert invoice + items in single transaction
+   * Phase 2 Rewrite: Creates a legally compliant invoice atomically.
+   * Includes Schedule H gate, FEFO selection, server-side price enforcement,
+   * GST split, and split payments.
    */
   async create(dto: CreateInvoiceDto, staffId: string) {
-    // 1. Look up branch code for invoice number prefix
-    const [branch] = await this.drizzle.db
-      .select({ code: schema.branches.code })
-      .from(schema.branches)
-      .where(eq(schema.branches.id, dto.branchId));
+    return await this.drizzle.db.transaction(async (tx) => {
+      // 0. Load branch and detect inter-state
+      const [branch] = await tx
+        .select({ code: schema.branches.code, state: schema.branches.state })
+        .from(schema.branches)
+        .where(eq(schema.branches.id, dto.branchId));
 
-    if (!branch) {
-      throw new NotFoundException(`Branch ${dto.branchId} not found`);
-    }
+      if (!branch) throw new NotFoundException(`Branch ${dto.branchId} not found`);
 
-    const invoiceNo = await this.repo.nextInvoiceNumber(dto.branchId, branch.code);
-    const discountAmountTotal = parseFloat(dto.discountAmount ?? "0");
+      let interState = false;
+      if (dto.patientId) {
+        const [patient] = await tx
+          .select({ state: schema.patients.state })
+          .from(schema.patients)
+          .where(eq(schema.patients.id, dto.patientId));
+        
+        // If patient state and branch state are both provided and different, it's inter-state
+        // For West Bengal only deployment, this will usually be false
+        if (patient?.state && branch.state) {
+          interState = patient.state.trim().toLowerCase() !== branch.state.trim().toLowerCase();
+        }
+      }
 
-    const result = await this.drizzle.db.transaction(async (tx) => {
-      const allLines: any[] = [];
+      // 1. Load all medicines and check Schedule H gate
+      const medicineIds = dto.items.map(i => i.medicineId);
+      const medicines = await tx
+        .select({
+          id: schema.medicines.id,
+          name: schema.medicines.name,
+          scheduleClass: schema.medicines.scheduleClass,
+          requiresPrescription: schema.medicines.requiresPrescription,
+          taxPercent: schema.medicines.taxPercent,
+          isActive: schema.medicines.isActive,
+        })
+        .from(schema.medicines)
+        .where(inArray(schema.medicines.id, medicineIds));
 
       for (const item of dto.items) {
-        // Fetch medicine for tax info
-        const [medicine] = await tx
-          .select({ taxPercent: schema.medicines.taxPercent })
-          .from(schema.medicines)
-          .where(eq(schema.medicines.id, item.medicineId));
-
-        if (!medicine) {
-          throw new NotFoundException(`Medicine ${item.medicineId} not found`);
+        const med = medicines.find(m => m.id === item.medicineId);
+        if (!med || !med.isActive) {
+          throw new NotFoundException(`Medicine ${item.medicineId} not found or inactive`);
         }
 
-        // FEFO Selection - throws if insufficient stock
-        const allocations = await this.batchRepo.selectBatchesForDispense(
-          item.medicineId,
-          dto.branchId,
-          item.quantity,
-          tx,
-        );
-
-        for (const alloc of allocations) {
-          const { lineTotal, taxAmount, breakdown } = this.taxService.calculateLineTax(
-            parseFloat(alloc.mrpAtEntry),
-            alloc.allocate,
-            parseFloat(item.discountPct ?? "0"),
-            parseFloat(medicine.taxPercent ?? "0"),
-          );
-
-          allLines.push({
-            medicineId: item.medicineId,
-            batchId: alloc.batchId,
-            quantity: alloc.allocate,
-            unitPrice: alloc.mrpAtEntry,
-            discountPct: item.discountPct ?? "0",
-            taxPct: medicine.taxPercent ?? "0",
-            lineTotal,
-            taxAmount,
-            taxableAmount: breakdown.taxableAmount,
-            cgstAmt: breakdown.cgst.toFixed(2),
-            sgstAmt: breakdown.sgst.toFixed(2),
-            igstAmt: breakdown.igst.toFixed(2),
-          });
-
-          // Adjust stock (atomic decrement)
-          const updatedBatch = await this.batchRepo.adjustQuantity(alloc.batchId, -alloc.allocate, tx as any);
-          if (!updatedBatch) {
-            throw new UnprocessableEntityException(`Stock update failed for batch ${alloc.batchId}`);
+        const isControlled = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"].includes(med.scheduleClass ?? "") || med.requiresPrescription;
+        
+        if (isControlled) {
+          if (!dto.prescriptionId && !dto.overrideReason) {
+            throw new UnprocessableEntityException(
+              `Medicine ${med.name} requires a verified prescription or manager override (Schedule ${med.scheduleClass})`
+            );
           }
 
-          // Log movement
-          await this.movementRepo.log({
-            batchId: alloc.batchId,
-            medicineId: item.medicineId,
-            movementType: "sale",
-            quantity: -alloc.allocate,
-            performedBy: staffId,
-            referenceType: "invoice",
-          }, tx);
+          if (dto.prescriptionId) {
+            const [rx] = await tx
+              .select({ status: schema.prescriptions.status, expiryDate: schema.prescriptions.expiryDate })
+              .from(schema.prescriptions)
+              .where(eq(schema.prescriptions.id, dto.prescriptionId));
+
+            const today = new Date().toISOString().split("T")[0]!;
+            if (!rx || rx.status !== "verified") {
+              throw new UnprocessableEntityException(`Linked prescription for ${med.name} is not verified`);
+            }
+            if (rx.expiryDate && rx.expiryDate < today) {
+              throw new UnprocessableEntityException(`Linked prescription for ${med.name} has expired`);
+            }
+          }
+
+          if (dto.overrideReason && dto.overriddenBy) {
+            const [approver] = await tx
+              .select({ role: schema.users.role })
+              .from(schema.users)
+              .where(eq(schema.users.id, dto.overriddenBy));
+            
+            if (!approver || !["super_admin", "admin", "pharmacist"].includes(approver.role)) {
+              throw new UnprocessableEntityException("Override approver must be a pharmacist or admin");
+            }
+          }
         }
       }
 
-      const { subtotal, taxAmount: totalTax, totalAmount } = this.taxService.aggregateInvoiceTotals(allLines);
-      const finalTotal = totalAmount - discountAmountTotal;
-
-      // Calculate paid amount from payments array
-      const totalPaid = dto.payments.reduce((acc, p) => acc + parseFloat(p.amount), 0);
-      const amountDue = finalTotal - totalPaid;
-
-      // Determine primary payment mode
-      let paymentMode: any = "mixed";
-      if (dto.payments.length === 1 && dto.payments[0]) {
-        paymentMode = dto.payments[0].mode;
+      // 2. FEFO Batch Selection
+      const allAllocations: any[] = [];
+      for (const item of dto.items) {
+        const med = medicines.find(m => m.id === item.medicineId)!;
+        const batchAllocations = await this.batchRepo.selectBatchesForDispense(
+          item.medicineId, 
+          dto.branchId, 
+          item.quantity, 
+          tx
+        );
+        for (const alloc of batchAllocations) {
+          allAllocations.push({ item, med, allocation: alloc });
+        }
       }
 
+      // 3. Compute Totals & Validate Payment Sum
+      const lines = allAllocations.map(({ item, med, allocation }) => {
+        const { lineTotal, taxAmount, breakdown } = this.taxService.calculateLineTax(
+          parseFloat(allocation.mrpAtEntry),
+          allocation.allocate,
+          parseFloat(item.discountPct ?? "0"),
+          parseFloat(med.taxPercent),
+          interState,
+        );
+        return { 
+          ...allocation, 
+          item, 
+          med, 
+          lineTotal, 
+          taxAmount, 
+          breakdown, 
+          taxableAmount: breakdown.taxableAmount 
+        };
+      });
+
+      const { subtotal, taxAmount, totalAmount } = this.taxService.aggregateInvoiceTotals(lines);
+      const discountAmount = new Decimal(dto.discountAmount ?? "0");
+      const finalTotal = new Decimal(totalAmount).minus(discountAmount).toNumber();
+
+      const paymentTotal = dto.payments.reduce(
+        (sum, p) => new Decimal(sum).plus(p.amount).toNumber(), 
+        0
+      );
+
+      // Allow 0.01 tolerance for rounding if necessary, but here we expect exact match
+      if (!new Decimal(paymentTotal).equals(new Decimal(finalTotal.toFixed(2)))) {
+        throw new UnprocessableEntityException(
+          `Payment total ${paymentTotal} does not match invoice total ${finalTotal.toFixed(2)}`
+        );
+      }
+
+      // 4. Batch Deduction & Logs
+      for (const { allocation, item } of allAllocations) {
+        const [deducted] = await tx
+          .update(schema.inventoryBatches)
+          .set({ 
+            quantity: sql`${schema.inventoryBatches.quantity} - ${allocation.allocate}`, 
+            updatedAt: new Date() 
+          })
+          .where(
+            and(
+              eq(schema.inventoryBatches.id, allocation.batchId), 
+              gte(schema.inventoryBatches.quantity, allocation.allocate)
+            )
+          )
+          .returning({ id: schema.inventoryBatches.id });
+
+        if (!deducted) {
+          throw new UnprocessableEntityException(
+            `Concurrent depletion: batch ${allocation.batchNo} for ${item.medicineId} no longer has sufficient units`
+          );
+        }
+
+        await this.movementRepo.log({
+          batchId: allocation.batchId,
+          medicineId: item.medicineId,
+          movementType: "sale",
+          quantity: -allocation.allocate,
+          performedBy: staffId,
+          referenceType: "invoice",
+        }, tx);
+      }
+
+      // 5. Insert Invoice, Items, and Payments
+      const invoiceNo = await this.repo.nextInvoiceNumber(dto.branchId, branch.code);
+      
       const invoiceData: typeof schema.salesInvoices.$inferInsert = {
         invoiceNo,
         patientId: dto.patientId,
@@ -130,38 +211,39 @@ export class BillingService {
         branchId: dto.branchId,
         prescriptionId: dto.prescriptionId,
         subtotal: subtotal.toFixed(2),
-        discountAmount: discountAmountTotal.toFixed(2),
-        taxAmount: totalTax.toFixed(2),
+        discountAmount: discountAmount.toFixed(2),
+        taxAmount: taxAmount.toFixed(2),
         totalAmount: finalTotal.toFixed(2),
-        amountPaid: totalPaid.toFixed(2),
-        amountDue: amountDue.toFixed(2),
-        paymentMode,
-        status: amountDue <= 0 ? "paid" : "partially_paid",
+        amountPaid: finalTotal.toFixed(2),
+        amountDue: "0.00",
+        paymentMode: dto.payments.length > 1 ? "mixed" : dto.payments[0]!.mode as any,
+        status: "confirmed",
         notes: dto.notes,
-        isOfflineSync: dto.isOfflineSync,
+        isOfflineSync: dto.isOfflineSync ?? false,
+        isReturn: false,
         overrideReason: dto.overrideReason,
         overriddenBy: dto.overriddenBy,
       };
 
-      const itemsData = allLines.map((line) => ({
-        medicineId: line.medicineId,
+      const itemsData = lines.map(line => ({
+        medicineId: line.item.medicineId,
         batchId: line.batchId,
-        quantity: line.quantity,
-        unitPrice: line.unitPrice,
-        discountPct: line.discountPct,
-        taxPct: line.taxPct,
+        quantity: line.allocate,
+        unitPrice: line.mrpAtEntry,
+        discountPct: line.item.discountPct ?? "0",
+        taxPct: String(parseFloat(line.med.taxPercent)),
         lineTotal: line.lineTotal.toFixed(2),
-        cgstAmt: line.cgstAmt,
-        sgstAmt: line.sgstAmt,
-        igstAmt: line.igstAmt,
+        cgstAmt: line.breakdown.cgst.toFixed(2),
+        sgstAmt: line.breakdown.sgst.toFixed(2),
+        igstAmt: line.breakdown.igst.toFixed(2),
       }));
 
-      const created = await this.repo.createInvoiceWithItems(invoiceData, itemsData, tx);
+      const { invoice, items: insertedItems } = await this.repo.createInvoiceWithItems(invoiceData, itemsData, tx);
 
-      // Record detailed payments
+      // Insert multiple payment rows
       for (const p of dto.payments) {
         await tx.insert(schema.payments).values({
-          invoiceId: created.invoice.id,
+          invoiceId: invoice.id,
           amount: p.amount,
           mode: p.mode as any,
           referenceNo: p.referenceNo,
@@ -169,10 +251,8 @@ export class BillingService {
         });
       }
 
-      return created;
+      return { invoice, items: insertedItems };
     });
-
-    return { data: result.invoice, message: "Invoice created" };
   }
 
   async voidInvoice(id: string, dto: VoidInvoiceDto, userId: string) {
@@ -183,7 +263,15 @@ export class BillingService {
     // Return stock
     await this.drizzle.db.transaction(async (tx) => {
       for (const item of existing.data.items) {
-        await this.batchRepo.adjustQuantity(item.batchId, item.quantity, tx as any);
+        const [deducted] = await tx
+          .update(schema.inventoryBatches)
+          .set({ 
+            quantity: sql`${schema.inventoryBatches.quantity} + ${item.quantity}`, 
+            updatedAt: new Date() 
+          })
+          .where(eq(schema.inventoryBatches.id, item.batchId))
+          .returning({ id: schema.inventoryBatches.id });
+
         await this.movementRepo.log({
           batchId: item.batchId,
           medicineId: item.medicineId,
@@ -200,7 +288,139 @@ export class BillingService {
     return { message: "Invoice voided" };
   }
 
-  async recordPayment(dto: RecordPaymentDto, staffId: string) {
+  async createReturn(originalInvoiceId: string, dto: ReturnInvoiceDto, staffId: string) {
+    // Load original invoice with items and payments
+    const original = await this.repo.findById(originalInvoiceId);
+    if (!original) throw new NotFoundException(`Invoice ${originalInvoiceId} not found`);
+    if (original.status !== "confirmed") {
+      throw new UnprocessableEntityException("Only confirmed invoices can be returned");
+    }
+
+    // Get already-returned quantities (keyed by "medicineId:batchId")
+    const returnedMap = await this.repo.findReturnedQuantities(originalInvoiceId);
+
+    // Validate each return item against original quantities
+    const returnLineData: Array<{
+      originalItem: any;
+      returnQty: number;
+      lineTotal: number;
+      cgstAmt: number; 
+      sgstAmt: number; 
+      igstAmt: number;
+    }> = [];
+
+    for (const returnItem of dto.items) {
+      const originalItem = original.items.find(i => i.id === returnItem.invoiceItemId);
+      if (!originalItem) {
+        throw new NotFoundException(`Invoice item ${returnItem.invoiceItemId} not found on original invoice`);
+      }
+      const alreadyReturned = returnedMap[`${originalItem.medicineId}:${originalItem.batchId}`] ?? 0;
+      const remaining = originalItem.quantity - alreadyReturned;
+      if (returnItem.returnQty > remaining) {
+        throw new UnprocessableEntityException(
+          `Cannot return ${returnItem.returnQty} units of item ${returnItem.invoiceItemId}: only ${remaining} units eligible for return`,
+        );
+      }
+
+      // Prorate line totals by return fraction
+      const fraction = returnItem.returnQty / originalItem.quantity;
+      returnLineData.push({
+        originalItem,
+        returnQty: returnItem.returnQty,
+        lineTotal: -(parseFloat(originalItem.lineTotal) * fraction),
+        cgstAmt: -(parseFloat(originalItem.cgstAmt) * fraction),
+        sgstAmt: -(parseFloat(originalItem.sgstAmt) * fraction),
+        igstAmt: -(parseFloat(originalItem.igstAmt) * fraction),
+      });
+    }
+
+    const returnTotal = returnLineData.reduce((sum, l) => sum + l.lineTotal, 0);
+
+    // Get branch code for invoice number
+    const [branch] = await this.drizzle.db
+      .select({ code: schema.branches.code })
+      .from(schema.branches)
+      .where(eq(schema.branches.id, original.branchId));
+    if (!branch) throw new NotFoundException(`Branch not found`);
+
+    const returnInvoiceNo = await this.repo.nextInvoiceNumber(original.branchId, branch.code);
+
+    // Determine refund payment mode from original invoice
+    const refundMode = original.payments?.[0]?.mode ?? "cash";
+
+    return this.drizzle.db.transaction(async (tx) => {
+      // Restock batches + log movements
+      for (const line of returnLineData) {
+        await tx
+          .update(schema.inventoryBatches)
+          .set({
+            quantity: sql`${schema.inventoryBatches.quantity} + ${line.returnQty}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.inventoryBatches.id, line.originalItem.batchId));
+
+        await this.movementRepo.log({
+          batchId: line.originalItem.batchId,
+          medicineId: line.originalItem.medicineId,
+          movementType: "return",
+          quantity: line.returnQty,   // positive = restock
+          performedBy: staffId,
+          referenceId: originalInvoiceId,
+          referenceType: "invoice_return",
+          notes: dto.reason,
+        }, tx);
+      }
+
+      // Create return invoice
+      const returnInvoiceData: typeof schema.salesInvoices.$inferInsert = {
+        invoiceNo: returnInvoiceNo,
+        patientId: original.patientId,
+        staffId,
+        branchId: original.branchId,
+        prescriptionId: original.prescriptionId,
+        subtotal: returnTotal.toFixed(2),
+        discountAmount: "0.00",
+        taxAmount: returnLineData.reduce((s, l) => s + l.cgstAmt + l.sgstAmt + l.igstAmt, 0).toFixed(2),
+        totalAmount: returnTotal.toFixed(2),
+        amountPaid: returnTotal.toFixed(2),
+        amountDue: "0.00",
+        paymentMode: refundMode as any,
+        status: "confirmed",
+        notes: dto.reason,
+        isOfflineSync: false,
+        isReturn: true,
+        originalInvoiceId,
+      };
+
+      const returnItems = returnLineData.map(line => ({
+        medicineId: line.originalItem.medicineId,
+        batchId: line.originalItem.batchId,
+        quantity: line.returnQty,
+        unitPrice: line.originalItem.unitPrice,
+        discountPct: line.originalItem.discountPct,
+        taxPct: line.originalItem.taxPct,
+        lineTotal: line.lineTotal.toFixed(2),
+        cgstAmt: line.cgstAmt.toFixed(2),
+        sgstAmt: line.sgstAmt.toFixed(2),
+        igstAmt: line.igstAmt.toFixed(2),
+      }));
+
+      const { invoice: returnInvoice, items: returnInsertedItems } =
+        await this.repo.createInvoiceWithItems(returnInvoiceData, returnItems, tx);
+
+      // Refund payment row (negative amount)
+      await tx.insert(schema.payments).values({
+        invoiceId: returnInvoice.id,
+        amount: returnTotal.toFixed(2),   // negative string e.g. "-150.00"
+        mode: refundMode as any,
+        processedBy: staffId,
+      });
+
+      return { data: { invoice: returnInvoice, items: returnInsertedItems }, message: "Return processed" };
+    });
+  }
+
+  async recordPayment(dto: any, staffId: string) {
     const inv = await this.repo.findById(dto.invoiceId);
     if (!inv) throw new NotFoundException(`Invoice ${dto.invoiceId} not found`);
     const payment = await this.repo.recordPayment({
