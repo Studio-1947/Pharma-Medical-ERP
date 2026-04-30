@@ -148,3 +148,46 @@ export const purchaseOrdersRelations = relations(
     grns: many(goodsReceivedNotes),
   }),
 );
+export const purchaseOrderItemsRelations = relations(
+  purchaseOrderItems,
+  ({ one }) => ({
+    purchaseOrder: one(purchaseOrders, {
+      fields: [purchaseOrderItems.poId],
+      references: [purchaseOrders.id],
+    }),
+    medicine: one(medicines, {
+      fields: [purchaseOrderItems.medicineId],
+      references: [medicines.id],
+    }),
+  }),
+);
+
+export const goodsReceivedNotesRelations = relations(
+  goodsReceivedNotes,
+  ({ one, many }) => ({
+    purchaseOrder: one(purchaseOrders, {
+      fields: [goodsReceivedNotes.poId],
+      references: [purchaseOrders.id],
+    }),
+    user: one(users, {
+      fields: [goodsReceivedNotes.receivedBy],
+      references: [users.id],
+    }),
+    items: many(grnItems),
+  }),
+);
+
+export const grnItemsRelations = relations(grnItems, ({ one }) => ({
+  grn: one(goodsReceivedNotes, {
+    fields: [grnItems.grnId],
+    references: [goodsReceivedNotes.id],
+  }),
+  poItem: one(purchaseOrderItems, {
+    fields: [grnItems.poItemId],
+    references: [purchaseOrderItems.id],
+  }),
+  batch: one(inventoryBatches, {
+    fields: [grnItems.batchId],
+    references: [inventoryBatches.id],
+  }),
+}));

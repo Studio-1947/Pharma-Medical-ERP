@@ -175,3 +175,13 @@ export const salesInvoiceItemsRelations = relations(
     }),
   }),
 );
+export const paymentsRelations = relations(payments, ({ one }) => ({
+  invoice: one(salesInvoices, {
+    fields: [payments.invoiceId],
+    references: [salesInvoices.id],
+  }),
+  processedBy: one(users, {
+    fields: [payments.processedBy],
+    references: [users.id],
+  }),
+}));

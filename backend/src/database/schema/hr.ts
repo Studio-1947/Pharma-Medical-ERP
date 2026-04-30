@@ -114,3 +114,33 @@ export const employeesRelations = relations(employees, ({ one, many }) => ({
   attendance: many(attendance),
   leaveRequests: many(leaveRequests),
 }));
+export const departmentsRelations = relations(departments, ({ one, many }) => ({
+  manager: one(users, {
+    fields: [departments.managerId],
+    references: [users.id],
+  }),
+  employees: many(employees),
+}));
+
+export const attendanceRelations = relations(attendance, ({ one }) => ({
+  employee: one(employees, {
+    fields: [attendance.employeeId],
+    references: [employees.id],
+  }),
+}));
+
+export const leaveRequestsRelations = relations(leaveRequests, ({ one }) => ({
+  employee: one(employees, {
+    fields: [leaveRequests.employeeId],
+    references: [employees.id],
+  }),
+  reviewer: one(users, {
+    fields: [leaveRequests.reviewedBy],
+    references: [users.id],
+  }),
+}));
+
+export const shiftsRelations = relations(shifts, ({ many }) => ({
+  // Shifts might be linked to employees through a join table later, 
+  // but for now let's just define the object if needed.
+}));

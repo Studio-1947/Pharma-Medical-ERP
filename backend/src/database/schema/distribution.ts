@@ -90,3 +90,20 @@ export const stockTransfersRelations = relations(
     items: many(stockTransferItems),
   }),
 );
+export const stockTransferItemsRelations = relations(
+  stockTransferItems,
+  ({ one }) => ({
+    transfer: one(stockTransfers, {
+      fields: [stockTransferItems.transferId],
+      references: [stockTransfers.id],
+    }),
+    medicine: one(medicines, {
+      fields: [stockTransferItems.medicineId],
+      references: [medicines.id],
+    }),
+    batch: one(inventoryBatches, {
+      fields: [stockTransferItems.batchId],
+      references: [inventoryBatches.id],
+    }),
+  }),
+);

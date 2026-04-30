@@ -188,3 +188,28 @@ export const inventoryBatchesRelations = relations(
     stockMovements: many(stockMovements),
   }),
 );
+export const storageLocationsRelations = relations(
+  storageLocations,
+  ({ one, many }) => ({
+    warehouse: one(warehouses, {
+      fields: [storageLocations.warehouseId],
+      references: [warehouses.id],
+    }),
+    batches: many(inventoryBatches),
+  }),
+);
+
+export const stockMovementsRelations = relations(stockMovements, ({ one }) => ({
+  batch: one(inventoryBatches, {
+    fields: [stockMovements.batchId],
+    references: [inventoryBatches.id],
+  }),
+  medicine: one(medicines, {
+    fields: [stockMovements.medicineId],
+    references: [medicines.id],
+  }),
+  user: one(users, {
+    fields: [stockMovements.performedBy],
+    references: [users.id],
+  }),
+}));
