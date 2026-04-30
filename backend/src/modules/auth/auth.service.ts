@@ -20,16 +20,24 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto) {
+    console.time("register:total");
+    
+    console.time("register:findUser");
     const existing = await this.repo.findUserByEmail(dto.email);
+    console.timeEnd("register:findUser");
+    
     if (existing) throw new ConflictException("Email already registered");
 
+    console.time("register:hashPassword");
     const passwordHash = await argon2.hash(dto.password, {
       type: argon2.argon2id,
       timeCost: 2,
       memoryCost: 65536,
       parallelism: 1,
     });
+    console.timeEnd("register:hashPassword");
 
+    console.time("register:createUser");
     const user = await this.repo.createUser({
       email: dto.email,
       passwordHash,
@@ -38,7 +46,9 @@ export class AuthService {
       role: dto.role,
       branchId: dto.branchId,
     });
+    console.timeEnd("register:createUser");
 
+    console.timeEnd("register:total");
     return { user };
   }
 

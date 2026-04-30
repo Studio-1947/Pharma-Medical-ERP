@@ -8,6 +8,7 @@ import {
   integer,
   numeric,
   index,
+  AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { invoiceStatusEnum, paymentModeEnum } from "./enums";
@@ -36,6 +37,7 @@ export const patients = pgTable(
       .notNull()
       .default("0"),
     notes: text("notes"),
+    state: varchar("state", { length: 100 }),
     isActive: boolean("is_active").notNull().default(true),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -82,6 +84,15 @@ export const salesInvoices = pgTable(
     status: invoiceStatusEnum("status").notNull().default("draft"),
     notes: text("notes"),
     isOfflineSync: boolean("is_offline_sync").notNull().default(false),
+    isReturn: boolean("is_return").notNull().default(false),
+    originalInvoiceId: uuid("original_invoice_id").references(
+      (): AnyPgColumn => salesInvoices.id,
+      { onDelete: "restrict" }
+    ),
+    overrideReason: text("override_reason"),
+    overriddenBy: uuid("overridden_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
     customerGstin: varchar("customer_gstin", { length: 15 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
@@ -155,6 +166,12 @@ export const salesInvoicesRelations = relations(
     }),
     items: many(salesInvoiceItems),
     payments: many(payments),
+    originalInvoice: one(salesInvoices, {
+      fields: [salesInvoices.originalInvoiceId],
+      references: [salesInvoices.id],
+      relationName: "returns",
+    }),
+    returnInvoices: many(salesInvoices, { relationName: "returns" }),
   }),
 );
 

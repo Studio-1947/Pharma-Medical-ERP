@@ -34,22 +34,7 @@ export class BillingService {
    * 4. Insert invoice + items in single transaction
    */
   async create(dto: CreateInvoiceDto, staffId: string) {
-    // Pre-calculate line items with tax
-    const lines = dto.items.map((item) => {
-      const { lineTotal, taxAmount, breakdown } = this.taxService.calculateLineTax(
-        parseFloat(item.unitPrice),
-        item.quantity,
-        parseFloat(item.discountPct ?? "0"),
-        parseFloat(item.taxPct ?? "0"),
-      );
-      return { ...item, lineTotal, taxAmount, taxableAmount: breakdown.taxableAmount };
-    });
-
-    const { subtotal, taxAmount, totalAmount } = this.taxService.aggregateInvoiceTotals(lines);
-    const discountAmount = parseFloat(dto.discountAmount ?? "0");
-    const finalTotal = totalAmount - discountAmount;
-
-    // Look up branch code for invoice number prefix
+    // 1. Look up branch code for invoice number prefix
     const [branch] = await this.drizzle.db
       .select({ code: schema.branches.code })
       .from(schema.branches)
@@ -60,24 +45,82 @@ export class BillingService {
     }
 
     const invoiceNo = await this.repo.nextInvoiceNumber(dto.branchId, branch.code);
+    const discountAmountTotal = parseFloat(dto.discountAmount ?? "0");
 
     const result = await this.drizzle.db.transaction(async (tx) => {
-      // Decrement stock for each item
-      for (const line of lines) {
-        const updated = await this.batchRepo.adjustQuantity(line.batchId, -line.quantity, tx as any);
-        if (!updated) {
-          throw new UnprocessableEntityException(
-            `Insufficient stock in batch ${line.batchId}`,
-          );
+      const allLines: any[] = [];
+
+      for (const item of dto.items) {
+        // Fetch medicine for tax info
+        const [medicine] = await tx
+          .select({ taxPercent: schema.medicines.taxPercent })
+          .from(schema.medicines)
+          .where(eq(schema.medicines.id, item.medicineId));
+
+        if (!medicine) {
+          throw new NotFoundException(`Medicine ${item.medicineId} not found`);
         }
-        await this.movementRepo.log({
-          batchId: line.batchId,
-          medicineId: line.medicineId,
-          movementType: "sale",
-          quantity: -line.quantity,
-          performedBy: staffId,
-          referenceType: "invoice",
-        }, tx);
+
+        // FEFO Selection - throws if insufficient stock
+        const allocations = await this.batchRepo.selectBatchesForDispense(
+          item.medicineId,
+          dto.branchId,
+          item.quantity,
+          tx,
+        );
+
+        for (const alloc of allocations) {
+          const { lineTotal, taxAmount, breakdown } = this.taxService.calculateLineTax(
+            parseFloat(alloc.mrpAtEntry),
+            alloc.allocate,
+            parseFloat(item.discountPct ?? "0"),
+            parseFloat(medicine.taxPercent ?? "0"),
+          );
+
+          allLines.push({
+            medicineId: item.medicineId,
+            batchId: alloc.batchId,
+            quantity: alloc.allocate,
+            unitPrice: alloc.mrpAtEntry,
+            discountPct: item.discountPct ?? "0",
+            taxPct: medicine.taxPercent ?? "0",
+            lineTotal,
+            taxAmount,
+            taxableAmount: breakdown.taxableAmount,
+            cgstAmt: breakdown.cgst.toFixed(2),
+            sgstAmt: breakdown.sgst.toFixed(2),
+            igstAmt: breakdown.igst.toFixed(2),
+          });
+
+          // Adjust stock (atomic decrement)
+          const updatedBatch = await this.batchRepo.adjustQuantity(alloc.batchId, -alloc.allocate, tx as any);
+          if (!updatedBatch) {
+            throw new UnprocessableEntityException(`Stock update failed for batch ${alloc.batchId}`);
+          }
+
+          // Log movement
+          await this.movementRepo.log({
+            batchId: alloc.batchId,
+            medicineId: item.medicineId,
+            movementType: "sale",
+            quantity: -alloc.allocate,
+            performedBy: staffId,
+            referenceType: "invoice",
+          }, tx);
+        }
+      }
+
+      const { subtotal, taxAmount: totalTax, totalAmount } = this.taxService.aggregateInvoiceTotals(allLines);
+      const finalTotal = totalAmount - discountAmountTotal;
+
+      // Calculate paid amount from payments array
+      const totalPaid = dto.payments.reduce((acc, p) => acc + parseFloat(p.amount), 0);
+      const amountDue = finalTotal - totalPaid;
+
+      // Determine primary payment mode
+      let paymentMode: any = "mixed";
+      if (dto.payments.length === 1 && dto.payments[0]) {
+        paymentMode = dto.payments[0].mode;
       }
 
       const invoiceData: typeof schema.salesInvoices.$inferInsert = {
@@ -87,28 +130,46 @@ export class BillingService {
         branchId: dto.branchId,
         prescriptionId: dto.prescriptionId,
         subtotal: subtotal.toFixed(2),
-        discountAmount: discountAmount.toFixed(2),
-        taxAmount: taxAmount.toFixed(2),
+        discountAmount: discountAmountTotal.toFixed(2),
+        taxAmount: totalTax.toFixed(2),
         totalAmount: finalTotal.toFixed(2),
-        amountPaid: "0",
-        amountDue: finalTotal.toFixed(2),
-        paymentMode: dto.paymentMode as any,
-        status: "confirmed",
+        amountPaid: totalPaid.toFixed(2),
+        amountDue: amountDue.toFixed(2),
+        paymentMode,
+        status: amountDue <= 0 ? "paid" : "partially_paid",
         notes: dto.notes,
         isOfflineSync: dto.isOfflineSync,
+        overrideReason: dto.overrideReason,
+        overriddenBy: dto.overriddenBy,
       };
 
-      const itemsData = lines.map((line) => ({
+      const itemsData = allLines.map((line) => ({
         medicineId: line.medicineId,
         batchId: line.batchId,
         quantity: line.quantity,
         unitPrice: line.unitPrice,
-        discountPct: line.discountPct ?? "0",
-        taxPct: line.taxPct ?? "0",
+        discountPct: line.discountPct,
+        taxPct: line.taxPct,
         lineTotal: line.lineTotal.toFixed(2),
+        cgstAmt: line.cgstAmt,
+        sgstAmt: line.sgstAmt,
+        igstAmt: line.igstAmt,
       }));
 
-      return this.repo.createInvoiceWithItems(invoiceData, itemsData, tx);
+      const created = await this.repo.createInvoiceWithItems(invoiceData, itemsData, tx);
+
+      // Record detailed payments
+      for (const p of dto.payments) {
+        await tx.insert(schema.payments).values({
+          invoiceId: created.invoice.id,
+          amount: p.amount,
+          mode: p.mode as any,
+          referenceNo: p.referenceNo,
+          processedBy: staffId,
+        });
+      }
+
+      return created;
     });
 
     return { data: result.invoice, message: "Invoice created" };

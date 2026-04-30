@@ -1,5 +1,5 @@
-import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, gt, isNull, lt, lte, sql } from "drizzle-orm";
+import { Injectable, UnprocessableEntityException } from "@nestjs/common";
+import { and, asc, desc, eq, gt, gte, isNotNull, isNull, lt, lte, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 import type {
@@ -167,5 +167,75 @@ export class BatchRepository {
       )
       .returning({ id: schema.inventoryBatches.id });
     return updated;
+  }
+
+  /**
+   * FEFO batch selector. Call INSIDE a Drizzle transaction (pass tx).
+   * Filters to branchId via: inventoryBatches.locationId -> storageLocations.warehouseId -> warehouses.branchId
+   * Skips: expired (expiryDate <= today), non-active, zero-qty, null locationId.
+   * Throws UnprocessableEntityException if available < needed.
+   */
+  async selectBatchesForDispense(
+    medicineId: string,
+    branchId: string,
+    needed: number,
+    tx?: any,
+  ): Promise<Array<{ batchId: string; batchNo: string; expiryDate: string; allocate: number; mrpAtEntry: string }>> {
+    const db = tx ?? this.db;
+    const today = new Date().toISOString().split("T")[0]!;
+
+    const batches = await db
+      .select({
+        id: schema.inventoryBatches.id,
+        batchNo: schema.inventoryBatches.batchNo,
+        expiryDate: schema.inventoryBatches.expiryDate,
+        quantity: schema.inventoryBatches.quantity,
+        mrpAtEntry: schema.inventoryBatches.mrpAtEntry,
+      })
+      .from(schema.inventoryBatches)
+      .innerJoin(
+        schema.storageLocations,
+        eq(schema.inventoryBatches.locationId, schema.storageLocations.id),
+      )
+      .innerJoin(
+        schema.warehouses,
+        eq(schema.storageLocations.warehouseId, schema.warehouses.id),
+      )
+      .where(
+        and(
+          eq(schema.inventoryBatches.medicineId, medicineId),
+          eq(schema.warehouses.branchId, branchId),
+          eq(schema.inventoryBatches.status, "active"),
+          gt(schema.inventoryBatches.quantity, 0),
+          gt(schema.inventoryBatches.expiryDate, today),
+          isNotNull(schema.inventoryBatches.locationId),
+        ),
+      )
+      .orderBy(asc(schema.inventoryBatches.expiryDate));
+
+    const allocations: Array<{ batchId: string; batchNo: string; expiryDate: string; allocate: number; mrpAtEntry: string }> = [];
+    let remaining = needed;
+
+    for (const batch of batches) {
+      if (remaining <= 0) break;
+      const take = Math.min(batch.quantity, remaining);
+      allocations.push({
+        batchId: batch.id,
+        batchNo: batch.batchNo,
+        expiryDate: batch.expiryDate,
+        allocate: take,
+        mrpAtEntry: batch.mrpAtEntry,
+      });
+      remaining -= take;
+    }
+
+    if (remaining > 0) {
+      const available = needed - remaining;
+      throw new UnprocessableEntityException(
+        `Insufficient stock for medicine ${medicineId}: requested ${needed}, available ${available}`,
+      );
+    }
+
+    return allocations;
   }
 }

@@ -2,22 +2,40 @@ import { z } from "zod";
 
 export const invoiceItemSchema = z.object({
   medicineId: z.string().uuid(),
-  batchId: z.string().uuid(),
   quantity: z.number().int().min(1),
-  unitPrice: z.string().regex(/^\d+(\.\d{1,2})?$/),
   discountPct: z.string().regex(/^\d+(\.\d{1,2})?$/).default("0"),
-  taxPct: z.string().regex(/^\d+(\.\d{1,2})?$/).default("0"),
+  // batchId REMOVED — server performs FEFO (BILL-06)
+  // unitPrice REMOVED — server reads mrpAtEntry from batch (BILL-07)
+  // taxPct REMOVED — server reads medicine.taxPercent from DB
+});
+
+export const paymentEntrySchema = z.object({
+  mode: z.enum(["cash", "card", "upi", "insurance", "credit", "mixed"]),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  referenceNo: z.string().max(100).optional(),
 });
 
 export const createInvoiceSchema = z.object({
   patientId: z.string().uuid().optional(),
   prescriptionId: z.string().uuid().optional(),
   branchId: z.string().uuid(),
-  paymentMode: z.enum(["cash", "card", "upi", "insurance", "credit", "mixed"]).default("cash"),
   discountAmount: z.string().regex(/^\d+(\.\d{1,2})?$/).default("0"),
   notes: z.string().optional(),
   isOfflineSync: z.boolean().default(false),
   items: z.array(invoiceItemSchema).min(1),
+  payments: z.array(paymentEntrySchema).min(1),
+  overrideReason: z.string().min(1).optional(),
+  overriddenBy: z.string().uuid().optional(),
+});
+
+export const returnItemSchema = z.object({
+  invoiceItemId: z.string().uuid(),
+  returnQty: z.number().int().min(1),
+});
+
+export const returnInvoiceSchema = z.object({
+  items: z.array(returnItemSchema).min(1),
+  reason: z.string().min(1),
 });
 
 export const queryInvoiceSchema = z.object({
@@ -35,6 +53,9 @@ export const voidInvoiceSchema = z.object({
 });
 
 export type InvoiceItemDto = z.infer<typeof invoiceItemSchema>;
+export type PaymentEntryDto = z.infer<typeof paymentEntrySchema>;
 export type CreateInvoiceDto = z.infer<typeof createInvoiceSchema>;
+export type ReturnItemDto = z.infer<typeof returnItemSchema>;
+export type ReturnInvoiceDto = z.infer<typeof returnInvoiceSchema>;
 export type QueryInvoiceDto = z.infer<typeof queryInvoiceSchema>;
 export type VoidInvoiceDto = z.infer<typeof voidInvoiceSchema>;

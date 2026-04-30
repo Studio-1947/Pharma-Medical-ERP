@@ -21,6 +21,7 @@ export const branches = pgTable("branches", {
   email: varchar("email", { length: 255 }),
   isHeadOffice: boolean("is_head_office").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
+  state: varchar("state", { length: 100 }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

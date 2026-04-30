@@ -17,10 +17,12 @@ import { useState } from "react";
 
 export function StaffList() {
   const queryClient = useQueryClient();
-  const { data: users, isLoading } = useQuery<UserDto[]>({
+  const { data: rawUsers, isLoading } = useQuery({
     queryKey: queryKeys.users.all(),
     queryFn: () => apiClient.get("/users"),
   });
+
+  const users = (Array.isArray(rawUsers) ? rawUsers : (rawUsers as any)?.data ?? []) as UserDto[];
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/users/${id}`),
@@ -51,15 +53,16 @@ export function StaffList() {
             </tr>
           </thead>
           <tbody className="divide-y">
-            {users?.map((user) => (
+            {users.map((user) => (
               <tr key={user.id} className="hover:bg-muted/30 transition-colors">
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm">
-                      {user.firstName[0]}{user.lastName[0]}
+                      {(user.firstName?.[0] ?? user.email?.[0] ?? "U").toUpperCase()}
+                      {(user.lastName?.[0] ?? "").toUpperCase()}
                     </div>
                     <div>
-                      <div className="font-semibold">{user.firstName} {user.lastName}</div>
+                      <div className="font-semibold">{user.firstName ?? "User"} {user.lastName ?? ""}</div>
                       <div className="text-xs text-muted-foreground">{user.email}</div>
                     </div>
                   </div>
@@ -67,7 +70,7 @@ export function StaffList() {
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-1.5">
                     <Shield className="w-3.5 h-3.5 text-blue-500" />
-                    <span className="capitalize">{user.role.replace('_', ' ')}</span>
+                    <span className="capitalize">{(user.role ?? "staff").toString().replace('_', ' ')}</span>
                   </div>
                 </td>
                 <td className="px-6 py-4">
