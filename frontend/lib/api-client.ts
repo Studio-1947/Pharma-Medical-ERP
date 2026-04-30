@@ -97,4 +97,24 @@ export const queryKeys = {
     all: () => ["users"] as const,
     detail: (id: string) => ["users", id] as const,
   },
+  prescriptions: {
+    all: () => ["prescriptions"] as const,
+    list: (params: object) => ["prescriptions", "list", params] as const,
+    detail: (id: string) => ["prescriptions", id] as const,
+  },
+  suppliers: {
+    all: () => ["suppliers"] as const,
+    list: (params: object) => ["suppliers", "list", params] as const,
+    detail: (id: string) => ["suppliers", id] as const,
+  },
+  purchaseOrders: {
+    all: () => ["purchaseOrders"] as const,
+    list: (params: object) => ["purchaseOrders", "list", params] as const,
+    detail: (id: string) => ["purchaseOrders", id] as const,
+  },
+  employees: {
+    all: () => ["employees"] as const,
+    list: (params: object) => ["employees", "list", params] as const,
+    detail: (id: string) => ["employees", id] as const,
+  },
 };
