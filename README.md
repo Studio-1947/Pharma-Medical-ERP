@@ -24,10 +24,38 @@ A modern Enterprise Resource Planning (ERP) system for Pharmacies and Medical st
    ```
 
 3. **Start infrastructure services:**
-   Starts Postgres, Redis, Minio, and Elasticsearch.
+   This starts Postgres, Redis, Minio, and Elasticsearch in the background.
    ```bash
-   docker-compose up -d
+   docker compose up -d
    ```
+
+4. **Initialize the database:**
+   Sync the database schema and (optionally) seed it with initial data.
+   ```bash
+   pnpm run db:push
+   pnpm run db:seed # Optional: add dummy data
+   ```
+
+---
+
+## 🐳 Infrastructure Stack (Docker)
+
+If you're new to Docker, here's what just started running:
+
+| Service | Purpose |
+| :--- | :--- |
+| **PostgreSQL** | Primary database for sales, inventory, and users. |
+| **Redis** | High-speed cache for sessions and atomic invoice numbers. |
+| **Elasticsearch** | Powerful search engine for medicine catalogs. |
+| **MinIO** | Local file storage (S3 compatible) for prescriptions and images. |
+
+### 🛠️ Docker Cheat Sheet
+| Command | Result |
+| :--- | :--- |
+| `docker ps` | Check if services are running and healthy. |
+| `docker compose logs -f` | View live logs/errors from services. |
+| `docker compose stop` | Pause services without losing data. |
+| `docker compose down` | Stop and **remove** containers (data persists in volumes). |
 
 ---
 
@@ -48,14 +76,36 @@ If you want to run only one part of the stack:
 
 ## 🗄️ Database Management (Drizzle)
 
-All database commands should be run from the root using these shortcuts:
+We use a dual-database setup to ensure local development doesn't interfere with production.
 
-| Command | Description |
-| :--- | :--- |
-| `pnpm run db:generate` | Generate migration files based on schema changes. |
-| `pnpm run db:migrate` | Apply pending migrations to the database. |
-| `pnpm run db:push` | Directly sync schema changes (useful for local dev). |
-| `pnpm run db:studio` | Open Drizzle Studio to browse your data visually. |
+### 🌐 Environments & Configuration
+The system switches databases based on environment variables found in your `.env` files:
+
+*   **Local (Default)**: Uses `DATABASE_URL` (points to Docker container on port 5433).
+*   **Production**: Uses `DATABASE_URL_PROD` (points to Neon DB).
+
+The switching logic is handled automatically in `backend/drizzle.config.ts` via the `DB_TARGET` flag.
+
+### 🛠️ Syncing Commands
+
+| Target | Command | Description |
+| :--- | :--- | :--- |
+| **Local** | `pnpm run db:push` | Directly push schema changes to Local Docker. |
+| **Local** | `pnpm run db:migrate` | Apply versioned migrations to Local Docker. |
+| **Prod** | `pnpm run db:push:prod` | Directly push schema changes to **Neon DB**. |
+| **Prod** | `pnpm run db:migrate:prod` | Apply versioned migrations to **Neon DB**. |
+
+### 🚀 Recommended Safe Workflow
+
+1.  **Modify Schema**: Edit your Drizzle schema files in `backend/src/database/schema/`.
+2.  **Test Locally**: Run `pnpm run db:push` to update your local Docker database.
+3.  **Generate Migration**: Once happy, run `pnpm run db:generate` to create a permanent migration file.
+4.  **Go Live**: 
+    *   Run `pnpm run db:migrate` (Local) to test the migration script.
+    *   Run `pnpm run db:migrate:prod` to apply the same changes to the Neon production database.
+
+> [!CAUTION]
+> Avoid using `db:push:prod` for production if you have critical data. It's better to use versioned migrations (`db:migrate:prod`) to ensure a predictable and reversible update path.
 
 ---
 

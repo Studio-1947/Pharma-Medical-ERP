@@ -10,8 +10,11 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "db:generate": "pnpm --filter backend drizzle-kit generate",
-    "db:migrate": "pnpm --filter backend drizzle-kit migrate",
     "db:push": "pnpm --filter backend drizzle-kit push",
+    "db:push:prod": "cross-env DB_TARGET=prod pnpm run db:push",
+    "db:migrate": "pnpm --filter backend drizzle-kit migrate",
+    "db:migrate:prod": "cross-env DB_TARGET=prod pnpm run db:migrate",
+    "db:seed": "pnpm --filter backend db:seed",
     "db:studio": "pnpm --filter backend drizzle-kit studio"
   },
   "workspaces": [
@@ -20,6 +23,7 @@
     "packages/*"
   ],
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "turbo": "^2.0.0"
   }
 }
