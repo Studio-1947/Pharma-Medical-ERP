@@ -114,7 +114,9 @@ The switching logic is handled automatically in `backend/drizzle.config.ts` via 
 - **Build all packages:** `pnpm run build`
 - **Lint code:** `pnpm run lint`
 - **Type check:** `pnpm run typecheck`
-- **Run tests:** `pnpm run test`
+- **Run all tests:** `pnpm run test`
+- **Run backend tests:** `pnpm --filter backend run test`
+- **Run backend tests (watch mode):** `pnpm --filter backend run test:watch`
 
 ---
 

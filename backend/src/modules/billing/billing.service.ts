@@ -92,7 +92,11 @@ export class BillingService {
 
           if (dto.prescriptionId) {
             const [rx] = await tx
-              .select({ status: schema.prescriptions.status, expiryDate: schema.prescriptions.expiryDate })
+              .select({ 
+                status: schema.prescriptions.status, 
+                expiryDate: schema.prescriptions.expiryDate,
+                id: schema.prescriptions.id 
+              })
               .from(schema.prescriptions)
               .where(eq(schema.prescriptions.id, dto.prescriptionId));
 
@@ -102,6 +106,33 @@ export class BillingService {
             }
             if (rx.expiryDate && rx.expiryDate < today) {
               throw new UnprocessableEntityException(`Linked prescription for ${med.name} has expired`);
+            }
+
+            // Check dispense quantities
+            const [rxItem] = await tx
+              .select({ 
+                id: schema.prescriptionItems.id,
+                quantityPrescribed: schema.prescriptionItems.quantityPrescribed,
+                quantityDispensed: schema.prescriptionItems.quantityDispensed,
+                isFullyDispensed: schema.prescriptionItems.isFullyDispensed
+              })
+              .from(schema.prescriptionItems)
+              .where(
+                and(
+                  eq(schema.prescriptionItems.prescriptionId, rx.id),
+                  eq(schema.prescriptionItems.medicineId, med.id)
+                )
+              );
+
+            if (rxItem) {
+              if (rxItem.isFullyDispensed) {
+                throw new UnprocessableEntityException(`Prescription for ${med.name} has already been fully dispensed`);
+              }
+              if (rxItem.quantityPrescribed && (rxItem.quantityDispensed + item.quantity > rxItem.quantityPrescribed)) {
+                throw new UnprocessableEntityException(
+                  `Cannot dispense ${item.quantity} of ${med.name}. Only ${rxItem.quantityPrescribed - rxItem.quantityDispensed} remaining on prescription.`
+                );
+              }
             }
           }
 
@@ -199,6 +230,38 @@ export class BillingService {
           performedBy: staffId,
           referenceType: "invoice",
         }, tx);
+      }
+
+      // 4.5 Update Prescription Dispensed Quantities
+      if (dto.prescriptionId) {
+        for (const item of dto.items) {
+          const [rxItem] = await tx
+            .select({ 
+              id: schema.prescriptionItems.id,
+              quantityPrescribed: schema.prescriptionItems.quantityPrescribed,
+              quantityDispensed: schema.prescriptionItems.quantityDispensed
+            })
+            .from(schema.prescriptionItems)
+            .where(
+              and(
+                eq(schema.prescriptionItems.prescriptionId, dto.prescriptionId),
+                eq(schema.prescriptionItems.medicineId, item.medicineId)
+              )
+            );
+          
+          if (rxItem) {
+            const newDispensed = rxItem.quantityDispensed + item.quantity;
+            const isFullyDispensed = rxItem.quantityPrescribed ? newDispensed >= rxItem.quantityPrescribed : false;
+            
+            await tx
+              .update(schema.prescriptionItems)
+              .set({ 
+                quantityDispensed: newDispensed,
+                isFullyDispensed
+              })
+              .where(eq(schema.prescriptionItems.id, rxItem.id));
+          }
+        }
       }
 
       // 5. Insert Invoice, Items, and Payments
