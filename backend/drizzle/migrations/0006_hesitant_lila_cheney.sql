@@ -1,0 +1,1 @@
+ALTER TABLE "sales_invoices" ADD COLUMN "pdf_url" varchar(255);

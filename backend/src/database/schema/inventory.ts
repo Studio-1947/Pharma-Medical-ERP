@@ -213,3 +213,15 @@ export const stockMovementsRelations = relations(stockMovements, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+export const systemAlerts = pgTable("system_alerts", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  type: varchar("type", { length: 50 }).notNull(), // 'EXPIRY', 'REORDER', 'SYSTEM'
+  message: text("message").notNull(),
+  isRead: boolean("is_read").notNull().default(false),
+  referenceId: uuid("reference_id"), // medicineId, batchId, etc.
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+

@@ -94,6 +94,7 @@ export const salesInvoices = pgTable(
       onDelete: "set null",
     }),
     customerGstin: varchar("customer_gstin", { length: 15 }),
+    pdfUrl: varchar("pdf_url", { length: 255 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

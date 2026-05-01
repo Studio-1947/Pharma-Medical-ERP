@@ -2,6 +2,8 @@ import { Injectable, NotFoundException, UnprocessableEntityException } from "@ne
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import Decimal from "decimal.js";
 import { DrizzleService } from "../../database/drizzle.service";
+import { InjectQueue } from "@nestjs/bull";
+import { Queue } from "bull";
 import { BillingRepository } from "./billing.repository";
 import { TaxService } from "./tax.service";
 import { BatchRepository } from "../inventory/batch.repository";
@@ -22,6 +24,7 @@ export class BillingService {
     private readonly taxService: TaxService,
     private readonly batchRepo: BatchRepository,
     private readonly movementRepo: StockMovementRepository,
+    @InjectQueue("pdf-generation") private readonly pdfQueue: Queue,
   ) {}
 
   findAll(query: QueryInvoiceDto) { return this.repo.findPaginated(query); }
@@ -313,6 +316,15 @@ export class BillingService {
           processedBy: staffId,
         });
       }
+
+      // 6. Trigger PDF Generation Background Job
+      await this.pdfQueue.add({
+        invoiceId: invoice.id,
+      }, {
+        attempts: 3,
+        backoff: 5000,
+        removeOnComplete: true,
+      });
 
       return { invoice, items: insertedItems };
     });

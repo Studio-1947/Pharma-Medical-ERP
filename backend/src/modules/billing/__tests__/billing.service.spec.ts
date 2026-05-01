@@ -79,12 +79,17 @@ describe("BillingService (Compliance)", () => {
       log: vi.fn(),
     };
 
+    const mockPdfQueue = {
+      add: vi.fn(),
+    };
+
     service = new BillingService(
       mockRepo,
       mockDrizzle,
       mockTaxService,
       mockBatchRepo,
-      mockMovementRepo
+      mockMovementRepo,
+      mockPdfQueue as any,
     );
   });
 
@@ -129,9 +134,21 @@ describe("BillingService (Compliance)", () => {
             }],
             [{                                     // Prescription
                 status: "verified",
-                expiryDate: "2099-01-01"
+                expiryDate: "2099-01-01",
+                id: "rx-1"
             }],
-            [{ id: "b1" }]                         // Batch update returning
+            [{                                     // Prescription items check
+                id: "rx-item-1",
+                quantityPrescribed: 5,
+                quantityDispensed: 0,
+                isFullyDispensed: false
+            }],
+            [{ id: "b1" }],                        // Batch update returning
+            [{                                     // Prescription items update select
+                id: "rx-item-1",
+                quantityPrescribed: 5,
+                quantityDispensed: 0
+            }]
         ]);
 
         mockBatchRepo.selectBatchesForDispense.mockResolvedValue([{
