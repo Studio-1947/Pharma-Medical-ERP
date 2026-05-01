@@ -108,8 +108,8 @@ export class BatchService {
     return { data: updated, message: "Stock adjusted" };
   }
 
-  async getExpiringBatches(days: number) {
-    const batches = await this.batchRepo.findExpiringBatches(days);
+  async getExpiringBatches(days: number, branchId?: string) {
+    const batches = await this.batchRepo.findExpiringBatches(days, branchId);
     return { data: batches };
   }
 

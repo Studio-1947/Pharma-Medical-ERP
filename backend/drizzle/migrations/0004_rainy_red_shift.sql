@@ -1,0 +1,1 @@
+ALTER TABLE "suppliers" ADD COLUMN "outstanding_balance" numeric(12, 2) DEFAULT '0' NOT NULL;

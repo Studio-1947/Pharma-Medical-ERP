@@ -25,5 +25,10 @@
   "devDependencies": {
     "cross-env": "^10.1.0",
     "turbo": "^2.0.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "fastify": "4.28.1"
+    }
   }
 }

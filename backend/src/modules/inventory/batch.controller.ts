@@ -38,8 +38,8 @@ export class BatchController {
   @Get("expiring")
   @Roles("admin", "inventory_manager", "pharmacist")
   @ApiOperation({ summary: "Batches expiring within N days (default 90)" })
-  getExpiring(@Query("days") days = "90") {
-    return this.service.getExpiringBatches(parseInt(days));
+  getExpiring(@Query("days") days = "90", @Query("branchId") branchId?: string) {
+    return this.service.getExpiringBatches(parseInt(days), branchId);
   }
 
   @Get(":id")

@@ -28,6 +28,9 @@ export const suppliers = pgTable("suppliers", {
   creditLimit: numeric("credit_limit", { precision: 12, scale: 2 })
     .notNull()
     .default("0"),
+  outstandingBalance: numeric("outstanding_balance", { precision: 12, scale: 2 })
+    .notNull()
+    .default("0"),
   rating: integer("rating").default(3),
   isActive: boolean("is_active").notNull().default(true),
   deletedAt: timestamp("deleted_at", { withTimezone: true }),

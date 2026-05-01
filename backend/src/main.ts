@@ -3,6 +3,7 @@ import {
   FastifyAdapter,
   NestFastifyApplication,
 } from "@nestjs/platform-fastify";
+import multipart from "@fastify/multipart";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import { patchNestJsSwagger } from "nestjs-zod";
 import { AppModule } from "./app.module";
@@ -12,6 +13,12 @@ async function bootstrap() {
     AppModule,
     new FastifyAdapter({ logger: process.env.NODE_ENV === "development" }),
   );
+
+  await app.register(multipart, {
+    limits: {
+      fileSize: 5 * 1024 * 1024, // 5MB
+    },
+  });
 
   app.setGlobalPrefix("api/v1");
 

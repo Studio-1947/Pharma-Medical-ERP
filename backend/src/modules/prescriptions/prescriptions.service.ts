@@ -1,10 +1,14 @@
 import { Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import { PrescriptionsRepository } from "./prescriptions.repository";
+import { S3Service } from "../../common/s3/s3.service";
 import type { CreatePrescriptionDto, QueryPrescriptionDto, VerifyPrescriptionDto } from "@pharmerp/types";
 
 @Injectable()
 export class PrescriptionsService {
-  constructor(private readonly repo: PrescriptionsRepository) {}
+  constructor(
+    private readonly repo: PrescriptionsRepository,
+    private readonly s3Service: S3Service,
+  ) {}
 
   findAll(query: QueryPrescriptionDto) {
     return this.repo.findPaginated(query);
@@ -13,7 +17,23 @@ export class PrescriptionsService {
   async findOne(id: string) {
     const prescription = await this.repo.findById(id);
     if (!prescription) throw new NotFoundException(`Prescription ${id} not found`);
-    return { data: prescription };
+
+    // Generate signed URL if image exists
+    let signedUrl: string | undefined;
+    if (prescription.fileUrl && !prescription.fileUrl.startsWith("http")) {
+      try {
+        signedUrl = await this.s3Service.getPresignedUrl(prescription.fileUrl);
+      } catch (e) {
+        // Log but don't fail the whole request
+      }
+    }
+
+    return { 
+      data: { 
+        ...prescription, 
+        displayUrl: signedUrl ?? prescription.fileUrl 
+      } 
+    };
   }
 
   async create(dto: CreatePrescriptionDto) {

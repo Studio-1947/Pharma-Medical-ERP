@@ -9,6 +9,7 @@ export const createPrescriptionSchema = z.object({
   expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   notes: z.string().optional(),
   isControlled: z.boolean().default(false),
+  fileUrl: z.string().optional(),
   items: z.array(z.object({
     medicineName: z.string().min(1).max(255),
     medicineId: z.string().uuid().optional(),

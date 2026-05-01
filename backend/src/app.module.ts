@@ -12,6 +12,7 @@ import { PrescriptionsModule } from "./modules/prescriptions/prescriptions.modul
 import { ProcurementModule } from "./modules/procurement/procurement.module";
 import { HrModule } from "./modules/hr/hr.module";
 import { DistributionModule } from "./modules/distribution/distribution.module";
+import { S3Module } from "./common/s3/s3.module";
 import { GlobalExceptionFilter } from "./common/filters/global-exception.filter";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
 
@@ -40,6 +41,7 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
     ProcurementModule,
     HrModule,
     DistributionModule,
+    S3Module,
   ],
   providers: [
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },

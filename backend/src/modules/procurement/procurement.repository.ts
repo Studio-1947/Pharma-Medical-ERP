@@ -245,6 +245,29 @@ export class ProcurementRepository {
 
     const grnNumber = `GRN-${Date.now()}`;
 
+    // Get PO details to find warehouse and supplier
+    const po = await db.query.purchaseOrders.findFirst({
+      where: eq(schema.purchaseOrders.id, dto.poId),
+      with: { items: true },
+    });
+    if (!po) throw new Error(`PO ${dto.poId} not found during GRN`);
+
+    // Find a default storage location for this warehouse
+    const [location] = await db
+      .select({ id: schema.storageLocations.id })
+      .from(schema.storageLocations)
+      .where(eq(schema.storageLocations.warehouseId, po.warehouseId))
+      .limit(1);
+
+    if (!location) {
+      throw new Error(`No storage locations found for warehouse ${po.warehouseId}. Create one first.`);
+    }
+
+    let grnTotal = 0;
+
+    const createdBatchIds: string[] = [];
+
+    // Create GRN record first
     const [grn] = await db
       .insert(schema.goodsReceivedNotes)
       .values({
@@ -257,27 +280,25 @@ export class ProcurementRepository {
       })
       .returning();
 
-    const po = await db.query.purchaseOrders.findFirst({
-      where: eq(schema.purchaseOrders.id, dto.poId),
-      with: { items: true },
-    });
-
-    const createdBatchIds: string[] = [];
-
     for (const item of dto.items) {
-      const poItem = po?.items.find((i: any) => i.id === item.poItemId);
+      const poItem = po.items.find((i: any) => i.id === item.poItemId);
       if (!poItem) continue;
+
+      const lineCost = parseFloat(poItem.unitCost) * item.receivedQty;
+      const lineTax = lineCost * (parseFloat(poItem.taxPct) / 100);
+      grnTotal += lineCost + lineTax;
 
       // Create inventory batch
       const [batch] = await db
         .insert(schema.inventoryBatches)
         .values({
           medicineId: poItem.medicineId,
+          locationId: location.id,
           batchNo: item.batchNo,
           expiryDate: item.expiryDate,
           quantity: item.receivedQty,
           costPrice: poItem.unitCost,
-          mrpAtEntry: poItem.unitCost,
+          mrpAtEntry: poItem.unitCost, // MRP default to cost if not provided, can be updated later
           status: "active",
           poId: dto.poId,
           grnId: grn!.id,
@@ -297,7 +318,7 @@ export class ProcurementRepository {
         referenceId: grn!.id,
       });
 
-      // Insert GRN item linking back to the batch
+      // Insert GRN item
       await db.insert(schema.grnItems).values({
         grnId: grn!.id,
         poItemId: item.poItemId,
@@ -316,6 +337,15 @@ export class ProcurementRepository {
         })
         .where(eq(schema.purchaseOrderItems.id, item.poItemId));
     }
+
+    // Update supplier outstanding balance
+    await db
+      .update(schema.suppliers)
+      .set({
+        outstandingBalance: sql`${schema.suppliers.outstandingBalance} + ${grnTotal.toFixed(2)}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.suppliers.id, po.supplierId));
 
     return { grn: grn!, batchIds: createdBatchIds };
   }

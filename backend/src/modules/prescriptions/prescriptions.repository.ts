@@ -75,6 +75,7 @@ export class PrescriptionsRepository {
           expiryDate: data.expiryDate,
           notes: data.notes,
           isControlled: data.isControlled ?? false,
+          fileUrl: data.fileUrl,
           status: "pending_verification",
         })
         .returning();

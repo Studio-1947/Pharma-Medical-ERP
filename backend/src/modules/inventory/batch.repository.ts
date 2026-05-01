@@ -127,11 +127,21 @@ export class BatchRepository {
     return updated;
   }
 
-  /** Batches expiring within `days` days that are still active */
-  async findExpiringBatches(days: number) {
+  /** Batches expiring within `days` days that are still active, filtered by branch */
+  async findExpiringBatches(days: number, branchId?: string) {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() + days);
     const cutoffStr = cutoff.toISOString().split("T")[0]!;
+
+    const conditions = [
+      eq(schema.inventoryBatches.status, "active"),
+      gt(schema.inventoryBatches.quantity, 0),
+      lte(schema.inventoryBatches.expiryDate, cutoffStr),
+    ];
+
+    if (branchId) {
+      conditions.push(eq(schema.warehouses.branchId, branchId));
+    }
 
     return this.db
       .select({
@@ -143,13 +153,15 @@ export class BatchRepository {
         status: schema.inventoryBatches.status,
       })
       .from(schema.inventoryBatches)
-      .where(
-        and(
-          eq(schema.inventoryBatches.status, "active"),
-          gt(schema.inventoryBatches.quantity, 0),
-          lte(schema.inventoryBatches.expiryDate, cutoffStr),
-        ),
+      .innerJoin(
+        schema.storageLocations,
+        eq(schema.inventoryBatches.locationId, schema.storageLocations.id),
       )
+      .innerJoin(
+        schema.warehouses,
+        eq(schema.storageLocations.warehouseId, schema.warehouses.id),
+      )
+      .where(and(...conditions))
       .orderBy(asc(schema.inventoryBatches.expiryDate));
   }
 
