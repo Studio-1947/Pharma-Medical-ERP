@@ -13,18 +13,25 @@ export interface CartItem {
   discountPct: number;
   quantity: number;
   lineTotal: number;
+  scheduleClass?: string | null;
+  requiresPrescription?: boolean;
 }
 
 interface CartState {
   items: CartItem[];
   patientId: string | null;
   branchId: string;
+  prescriptionId: string | null;
+  loyaltyPointsToRedeem: number;
   addItem: (item: Omit<CartItem, "lineTotal">) => void;
   updateQty: (medicineId: string, batchId: string, qty: number) => void;
   removeItem: (medicineId: string, batchId: string) => void;
   setPatient: (id: string | null) => void;
+  setPrescriptionId: (id: string | null) => void;
+  setLoyaltyPointsToRedeem: (points: number) => void;
   clear: () => void;
   totals: () => { subtotal: number; tax: number; discount: number; total: number };
+  hasControlledItems: () => boolean;
 }
 
 function calcLine(i: Omit<CartItem, "lineTotal">) {
@@ -40,6 +47,8 @@ export const useCartStore = create<CartState>()(
       items: [],
       patientId: null,
       branchId: "",
+      prescriptionId: null,
+      loyaltyPointsToRedeem: 0,
       addItem: (item) => {
         const existing = get().items.find((i) => i.batchId === item.batchId);
         if (existing) {
@@ -54,7 +63,9 @@ export const useCartStore = create<CartState>()(
       },
       removeItem: (_, batchId) => set((s) => ({ items: s.items.filter((i) => i.batchId !== batchId) })),
       setPatient: (id) => set({ patientId: id }),
-      clear: () => set({ items: [], patientId: null }),
+      setPrescriptionId: (id) => set({ prescriptionId: id }),
+      setLoyaltyPointsToRedeem: (points) => set({ loyaltyPointsToRedeem: points }),
+      clear: () => set({ items: [], patientId: null, prescriptionId: null, loyaltyPointsToRedeem: 0 }),
       totals: () => {
         const items = get().items;
         const subtotal = items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
@@ -63,7 +74,13 @@ export const useCartStore = create<CartState>()(
         const tax = items.reduce((s, i) => s + ((i.unitPrice * i.quantity - (i.unitPrice * i.quantity * i.discountPct) / 100) * i.taxPct) / 100, 0);
         return { subtotal, tax, discount, total: taxable + tax };
       },
+      hasControlledItems: () => {
+        const controlled = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"];
+        return get().items.some(
+          (i) => (i.scheduleClass && controlled.includes(i.scheduleClass)) || i.requiresPrescription
+        );
+      },
     }),
-    { name: "pharmerp-cart", partialize: (s) => ({ items: s.items, patientId: s.patientId }) },
+    { name: "pharmerp-cart", partialize: (s) => ({ items: s.items, patientId: s.patientId, prescriptionId: s.prescriptionId }) },
   ),
 );

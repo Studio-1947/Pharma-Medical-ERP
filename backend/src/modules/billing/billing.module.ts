@@ -6,6 +6,7 @@ import { TaxService } from "./tax.service";
 import { BullModule } from "@nestjs/bull";
 import { BatchRepository } from "../inventory/batch.repository";
 import { StockMovementRepository } from "../inventory/stock-movement.repository";
+import { PatientsRepository } from "../patients/patients.repository";
 import { RedisModule } from "../../common/redis/redis.module";
 
 @Module({
@@ -22,6 +23,7 @@ import { RedisModule } from "../../common/redis/redis.module";
     TaxService,
     BatchRepository,
     StockMovementRepository,
+    PatientsRepository,
   ],
   exports: [BillingService],
 })

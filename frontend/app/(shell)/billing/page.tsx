@@ -4,39 +4,72 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import Link from "next/link";
 import { apiClient, queryKeys } from "@/lib/api-client";
-import { ShoppingCart, XCircle, RotateCcw, AlertCircle, Download, Search, Filter } from "lucide-react";
+import { ShoppingCart, XCircle, RotateCcw, AlertCircle, Download, Search, BarChart2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 
-// ─── PDF download button ──────────────────────────────────────────────────────
+// ─── PDF download button (polls until ready) ─────────────────────────────────
 
 function PdfButton({ invoiceId }: { invoiceId: string }) {
-  const [loading, setLoading] = useState(false);
+  const [state, setState] = useState<"idle" | "polling" | "done" | "error">("idle");
 
   const handleDownload = async () => {
-    setLoading(true);
-    try {
-      const res: any = await apiClient.get(`/billing/invoices/${invoiceId}/pdf`);
-      if (res.ready && res.url) {
-        window.open(res.url, "_blank");
-      } else {
-        alert("PDF is being generated. Please try again in a few seconds.");
+    setState("polling");
+    let attempts = 0;
+    const maxAttempts = 12; // 12 × 2.5s = 30s max
+
+    const tryFetch = async (): Promise<void> => {
+      try {
+        const res: any = await apiClient.get(`/billing/invoices/${invoiceId}/pdf`);
+        if (res.ready && res.url) {
+          setState("done");
+          window.open(res.url, "_blank");
+          setTimeout(() => setState("idle"), 3000);
+          return;
+        }
+      } catch {
+        // server error — stop polling
+        setState("error");
+        return;
       }
-    } catch {
-      alert("Failed to get PDF link.");
-    } finally {
-      setLoading(false);
-    }
+      attempts++;
+      if (attempts >= maxAttempts) {
+        setState("error");
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 2500));
+      return tryFetch();
+    };
+
+    await tryFetch();
   };
+
+  if (state === "polling") {
+    return (
+      <span className="flex items-center gap-1 text-xs text-slate-400">
+        <span className="w-3 h-3 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+        Generating…
+      </span>
+    );
+  }
+  if (state === "done") {
+    return <span className="text-xs text-green-600 font-medium">Opened</span>;
+  }
+  if (state === "error") {
+    return (
+      <button onClick={() => setState("idle")} className="text-xs text-red-500 hover:underline">
+        Retry PDF
+      </button>
+    );
+  }
 
   return (
     <button
       onClick={handleDownload}
-      disabled={loading}
-      className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 hover:underline disabled:opacity-40"
+      className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 hover:underline"
       title="Download PDF"
     >
       <Download size={12} />
-      {loading ? "..." : "PDF"}
+      PDF
     </button>
   );
 }
@@ -272,6 +305,68 @@ function ReturnModal({
   );
 }
 
+// ─── End-of-Day Summary ───────────────────────────────────────────────────────
+
+function EodSummary() {
+  const today = new Date().toISOString().split("T")[0]!;
+  const [date, setDate] = useState(today);
+  const [open, setOpen] = useState(false);
+
+  const { data, isFetching, refetch } = useQuery({
+    queryKey: ["eod-summary", date],
+    queryFn: () => apiClient.get("/billing/reports/end-of-day", { params: { date } }) as any,
+    enabled: open,
+  });
+
+  const summary = (data as any)?.data ?? data;
+
+  return (
+    <div className="mt-6 border rounded-xl overflow-hidden">
+      <button
+        onClick={() => { setOpen((o) => !o); if (!open) refetch(); }}
+        className="w-full flex items-center justify-between px-5 py-3.5 bg-muted/30 hover:bg-muted/50 transition-colors text-sm font-semibold"
+      >
+        <div className="flex items-center gap-2">
+          <BarChart2 size={16} />
+          End-of-Day Summary
+        </div>
+        <span className="text-muted-foreground text-xs">{open ? "Collapse" : "Expand"}</span>
+      </button>
+
+      {open && (
+        <div className="p-5 space-y-4">
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium">Date</label>
+            <input
+              type="date"
+              value={date}
+              max={today}
+              onChange={(e) => setDate(e.target.value)}
+              className="border rounded-lg px-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+            />
+          </div>
+          {isFetching && <div className="text-sm text-muted-foreground animate-pulse">Loading summary…</div>}
+          {summary && !isFetching && (
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              {[
+                { label: "Total Invoices", value: summary.totalInvoices, prefix: "", suffix: "" },
+                { label: "Total Sales", value: Number(summary.totalSales).toFixed(2), prefix: "₹", suffix: "" },
+                { label: "Total GST", value: Number(summary.totalTax).toFixed(2), prefix: "₹", suffix: "" },
+                { label: "Discounts Given", value: Number(summary.totalDiscounts).toFixed(2), prefix: "₹", suffix: "" },
+              ].map(({ label, value, prefix }) => (
+                <div key={label} className="bg-muted/20 border rounded-xl p-4 text-center">
+                  <p className="text-xs text-muted-foreground mb-1">{label}</p>
+                  <p className="text-xl font-bold text-slate-900">{prefix}{value}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function BillingPage() {
@@ -488,6 +583,8 @@ export default function BillingPage() {
 
       <VoidModal invoice={voidTarget} open={!!voidTarget} onClose={() => setVoidTarget(null)} />
       <ReturnModal invoice={returnTarget} open={!!returnTarget} onClose={() => setReturnTarget(null)} />
+
+      <EodSummary />
     </div>
   );
 }

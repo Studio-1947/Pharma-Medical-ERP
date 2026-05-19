@@ -87,12 +87,18 @@ describe("BillingService (Compliance)", () => {
       getPresignedUrl: vi.fn(),
     };
 
+    const mockPatientsRepo = {
+      addLoyaltyPoints: vi.fn(),
+      deductLoyaltyPoints: vi.fn(),
+    };
+
     service = new BillingService(
       mockRepo,
       mockDrizzle,
       mockTaxService,
       mockBatchRepo,
       mockMovementRepo,
+      mockPatientsRepo as any,
       mockS3 as any,
       mockPdfQueue as any,
     );

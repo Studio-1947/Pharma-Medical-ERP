@@ -75,6 +75,22 @@ export class PatientsRepository {
 
   async addLoyaltyPoints(id: string, points: number, tx?: any) {
     const db = tx ?? this.db;
-    await db.update(schema.patients).set({ loyaltyPoints: sql`${schema.patients.loyaltyPoints} + ${points}` }).where(eq(schema.patients.id, id));
+    await db.update(schema.patients)
+      .set({ loyaltyPoints: sql`${schema.patients.loyaltyPoints} + ${points}` })
+      .where(eq(schema.patients.id, id));
+  }
+
+  async deductLoyaltyPoints(id: string, points: number, tx?: any) {
+    const db = tx ?? this.db;
+    const [patient] = await db
+      .select({ loyaltyPoints: schema.patients.loyaltyPoints })
+      .from(schema.patients)
+      .where(eq(schema.patients.id, id));
+    if (!patient || patient.loyaltyPoints < points) {
+      throw new Error(`Insufficient loyalty points. Available: ${patient?.loyaltyPoints ?? 0}`);
+    }
+    await db.update(schema.patients)
+      .set({ loyaltyPoints: sql`${schema.patients.loyaltyPoints} - ${points}` })
+      .where(eq(schema.patients.id, id));
   }
 }

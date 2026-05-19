@@ -2,12 +2,14 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Search, Trash2, Plus, Minus, ShoppingCart, Printer } from "lucide-react";
+import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X } from "lucide-react";
 import { useCartStore } from "@/stores/cart.store";
 import { PaymentModal } from "./payment-modal";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { queueOfflineInvoice, syncOfflineQueue } from "@/lib/pos-db";
+
+const CONTROLLED_CLASSES = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"];
 
 export function PosTerminal() {
   const [search, setSearch] = useState("");
@@ -15,68 +17,76 @@ export function PosTerminal() {
   const [isOnline, setIsOnline] = useState(true);
   const [printOpen, setPrintOpen] = useState(false);
   const [lastInvoice, setLastInvoice] = useState<any>(null);
+  const [patientSearch, setPatientSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
-  
-  const { items, addItem, updateQty, removeItem, clear, totals, patientId, branchId } = useCartStore();
+
+  const {
+    items, addItem, updateQty, removeItem, clear, totals,
+    patientId, branchId,
+    prescriptionId, setPrescriptionId,
+    loyaltyPointsToRedeem, setLoyaltyPointsToRedeem,
+    setPatient, hasControlledItems,
+  } = useCartStore();
   const { user } = useAuthStore();
   const { subtotal, tax, discount, total } = totals();
 
-  // USB HID Barcode Scanner Buffer hook
+  const needsRx = hasControlledItems();
+  const loyaltyDiscount = loyaltyPointsToRedeem / 10;
+  const finalTotal = Math.max(0, total - loyaltyDiscount);
+
+  // ── Patient lookup ──────────────────────────────────────────────────────────
+  const { data: patientResults } = useQuery({
+    queryKey: ["patient-search-pos", patientSearch],
+    queryFn: () => apiClient.get("/patients", { params: { search: patientSearch, limit: 5 } }) as any,
+    enabled: patientSearch.length >= 3,
+  });
+
+  const { data: selectedPatientRaw } = useQuery({
+    queryKey: ["patient-detail", patientId],
+    queryFn: () => apiClient.get(`/patients/${patientId}`),
+    enabled: !!patientId,
+  });
+
+  const selectedPatient: any = (selectedPatientRaw as any)?.data ?? selectedPatientRaw ?? null;
+  const patientResults_: any[] = (patientResults as any)?.data ?? [];
+
+  // ── Barcode scanner ─────────────────────────────────────────────────────────
   useEffect(() => {
     let buffer = "";
     let lastKeyTime = Date.now();
 
     const handleGlobalKeydown = async (e: KeyboardEvent) => {
       const currentTime = Date.now();
-      
-      // If the rapid keypress sequence ended in Enter
       if (e.key === "Enter") {
         if (buffer && currentTime - lastKeyTime < 50) {
           e.preventDefault();
           const scanCode = buffer.trim();
           buffer = "";
-          
           if (scanCode.length > 2) {
             try {
-              // Lookup barcode matching medicine
-              const res: any = await apiClient.get("/inventory/medicines", {
-                params: { search: scanCode, limit: 1 },
-              });
+              const res: any = await apiClient.get("/inventory/medicines", { params: { search: scanCode, limit: 1 } });
               const medicine = res?.data?.[0];
               if (medicine) {
                 const batchesRes: any = await apiClient.get(`/inventory/medicines/${medicine.id}/batches`);
                 const firstBatch = Array.isArray(batchesRes) ? batchesRes[0] : (batchesRes as any)?.data?.[0];
                 if (firstBatch) {
                   addItem({
-                    medicineId: medicine.id,
-                    batchId: firstBatch.id,
-                    name: medicine.name,
-                    sku: medicine.sku,
-                    batchNo: firstBatch.batchNo,
+                    medicineId: medicine.id, batchId: firstBatch.id,
+                    name: medicine.name, sku: medicine.sku, batchNo: firstBatch.batchNo,
                     unitPrice: parseFloat(medicine.priceMrp),
-                    taxPct: parseFloat(medicine.taxPercent ?? "0"),
-                    discountPct: 0,
-                    quantity: 1,
+                    taxPct: parseFloat(medicine.taxPercent ?? "0"), discountPct: 0, quantity: 1,
+                    scheduleClass: medicine.scheduleClass, requiresPrescription: medicine.requiresPrescription,
                   });
                   setSearch("");
-                } else {
-                  alert(`Batch not found for scanned item: ${medicine.name}`);
                 }
               }
-            } catch (err) {
-              console.error("Barcode search failed", err);
-            }
+            } catch {}
           }
         } else {
           buffer = "";
         }
       } else if (e.key.length === 1) {
-        // If elapsed time between keypresses is very short, accumulate in the barcode buffer
-        if (currentTime - lastKeyTime < 50) {
-          buffer += e.key;
-        } else {
-          buffer = e.key;
-        }
+        buffer = currentTime - lastKeyTime < 50 ? buffer + e.key : e.key;
       }
       lastKeyTime = currentTime;
     };
@@ -85,67 +95,38 @@ export function PosTerminal() {
     return () => window.removeEventListener("keydown", handleGlobalKeydown);
   }, [addItem]);
 
-  // Network offline detection and Auto-sync queue hook
+  // ── Online/offline ──────────────────────────────────────────────────────────
   useEffect(() => {
-    const on = () => {
-      setIsOnline(true);
-      syncOfflineQueue((p) => apiClient.post("/billing/invoices", p) as any);
-    };
+    const on = () => { setIsOnline(true); syncOfflineQueue((p) => apiClient.post("/billing/invoices", p) as any); };
     const off = () => setIsOnline(false);
-
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
     setIsOnline(navigator.onLine);
-
-    return () => {
-      window.removeEventListener("online", on);
-      window.removeEventListener("offline", off);
-    };
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
 
-  // Hotkeys hook (F2, F4, F6, Ctrl+P)
+  // ── Hotkeys ─────────────────────────────────────────────────────────────────
   useEffect(() => {
-    const hotkeyHandler = (e: KeyboardEvent) => {
-      if (e.key === "F2") {
-        e.preventDefault();
-        searchRef.current?.focus();
-      }
-      if (e.key === "F4") {
-        e.preventDefault();
-        if (items.length > 0) setPayOpen(true);
-      }
-      if (e.key === "F6") {
-        e.preventDefault();
-        if (items.length > 0) {
-          if (confirm("Are you sure you want to clear the entire cart?")) {
-            clear();
-          }
-        }
-      }
-      if (e.ctrlKey && (e.key === "p" || e.key === "P")) {
-        e.preventDefault();
-        if (lastInvoice) {
-          window.print();
-        } else {
-          alert("No recent invoice to print yet.");
-        }
-      }
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "F2") { e.preventDefault(); searchRef.current?.focus(); }
+      if (e.key === "F4") { e.preventDefault(); if (items.length > 0) setPayOpen(true); }
+      if (e.key === "F6") { e.preventDefault(); if (items.length > 0 && confirm("Clear the entire cart?")) clear(); }
+      if (e.ctrlKey && (e.key === "p" || e.key === "P")) { e.preventDefault(); if (lastInvoice) window.print(); }
     };
-
-    window.addEventListener("keydown", hotkeyHandler);
-    return () => window.removeEventListener("keydown", hotkeyHandler);
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, [items, clear, lastInvoice]);
 
+  // ── Medicine search ──────────────────────────────────────────────────────────
   const { data: searchResults, isFetching } = useQuery({
     queryKey: ["medicine-search", search],
-    queryFn: () =>
-      apiClient.get("/inventory/medicines", { params: { search, limit: 8 } }) as any,
+    queryFn: () => apiClient.get("/inventory/medicines", { params: { search, limit: 8 } }) as any,
     enabled: search.length >= 2,
   });
 
+  // ── Invoice creation ─────────────────────────────────────────────────────────
   const createMutation = useMutation({
-    mutationFn: (payload: object) =>
-      apiClient.post("/billing/invoices", payload) as any,
+    mutationFn: (payload: object) => apiClient.post("/billing/invoices", payload) as any,
     onSuccess: (data: any) => {
       const invoice = data?.data?.invoice ?? data?.data ?? data;
       setLastInvoice(invoice);
@@ -157,23 +138,22 @@ export function PosTerminal() {
 
   const handlePayConfirm = async (mode: string, splits?: { mode: string; amount: number; ref?: string }[]) => {
     const resolvedBranchId = branchId || user?.branchId;
-    if (!resolvedBranchId) {
-      alert("No branch selected. Please log in again.");
+    if (!resolvedBranchId) { alert("No branch selected. Please log in again."); return; }
+
+    if (needsRx && !prescriptionId?.trim()) {
+      alert("This sale includes Schedule H/controlled medicines. Please enter a verified Prescription ID before checkout.");
       return;
     }
 
-    // Build payments array matching the backend schema
     const payments = splits?.length
-      ? splits.map((s) => ({
-          mode: s.mode,
-          amount: String(s.amount.toFixed(2)),
-          ...(s.ref ? { referenceNo: s.ref } : {}),
-        }))
-      : [{ mode, amount: String(total.toFixed(2)) }];
+      ? splits.map((s) => ({ mode: s.mode, amount: String(s.amount.toFixed(2)), ...(s.ref ? { referenceNo: s.ref } : {}) }))
+      : [{ mode, amount: String(finalTotal.toFixed(2)) }];
 
     const payload = {
       branchId: resolvedBranchId,
       patientId: patientId || undefined,
+      prescriptionId: prescriptionId?.trim() || undefined,
+      loyaltyPointsToRedeem,
       items: items.map((i) => ({
         medicineId: i.medicineId,
         quantity: i.quantity,
@@ -198,33 +178,120 @@ export function PosTerminal() {
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-8rem)]">
-      {/* Top Banner and Quick actions */}
+      {/* Top bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-muted/40 p-4 rounded-xl border">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs bg-muted border font-semibold px-2 py-1 rounded-md">
-            [F2] Search Bar
-          </span>
-          <span className="text-xs bg-muted border font-semibold px-2 py-1 rounded-md">
-            [F4] Pay Modal
-          </span>
-          <span className="text-xs bg-muted border font-semibold px-2 py-1 rounded-md">
-            [F6] Clear Cart
-          </span>
-          <span className="text-xs bg-muted border font-semibold px-2 py-1 rounded-md">
-            [Ctrl+P] Print Invoice
-          </span>
+          {(["[F2] Search", "[F4] Pay", "[F6] Clear", "[Ctrl+P] Print"] as const).map((k) => (
+            <span key={k} className="text-xs bg-muted border font-semibold px-2 py-1 rounded-md">{k}</span>
+          ))}
         </div>
         <div className="flex items-center gap-2">
           <span className={`w-3 h-3 rounded-full ${isOnline ? "bg-green-500" : "bg-amber-500"}`} />
-          <span className="text-xs font-semibold text-gray-700">
-            {isOnline ? "Online Terminal" : "Offline Storage Mode"}
-          </span>
+          <span className="text-xs font-semibold text-gray-700">{isOnline ? "Online Terminal" : "Offline Storage Mode"}</span>
         </div>
       </div>
 
+      {/* Schedule H warning banner */}
+      {needsRx && (
+        <div className="flex flex-col gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
+          <div className="flex items-center gap-2 text-amber-700 text-sm font-semibold">
+            <AlertTriangle size={15} /> Cart contains Schedule H / controlled medicines — a verified prescription is required
+          </div>
+          <div className="flex items-center gap-2">
+            <FileText size={14} className="text-amber-600 shrink-0" />
+            <input
+              value={prescriptionId ?? ""}
+              onChange={(e) => setPrescriptionId(e.target.value || null)}
+              placeholder="Paste verified Prescription ID (UUID)..."
+              className="flex-1 border border-amber-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white font-mono"
+            />
+            {prescriptionId && (
+              <button onClick={() => setPrescriptionId(null)} className="text-amber-500 hover:text-amber-700">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          {prescriptionId?.trim() && (
+            <span className="text-xs text-green-700 font-medium">Prescription linked</span>
+          )}
+        </div>
+      )}
+
       <div className="flex gap-4 flex-1 overflow-hidden">
-        {/* Left: search + results */}
+        {/* Left: search + patient */}
         <div className="flex-1 flex flex-col gap-3 h-full overflow-hidden">
+          {/* Patient selector */}
+          <div className="relative">
+            {selectedPatient ? (
+              <div className="flex items-center justify-between border rounded-xl px-4 py-2.5 bg-blue-50 border-blue-200">
+                <div>
+                  <p className="text-sm font-semibold text-blue-900">{selectedPatient.name}</p>
+                  <p className="text-xs text-blue-600">
+                    {selectedPatient.phone}
+                    {selectedPatient.loyaltyPoints != null && (
+                      <span className="ml-2 bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded font-bold">
+                        <Star size={10} className="inline mr-0.5" />{selectedPatient.loyaltyPoints} pts
+                      </span>
+                    )}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {(selectedPatient.loyaltyPoints ?? 0) >= 100 && (
+                    <div className="flex items-center gap-1 text-xs">
+                      <span className="text-yellow-700 font-medium">Redeem:</span>
+                      <select
+                        value={loyaltyPointsToRedeem}
+                        onChange={(e) => setLoyaltyPointsToRedeem(Number(e.target.value))}
+                        className="border border-yellow-300 rounded px-1.5 py-1 text-xs bg-white"
+                      >
+                        <option value={0}>0 pts</option>
+                        {Array.from({ length: Math.floor((selectedPatient.loyaltyPoints ?? 0) / 100) }, (_, i) => (i + 1) * 100)
+                          .filter((pts) => pts / 10 <= total)
+                          .map((pts) => (
+                            <option key={pts} value={pts}>{pts} pts (−₹{pts / 10})</option>
+                          ))}
+                      </select>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => { setPatient(null); setLoyaltyPointsToRedeem(0); setPatientSearch(""); }}
+                    className="text-blue-400 hover:text-blue-700"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  value={patientSearch}
+                  onChange={(e) => setPatientSearch(e.target.value)}
+                  placeholder="Search patient by name or phone (optional)..."
+                  className="w-full border rounded-xl pl-8 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 bg-background"
+                />
+                {patientResults_.length > 0 && patientSearch.length >= 3 && (
+                  <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-white border rounded-xl shadow-lg max-h-40 overflow-y-auto">
+                    {patientResults_.map((p: any) => (
+                      <button
+                        key={p.id}
+                        onClick={() => { setPatient(p.id); setPatientSearch(""); }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-muted/50 text-sm"
+                      >
+                        <span className="font-medium">{p.name}</span>
+                        <span className="text-muted-foreground ml-2 text-xs">{p.phone}</span>
+                        {p.loyaltyPoints > 0 && (
+                          <span className="ml-2 text-xs text-yellow-600 font-medium">{p.loyaltyPoints} pts</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Medicine search */}
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input
@@ -240,45 +307,33 @@ export function PosTerminal() {
             {search.length >= 2 ? (
               <div className="divide-y">
                 {isFetching && (
-                  <div className="p-6 text-sm text-muted-foreground text-center animate-pulse">
-                    Searching items…
-                  </div>
+                  <div className="p-6 text-sm text-muted-foreground text-center animate-pulse">Searching items…</div>
                 )}
                 {medicines.map((m: any) => (
                   <div
                     key={m.id}
                     onClick={async () => {
                       try {
-                        const batches: any[] = await apiClient.get(`/inventory/medicines/${m.id}/batches`) as any;
+                        const batches: any = await apiClient.get(`/inventory/medicines/${m.id}/batches`);
                         const first = Array.isArray(batches) ? batches[0] : (batches as any)?.data?.[0];
-                        if (!first) {
-                          alert("No batch/stock available for this item.");
-                          return;
-                        }
+                        if (!first) { alert("No batch/stock available for this item."); return; }
                         addItem({
-                          medicineId: m.id,
-                          batchId: first.id,
-                          name: m.name,
-                          sku: m.sku,
-                          batchNo: first.batchNo,
-                          unitPrice: parseFloat(m.priceMrp),
-                          taxPct: parseFloat(m.taxPercent ?? "0"),
-                          discountPct: 0,
-                          quantity: 1,
+                          medicineId: m.id, batchId: first.id, name: m.name, sku: m.sku,
+                          batchNo: first.batchNo, unitPrice: parseFloat(m.priceMrp),
+                          taxPct: parseFloat(m.taxPercent ?? "0"), discountPct: 0, quantity: 1,
+                          scheduleClass: m.scheduleClass, requiresPrescription: m.requiresPrescription,
                         });
                         setSearch("");
-                      } catch (err) {
-                        alert("Error getting batch stock details.");
-                      }
+                      } catch { alert("Error getting batch stock details."); }
                     }}
                     className="flex items-center justify-between px-5 py-4 hover:bg-muted/40 text-sm text-left transition duration-150 cursor-pointer"
                   >
                     <div className="space-y-1">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-gray-900">{m.name}</span>
-                        {m.scheduleClass && (
+                        {m.scheduleClass && CONTROLLED_CLASSES.includes(m.scheduleClass) && (
                           <span className="text-[10px] bg-red-50 text-red-700 border border-red-100 font-bold px-1.5 py-0.5 rounded uppercase">
-                            {m.scheduleClass}
+                            {m.scheduleClass} — Rx Required
                           </span>
                         )}
                       </div>
@@ -298,7 +353,6 @@ export function PosTerminal() {
               <div className="p-12 text-center text-muted-foreground text-sm flex flex-col items-center justify-center h-full">
                 <ShoppingCart className="w-12 h-12 mb-3 opacity-25" />
                 <p>Search or use a barcode scanner to build checkout.</p>
-                <p className="text-xs mt-1">Try searching for any medicine name by F2 key focus.</p>
               </div>
             )}
           </div>
@@ -330,32 +384,22 @@ export function PosTerminal() {
                       <span>{item.batchNo}</span>
                       <span>·</span>
                       <span>₹{item.unitPrice.toFixed(2)}</span>
-                      <span>·</span>
-                      <span className="bg-muted px-1.5 py-0.5 rounded text-[10px] font-semibold">
-                        GST {item.taxPct}%
-                      </span>
+                      {item.scheduleClass && CONTROLLED_CLASSES.includes(item.scheduleClass) && (
+                        <span className="bg-red-50 text-red-600 text-[10px] font-bold px-1 rounded">{item.scheduleClass}</span>
+                      )}
                     </div>
                   </div>
-                  <button
-                    onClick={() => removeItem(item.medicineId, item.batchId)}
-                    className="text-muted-foreground hover:text-red-500 ml-2 transition"
-                  >
+                  <button onClick={() => removeItem(item.medicineId, item.batchId)} className="text-muted-foreground hover:text-red-500 ml-2 transition">
                     <Trash2 size={14} />
                   </button>
                 </div>
                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-muted/30">
                   <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-md">
-                    <button
-                      onClick={() => updateQty(item.medicineId, item.batchId, item.quantity - 1)}
-                      className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition"
-                    >
+                    <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity - 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
                       <Minus size={10} />
                     </button>
                     <span className="w-8 text-center text-xs font-semibold">{item.quantity}</span>
-                    <button
-                      onClick={() => updateQty(item.medicineId, item.batchId, item.quantity + 1)}
-                      className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition"
-                    >
+                    <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity + 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
                       <Plus size={10} />
                     </button>
                   </div>
@@ -368,25 +412,25 @@ export function PosTerminal() {
           {/* Totals */}
           <div className="border-t p-4 space-y-1.5 text-sm bg-muted/10">
             <div className="flex justify-between text-muted-foreground">
-              <span>Subtotal</span>
-              <span>₹{subtotal.toFixed(2)}</span>
+              <span>Subtotal</span><span>₹{subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-muted-foreground">
-              <span>Tax (GST)</span>
-              <span>₹{tax.toFixed(2)}</span>
+              <span>Tax (GST)</span><span>₹{tax.toFixed(2)}</span>
             </div>
+            {loyaltyDiscount > 0 && (
+              <div className="flex justify-between text-yellow-700 text-xs font-medium">
+                <span><Star size={10} className="inline mr-1" />Loyalty discount ({loyaltyPointsToRedeem} pts)</span>
+                <span>−₹{loyaltyDiscount.toFixed(2)}</span>
+              </div>
+            )}
             <div className="flex justify-between font-bold text-base pt-1.5 border-t">
               <span>Total</span>
-              <span className="text-primary text-lg">₹{total.toFixed(2)}</span>
+              <span className="text-primary text-lg">₹{finalTotal.toFixed(2)}</span>
             </div>
           </div>
 
           <div className="px-4 pb-4 flex gap-2">
-            <button
-              onClick={clear}
-              disabled={items.length === 0}
-              className="flex-1 py-2.5 border rounded-lg text-sm hover:bg-muted transition duration-200 disabled:opacity-40"
-            >
+            <button onClick={clear} disabled={items.length === 0} className="flex-1 py-2.5 border rounded-lg text-sm hover:bg-muted transition duration-200 disabled:opacity-40">
               Clear (F6)
             </button>
             <button
@@ -402,20 +446,18 @@ export function PosTerminal() {
 
       <PaymentModal
         open={payOpen}
-        total={total}
+        total={finalTotal}
         onClose={() => setPayOpen(false)}
         onConfirm={handlePayConfirm}
         loading={createMutation.isPending}
       />
 
-      {/* Invoice Print Preview Drawer / Dialog */}
+      {/* Invoice print preview */}
       {printOpen && lastInvoice && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-4 max-h-[85vh] overflow-y-auto">
             <div className="text-center">
-              <span className="bg-green-100 text-green-700 font-semibold px-3 py-1 rounded-full text-xs">
-                Invoice Completed!
-              </span>
+              <span className="bg-green-100 text-green-700 font-semibold px-3 py-1 rounded-full text-xs">Invoice Completed!</span>
               <h3 className="text-lg font-bold text-gray-900 mt-2">Print & Review</h3>
             </div>
             <hr />
@@ -433,22 +475,12 @@ export function PosTerminal() {
                 <span>₹{parseFloat(lastInvoice.totalAmount).toFixed(2)}</span>
               </div>
             </div>
-
             <div className="flex gap-2 pt-2">
-              <button
-                onClick={() => {
-                  setPrintOpen(false);
-                  setLastInvoice(null);
-                }}
-                className="flex-1 py-2 border rounded-lg text-xs font-semibold hover:bg-muted transition"
-              >
+              <button onClick={() => { setPrintOpen(false); setLastInvoice(null); }} className="flex-1 py-2 border rounded-lg text-xs font-semibold hover:bg-muted transition">
                 Dismiss
               </button>
-              <button
-                onClick={() => window.print()}
-                className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:bg-primary/90 transition inline-flex items-center justify-center gap-1.5"
-              >
-                <Printer size={12} /> Print Invoice (Ctrl+P)
+              <button onClick={() => window.print()} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:bg-primary/90 transition inline-flex items-center justify-center gap-1.5">
+                <Printer size={12} /> Print (Ctrl+P)
               </button>
             </div>
           </div>

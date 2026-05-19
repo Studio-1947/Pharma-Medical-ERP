@@ -8,6 +8,7 @@ import { BillingRepository } from "./billing.repository";
 import { TaxService } from "./tax.service";
 import { BatchRepository } from "../inventory/batch.repository";
 import { StockMovementRepository } from "../inventory/stock-movement.repository";
+import { PatientsRepository } from "../patients/patients.repository";
 import { S3Service } from "../../common/s3/s3.service";
 import * as schema from "../../database/schema";
 import type {
@@ -25,6 +26,7 @@ export class BillingService {
     private readonly taxService: TaxService,
     private readonly batchRepo: BatchRepository,
     private readonly movementRepo: StockMovementRepository,
+    private readonly patientsRepo: PatientsRepository,
     private readonly s3: S3Service,
     @InjectQueue("pdf-generation") private readonly pdfQueue: Queue,
   ) {}
@@ -190,11 +192,31 @@ export class BillingService {
       });
 
       const { subtotal, taxAmount, totalAmount } = this.taxService.aggregateInvoiceTotals(lines);
-      const discountAmount = new Decimal(dto.discountAmount ?? "0");
+
+      // Loyalty point redemption: 100 points = ₹10 discount
+      const pointsToRedeem = dto.loyaltyPointsToRedeem ?? 0;
+      let loyaltyDiscount = new Decimal(0);
+      if (pointsToRedeem > 0) {
+        if (!dto.patientId) {
+          throw new UnprocessableEntityException("Loyalty points can only be redeemed for registered patients");
+        }
+        if (pointsToRedeem % 100 !== 0) {
+          throw new UnprocessableEntityException("Points must be redeemed in multiples of 100");
+        }
+        loyaltyDiscount = new Decimal(pointsToRedeem).div(10);
+        // Validate patient has enough points (throws if insufficient)
+        await this.patientsRepo.deductLoyaltyPoints(dto.patientId, pointsToRedeem, tx);
+      }
+
+      const discountAmount = new Decimal(dto.discountAmount ?? "0").plus(loyaltyDiscount);
       const finalTotal = new Decimal(totalAmount).minus(discountAmount).toNumber();
 
+      if (finalTotal < 0) {
+        throw new UnprocessableEntityException("Discount exceeds invoice total");
+      }
+
       const paymentTotal = dto.payments.reduce(
-        (sum, p) => new Decimal(sum).plus(p.amount).toNumber(), 
+        (sum, p) => new Decimal(sum).plus(p.amount).toNumber(),
         0
       );
 
@@ -319,7 +341,15 @@ export class BillingService {
         });
       }
 
-      // 6. Trigger PDF Generation Background Job
+      // 6. Accrue loyalty points (1 point per ₹100 of final total, rounded down)
+      if (dto.patientId && finalTotal > 0) {
+        const pointsEarned = Math.floor(finalTotal / 100);
+        if (pointsEarned > 0) {
+          await this.patientsRepo.addLoyaltyPoints(dto.patientId, pointsEarned, tx);
+        }
+      }
+
+      // 7. Trigger PDF Generation Background Job
       await this.pdfQueue.add({
         invoiceId: invoice.id,
       }, {

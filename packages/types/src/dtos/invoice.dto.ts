@@ -20,6 +20,7 @@ export const createInvoiceSchema = z.object({
   prescriptionId: z.string().uuid().optional(),
   branchId: z.string().uuid(),
   discountAmount: z.string().regex(/^\d+(\.\d{1,2})?$/).default("0"),
+  loyaltyPointsToRedeem: z.number().int().min(0).default(0),
   notes: z.string().optional(),
   isOfflineSync: z.boolean().default(false),
   items: z.array(invoiceItemSchema).min(1),
