@@ -48,7 +48,8 @@ export function PosTerminal() {
   });
 
   const selectedPatient: any = (selectedPatientRaw as any)?.data ?? selectedPatientRaw ?? null;
-  const patientResults_: any[] = (patientResults as any)?.data ?? [];
+  const prRaw = patientResults as any;
+  const patientResults_: any[] = Array.isArray(prRaw?.data?.data) ? prRaw.data.data : Array.isArray(prRaw?.data) ? prRaw.data : [];
 
   // ── Barcode scanner ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -65,10 +66,11 @@ export function PosTerminal() {
           if (scanCode.length > 2) {
             try {
               const res: any = await apiClient.get("/inventory/medicines", { params: { search: scanCode, limit: 1 } });
-              const medicine = res?.data?.[0];
+              const medicine = res?.data?.data?.[0] ?? res?.data?.[0];
               if (medicine) {
-                const batchesRes: any = await apiClient.get(`/inventory/medicines/${medicine.id}/batches`);
-                const firstBatch = Array.isArray(batchesRes) ? batchesRes[0] : (batchesRes as any)?.data?.[0];
+                const batchesRes: any = await apiClient.get("/inventory/batches", { params: { medicineId: medicine.id, status: "active", limit: 50 } });
+                const batchList: any[] = Array.isArray(batchesRes) ? batchesRes : Array.isArray(batchesRes?.data?.data) ? batchesRes.data.data : Array.isArray(batchesRes?.data) ? batchesRes.data : [];
+                const firstBatch = batchList[0];
                 if (firstBatch) {
                   addItem({
                     medicineId: medicine.id, batchId: firstBatch.id,
@@ -174,7 +176,8 @@ export function PosTerminal() {
     createMutation.mutate(payload);
   };
 
-  const medicines: any[] = (searchResults as any)?.data ?? [];
+  const searchRaw = searchResults as any;
+  const medicines: any[] = Array.isArray(searchRaw?.data?.data) ? searchRaw.data.data : Array.isArray(searchRaw?.data) ? searchRaw.data : [];
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-8rem)]">
@@ -314,8 +317,9 @@ export function PosTerminal() {
                     key={m.id}
                     onClick={async () => {
                       try {
-                        const batches: any = await apiClient.get(`/inventory/medicines/${m.id}/batches`);
-                        const first = Array.isArray(batches) ? batches[0] : (batches as any)?.data?.[0];
+                        const batchRes: any = await apiClient.get("/inventory/batches", { params: { medicineId: m.id, status: "active", limit: 50 } });
+                        const batchArr: any[] = Array.isArray(batchRes) ? batchRes : Array.isArray(batchRes?.data?.data) ? batchRes.data.data : Array.isArray(batchRes?.data) ? batchRes.data : [];
+                        const first = batchArr[0];
                         if (!first) { alert("No batch/stock available for this item."); return; }
                         addItem({
                           medicineId: m.id, batchId: first.id, name: m.name, sku: m.sku,
