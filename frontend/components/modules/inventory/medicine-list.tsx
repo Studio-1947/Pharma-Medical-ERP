@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Search, Barcode } from "lucide-react";
+import { Plus, Search, Barcode, Pill } from "lucide-react";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { Modal } from "@/components/ui/modal";
 import { MedicineForm } from "./medicine-form";
@@ -183,7 +183,9 @@ export function MedicineList() {
 
       {/* Create modal */}
       <Modal
-        title="Add Medicine"
+        title="Add New Medicine"
+        subtitle="Fill in the details below to register a new medicine in the formulary"
+        icon={<Pill size={16} />}
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         size="xl"
@@ -194,6 +196,8 @@ export function MedicineList() {
       {/* Edit modal */}
       <Modal
         title="Edit Medicine"
+        subtitle={editTarget ? `Editing: ${editTarget.name}` : undefined}
+        icon={<Pill size={16} />}
         open={!!editTarget}
         onClose={() => setEditTarget(null)}
         size="xl"

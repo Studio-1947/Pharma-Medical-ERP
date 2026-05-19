@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-interface User {
+export interface User {
   id: string;
   email: string;
   role: string;
@@ -20,6 +20,16 @@ interface AuthState {
   logout: () => void;
 }
 
+function setSessionCookie() {
+  if (typeof document === "undefined") return;
+  document.cookie = "pharmerp_session=1; path=/; max-age=604800; SameSite=Lax";
+}
+
+function clearSessionCookie() {
+  if (typeof document === "undefined") return;
+  document.cookie = "pharmerp_session=; path=/; max-age=0; SameSite=Lax";
+}
+
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
@@ -33,6 +43,7 @@ export const useAuthStore = create<AuthState>()(
         if (typeof window !== "undefined") {
           localStorage.setItem("pharmerp_access_token", access);
           localStorage.setItem("pharmerp_refresh_token", refresh);
+          setSessionCookie();
         }
       },
 
@@ -48,6 +59,7 @@ export const useAuthStore = create<AuthState>()(
         if (typeof window !== "undefined") {
           localStorage.removeItem("pharmerp_access_token");
           localStorage.removeItem("pharmerp_refresh_token");
+          clearSessionCookie();
         }
       },
     }),
@@ -59,6 +71,10 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: s.refreshToken,
         isAuthenticated: s.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        // Re-sync cookie after hydration from localStorage
+        if (state?.isAuthenticated) setSessionCookie();
+      },
     },
   ),
 );
