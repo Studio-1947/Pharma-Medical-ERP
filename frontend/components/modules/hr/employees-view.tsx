@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import { Plus, Search, Edit2, Shield, Calendar, UserCheck } from "lucide-react";
+import { Plus, Search, Edit2, Shield, Calendar, UserCheck, Trash2 } from "lucide-react";
 
 interface Employee {
   id: string;
@@ -190,6 +190,7 @@ export function EmployeesView() {
                   <th className="px-6 py-4">Designation</th>
                   <th className="px-6 py-4">Hire Date</th>
                   <th className="px-6 py-4">Base Salary</th>
+                  <th className="px-6 py-4 text-center">Status</th>
                   <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
               </thead>
@@ -198,16 +199,32 @@ export function EmployeesView() {
                   <tr key={emp.id} className="hover:bg-muted/30 transition-colors">
                     <td className="px-6 py-4 font-semibold text-slate-800">
                       {emp.firstName} {emp.lastName}
+                      {emp.phone && (
+                        <div className="text-xs text-muted-foreground font-normal">{emp.phone}</div>
+                      )}
                     </td>
                     <td className="px-6 py-4 font-mono text-xs">{emp.employeeCode}</td>
                     <td className="px-6 py-4 text-muted-foreground">
                       {emp.designation || "Staff"}
                     </td>
                     <td className="px-6 py-4 text-muted-foreground">
-                      {emp.hireDate || "--"}
+                      {emp.hireDate
+                        ? new Date(emp.hireDate).toLocaleDateString("en-IN")
+                        : "--"}
                     </td>
                     <td className="px-6 py-4 font-bold text-slate-800">
-                      ₹{emp.baseSalary}
+                      ₹{Number(emp.baseSalary).toLocaleString("en-IN")}
+                    </td>
+                    <td className="px-6 py-4 text-center">
+                      <span
+                        className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                          emp.isActive
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                        }`}
+                      >
+                        {emp.isActive ? "Active" : "Inactive"}
+                      </span>
                     </td>
                     <td className="px-6 py-4 text-right flex gap-2 justify-end">
                       <button
@@ -224,7 +241,7 @@ export function EmployeesView() {
                         }}
                         className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors rounded-lg"
                       >
-                        🗑️
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     </td>
                   </tr>

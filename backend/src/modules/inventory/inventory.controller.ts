@@ -51,6 +51,13 @@ export class InventoryController {
     return this.service.getLowStock();
   }
 
+  @Get("valuation")
+  @Roles("admin", "inventory_manager", "reports_analyst")
+  @ApiOperation({ summary: "Stock valuation — cost and MRP value per medicine" })
+  getValuation(@Query("warehouseId") warehouseId?: string) {
+    return this.service.getStockValuation(warehouseId);
+  }
+
   @Get(":id")
   @Roles("admin", "pharmacist", "inventory_manager", "cashier")
   @ApiOperation({ summary: "Get a medicine by ID" })

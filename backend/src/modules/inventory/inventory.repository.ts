@@ -116,6 +116,49 @@ export class InventoryRepository {
       .orderBy(asc(schema.inventoryBatches.expiryDate));
   }
 
+  async getStockValuation(warehouseId?: string) {
+    if (warehouseId) {
+      return this.db.execute(sql`
+        SELECT
+          m.id,
+          m.name,
+          m.sku,
+          m.schedule_class AS "scheduleClass",
+          COALESCE(SUM(b.quantity), 0)::int AS "totalQty",
+          COALESCE(SUM(b.quantity * CAST(b.cost_price AS FLOAT)), 0) AS "costValue",
+          COALESCE(SUM(b.quantity * CAST(m.price_mrp AS FLOAT)), 0) AS "mrpValue",
+          COUNT(DISTINCT b.id)::int AS "batchCount"
+        FROM medicines m
+        LEFT JOIN inventory_batches b ON b.medicine_id = m.id
+          AND b.status = 'active'
+          AND b.expiry_date > CURRENT_DATE
+        LEFT JOIN storage_locations sl ON sl.id = b.location_id
+        WHERE m.is_active = true AND m.deleted_at IS NULL
+          AND (sl.warehouse_id = ${warehouseId} OR b.location_id IS NULL)
+        GROUP BY m.id
+        ORDER BY "costValue" DESC
+      `);
+    }
+    return this.db.execute(sql`
+      SELECT
+        m.id,
+        m.name,
+        m.sku,
+        m.schedule_class AS "scheduleClass",
+        COALESCE(SUM(b.quantity), 0)::int AS "totalQty",
+        COALESCE(SUM(b.quantity * CAST(b.cost_price AS FLOAT)), 0) AS "costValue",
+        COALESCE(SUM(b.quantity * CAST(m.price_mrp AS FLOAT)), 0) AS "mrpValue",
+        COUNT(DISTINCT b.id)::int AS "batchCount"
+      FROM medicines m
+      LEFT JOIN inventory_batches b ON b.medicine_id = m.id
+        AND b.status = 'active'
+        AND b.expiry_date > CURRENT_DATE
+      WHERE m.is_active = true AND m.deleted_at IS NULL
+      GROUP BY m.id
+      ORDER BY "costValue" DESC
+    `);
+  }
+
   async getLowStockMedicines() {
     return this.db.execute(sql`
       SELECT m.id, m.name, m.sku, m.reorder_level,

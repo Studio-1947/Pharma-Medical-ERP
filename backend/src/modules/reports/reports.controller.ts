@@ -14,6 +14,59 @@ import { parse } from "json2csv";
 export class ReportsController {
   constructor(private readonly service: ReportsService) {}
 
+  @Get("sales")
+  @Roles("admin", "pharmacist", "reports_analyst")
+  @ApiOperation({ summary: "Daily sales trend for the last N days" })
+  getSalesTrend(
+    @Query("days") days = "30",
+    @Query("branchId") branchId?: string,
+  ) {
+    return this.service.getSalesTrend(parseInt(days), branchId);
+  }
+
+  @Get("summary")
+  @Roles("admin", "pharmacist", "reports_analyst")
+  @ApiOperation({ summary: "Aggregate revenue + invoice count for the last N days" })
+  getSummary(
+    @Query("days") days = "30",
+    @Query("branchId") branchId?: string,
+  ) {
+    return this.service.getSummary(parseInt(days), branchId);
+  }
+
+  @Get("top-products")
+  @Roles("admin", "pharmacist", "reports_analyst")
+  @ApiOperation({ summary: "Top N products by revenue" })
+  getTopProducts(
+    @Query("days") days = "30",
+    @Query("limit") limit = "5",
+    @Query("branchId") branchId?: string,
+  ) {
+    return this.service.getTopProducts(parseInt(days), parseInt(limit), branchId);
+  }
+
+  @Get("payment-methods")
+  @Roles("admin", "pharmacist", "reports_analyst")
+  @ApiOperation({ summary: "Payment method revenue breakdown" })
+  getPaymentMethods(
+    @Query("days") days = "30",
+    @Query("branchId") branchId?: string,
+  ) {
+    return this.service.getPaymentMethodBreakdown(parseInt(days), branchId);
+  }
+
+  @Get("purchase")
+  @Roles("admin", "pharmacist", "reports_analyst", "inventory_manager")
+  @ApiOperation({ summary: "Purchase order summary for a date range" })
+  getPurchaseSummary(
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+    @Query("warehouseId") warehouseId?: string,
+  ) {
+    const today = new Date().toISOString().slice(0, 10);
+    return this.service.getPurchaseSummary(from || today, to || today, warehouseId);
+  }
+
   @Get("gst")
   @Roles("admin", "pharmacist")
   @ApiOperation({ summary: "Export GSTR-1 data as CSV" })

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, between, eq, inArray, sql } from "drizzle-orm";
+import { and, between, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 
@@ -51,6 +51,158 @@ export class ReportsService {
       ...r,
       date: r.date.toISOString().split("T")[0],
     }));
+  }
+
+  async getSalesTrend(days: number, branchId?: string) {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    since.setHours(0, 0, 0, 0);
+
+    const conditions = [
+      eq(schema.salesInvoices.status, "confirmed"),
+      gte(schema.salesInvoices.createdAt, since),
+    ];
+    if (branchId) conditions.push(eq(schema.salesInvoices.branchId, branchId));
+
+    const rows = await this.db
+      .select({
+        date: sql<string>`DATE(${schema.salesInvoices.createdAt})`,
+        revenue: sql<number>`COALESCE(SUM(CAST(${schema.salesInvoices.totalAmount} AS FLOAT)), 0)`,
+        invoices: sql<number>`COUNT(${schema.salesInvoices.id})`,
+      })
+      .from(schema.salesInvoices)
+      .where(and(...conditions))
+      .groupBy(sql`DATE(${schema.salesInvoices.createdAt})`)
+      .orderBy(sql`DATE(${schema.salesInvoices.createdAt})`);
+
+    return { rows };
+  }
+
+  async getSummary(days: number, branchId?: string) {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    const conditions = [
+      eq(schema.salesInvoices.status, "confirmed"),
+      gte(schema.salesInvoices.createdAt, since),
+    ];
+    if (branchId) conditions.push(eq(schema.salesInvoices.branchId, branchId));
+
+    const [row] = await this.db
+      .select({
+        totalRevenue: sql<number>`COALESCE(SUM(CAST(${schema.salesInvoices.totalAmount} AS FLOAT)), 0)`,
+        totalInvoices: sql<number>`COUNT(${schema.salesInvoices.id})`,
+      })
+      .from(schema.salesInvoices)
+      .where(and(...conditions));
+
+    return {
+      totalRevenue: Number(row?.totalRevenue ?? 0),
+      totalInvoices: Number(row?.totalInvoices ?? 0),
+    };
+  }
+
+  async getTopProducts(days: number, limit: number, branchId?: string) {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    const conditions = [
+      eq(schema.salesInvoices.status, "confirmed"),
+      gte(schema.salesInvoices.createdAt, since),
+    ];
+    if (branchId) conditions.push(eq(schema.salesInvoices.branchId, branchId));
+
+    const rows = await this.db
+      .select({
+        name: schema.medicines.name,
+        revenue: sql<number>`COALESCE(SUM(CAST(${schema.salesInvoiceItems.lineTotal} AS FLOAT)), 0)`,
+        qty: sql<number>`COALESCE(SUM(${schema.salesInvoiceItems.quantity}), 0)`,
+      })
+      .from(schema.salesInvoiceItems)
+      .innerJoin(schema.salesInvoices, eq(schema.salesInvoiceItems.invoiceId, schema.salesInvoices.id))
+      .innerJoin(schema.medicines, eq(schema.salesInvoiceItems.medicineId, schema.medicines.id))
+      .where(and(...conditions))
+      .groupBy(schema.medicines.name)
+      .orderBy(desc(sql`SUM(CAST(${schema.salesInvoiceItems.lineTotal} AS FLOAT))`))
+      .limit(limit);
+
+    return { rows };
+  }
+
+  async getPaymentMethodBreakdown(days: number, branchId?: string) {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    const conditions = [
+      eq(schema.salesInvoices.status, "confirmed"),
+      gte(schema.salesInvoices.createdAt, since),
+    ];
+    if (branchId) conditions.push(eq(schema.salesInvoices.branchId, branchId));
+
+    const rows = await this.db
+      .select({
+        method: schema.payments.mode,
+        amount: sql<number>`COALESCE(SUM(CAST(${schema.payments.amount} AS FLOAT)), 0)`,
+      })
+      .from(schema.payments)
+      .innerJoin(schema.salesInvoices, eq(schema.payments.invoiceId, schema.salesInvoices.id))
+      .where(and(...conditions))
+      .groupBy(schema.payments.mode);
+
+    return { rows };
+  }
+
+  async getPurchaseSummary(from: string, to: string, warehouseId?: string) {
+    const start = new Date(from);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(to);
+    end.setHours(23, 59, 59, 999);
+
+    const conditions = [
+      isNull(schema.purchaseOrders.deletedAt),
+      between(schema.purchaseOrders.createdAt, start, end),
+    ];
+    if (warehouseId) conditions.push(eq(schema.purchaseOrders.warehouseId, warehouseId));
+
+    const [totals] = await this.db
+      .select({
+        totalOrders: sql<number>`COUNT(${schema.purchaseOrders.id})`,
+        totalValue: sql<number>`COALESCE(SUM(CAST(${schema.purchaseOrders.totalValue} AS FLOAT)), 0)`,
+        receivedOrders: sql<number>`COUNT(CASE WHEN ${schema.purchaseOrders.status} = 'received' THEN 1 END)`,
+        pendingOrders: sql<number>`COUNT(CASE WHEN ${schema.purchaseOrders.status} IN ('draft','pending_approval','approved','sent') THEN 1 END)`,
+      })
+      .from(schema.purchaseOrders)
+      .where(and(...conditions));
+
+    const rows = await this.db
+      .select({
+        id: schema.purchaseOrders.id,
+        poNumber: schema.purchaseOrders.poNumber,
+        status: schema.purchaseOrders.status,
+        supplierName: schema.suppliers.name,
+        totalValue: schema.purchaseOrders.totalValue,
+        createdAt: schema.purchaseOrders.createdAt,
+        expectedDelivery: schema.purchaseOrders.expectedDelivery,
+      })
+      .from(schema.purchaseOrders)
+      .innerJoin(schema.suppliers, eq(schema.purchaseOrders.supplierId, schema.suppliers.id))
+      .where(and(...conditions))
+      .orderBy(desc(schema.purchaseOrders.createdAt))
+      .limit(50);
+
+    return {
+      summary: {
+        totalOrders: Number(totals?.totalOrders ?? 0),
+        totalValue: Number(totals?.totalValue ?? 0),
+        receivedOrders: Number(totals?.receivedOrders ?? 0),
+        pendingOrders: Number(totals?.pendingOrders ?? 0),
+      },
+      rows: rows.map(r => ({
+        ...r,
+        totalValue: Number(r.totalValue),
+        createdAt: r.createdAt.toISOString().split("T")[0],
+      })),
+    };
   }
 
   async getScheduleHData(branchId: string, fromDate: string, toDate: string) {

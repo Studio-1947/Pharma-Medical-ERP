@@ -17,6 +17,11 @@ import {
   CurrentUser,
   JwtPayload,
 } from "../../common/decorators/current-user.decorator";
+import {
+  createTransferSchema,
+  deliverTransferSchema,
+  queryTransferSchema,
+} from "@pharmerp/types";
 
 @ApiTags("distribution")
 @ApiBearerAuth()
@@ -28,16 +33,8 @@ export class DistributionController {
   @Get("transfers")
   @Roles("super_admin", "admin", "distribution_staff")
   @ApiOperation({ summary: "List stock transfers" })
-  findAll(
-    @Query("page") page = "1",
-    @Query("limit") limit = "20",
-    @Query("status") status?: string,
-  ) {
-    return this.service.findAll({
-      page: parseInt(page, 10),
-      limit: parseInt(limit, 10),
-      status,
-    });
+  findAll(@Query() q: unknown) {
+    return this.service.findAll(queryTransferSchema.parse(q));
   }
 
   @Get("transfers/:id")
@@ -50,8 +47,8 @@ export class DistributionController {
   @Post("transfers")
   @Roles("super_admin", "admin", "distribution_staff")
   @ApiOperation({ summary: "Create a new stock transfer" })
-  create(@Body() body: any, @CurrentUser() user: JwtPayload) {
-    return this.service.create(body, user.sub);
+  create(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
+    return this.service.create(createTransferSchema.parse(body), user.sub);
   }
 
   @Patch("transfers/:id/approve")
@@ -64,12 +61,9 @@ export class DistributionController {
   @Patch("transfers/:id/deliver")
   @Roles("super_admin", "admin", "distribution_staff")
   @ApiOperation({ summary: "Mark transfer as delivered with received quantities" })
-  deliver(
-    @Param("id") id: string,
-    @Body() body: { status: "delivered" | "rejected"; podFileUrl?: string; items: any[] },
-  ) {
-    const { items, ...dto } = body;
-    return this.service.deliver(id, dto, items ?? []);
+  deliver(@Param("id") id: string, @Body() body: unknown) {
+    const { items } = deliverTransferSchema.parse(body);
+    return this.service.deliver(id, { status: "delivered" }, items);
   }
 
   @Patch("transfers/:id/cancel")

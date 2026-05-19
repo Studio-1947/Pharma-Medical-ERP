@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import { Plus, Search, FileText, CheckCircle, XCircle, Send, PlusCircle } from "lucide-react";
+import { Plus, Search, FileText, CheckCircle, XCircle, Send, PlusCircle, PackageCheck, Trash2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 
 interface POItem {
@@ -28,10 +28,182 @@ interface PO {
   warehouse?: { name: string };
 }
 
+interface GrnLineItem {
+  poItemId: string;
+  batchNo: string;
+  expiryDate: string;
+  receivedQty: number;
+  unitCost: string;
+}
+
+function GrnModal({
+  po,
+  open,
+  onClose,
+}: {
+  po: PO;
+  open: boolean;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [lines, setLines] = useState<GrnLineItem[]>(
+    po.items.map((item) => ({
+      poItemId: item.id,
+      batchNo: "",
+      expiryDate: "",
+      receivedQty: item.orderedQty,
+      unitCost: item.unitCost,
+    }))
+  );
+  const [error, setError] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: (items: GrnLineItem[]) =>
+      apiClient.post(`/procurement/purchase-orders/${po.id}/grn`, { items }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      onClose();
+    },
+    onError: (err: any) =>
+      setError(err?.response?.data?.message ?? "GRN failed. Please try again."),
+  });
+
+  const updateLine = (idx: number, key: keyof GrnLineItem, value: string | number) => {
+    setLines((prev) => {
+      const next = [...prev];
+      next[idx] = { ...next[idx], [key]: value } as GrnLineItem;
+      return next;
+    });
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    for (const l of lines) {
+      if (!l.batchNo.trim()) { setError("Batch number is required for all items."); return; }
+      if (!l.expiryDate) { setError("Expiry date is required for all items."); return; }
+      if (l.receivedQty <= 0) { setError("Received quantity must be greater than 0."); return; }
+    }
+    mutation.mutate(lines);
+  };
+
+  return (
+    <Modal
+      title="Goods Received Note (GRN)"
+      subtitle={`Receiving stock for PO: ${po.poNumber}`}
+      icon={<PackageCheck size={16} />}
+      open={open}
+      onClose={onClose}
+      size="2xl"
+    >
+      <form onSubmit={handleSubmit} className="px-6 py-5">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-100 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                <th className="text-left py-2 pr-3">Item / Medicine ID</th>
+                <th className="text-left py-2 pr-3">Batch No <span className="text-red-500">*</span></th>
+                <th className="text-left py-2 pr-3">Expiry Date <span className="text-red-500">*</span></th>
+                <th className="text-right py-2 pr-3">Rcvd Qty <span className="text-red-500">*</span></th>
+                <th className="text-right py-2">Unit Cost (₹)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {lines.map((line, idx) => (
+                <tr key={idx} className="py-1">
+                  <td className="py-2 pr-3">
+                    <span className="font-mono text-xs text-blue-600">
+                      {po.items[idx]?.medicineId ?? line.poItemId}
+                    </span>
+                    <div className="text-[10px] text-muted-foreground">
+                      Ordered: {po.items[idx]?.orderedQty}
+                    </div>
+                  </td>
+                  <td className="py-2 pr-3">
+                    <input
+                      required
+                      value={line.batchNo}
+                      onChange={(e) => updateLine(idx, "batchNo", e.target.value)}
+                      placeholder="e.g. BTC-2024-001"
+                      className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                  </td>
+                  <td className="py-2 pr-3">
+                    <input
+                      required
+                      type="date"
+                      value={line.expiryDate}
+                      onChange={(e) => updateLine(idx, "expiryDate", e.target.value)}
+                      className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
+                  </td>
+                  <td className="py-2 pr-3">
+                    <input
+                      required
+                      type="number"
+                      min="1"
+                      value={line.receivedQty}
+                      onChange={(e) => updateLine(idx, "receivedQty", Number(e.target.value))}
+                      className="w-20 border rounded px-2 py-1 text-xs text-right font-mono focus:outline-none focus:ring-1 focus:ring-blue-400 ml-auto block"
+                    />
+                  </td>
+                  <td className="py-2">
+                    <input
+                      type="text"
+                      value={line.unitCost}
+                      onChange={(e) => updateLine(idx, "unitCost", e.target.value)}
+                      className="w-24 border rounded px-2 py-1 text-xs text-right font-mono focus:outline-none focus:ring-1 focus:ring-blue-400 ml-auto block"
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {error && (
+          <div className="mt-3 text-sm text-red-600 flex items-center gap-1.5">
+            <XCircle size={14} />
+            {error}
+          </div>
+        )}
+
+        <div className="flex items-center justify-end gap-2 mt-5 pt-4 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-slate-600 border border-slate-200 rounded-lg hover:bg-slate-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={mutation.isPending}
+            className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+          >
+            {mutation.isPending ? (
+              <>
+                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Receiving...
+              </>
+            ) : (
+              <>
+                <PackageCheck size={14} />
+                Confirm Receipt
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 export function PurchaseOrdersView() {
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedPO, setSelectedPO] = useState<PO | null>(null);
+  const [grnPO, setGrnPO] = useState<PO | null>(null);
 
   // For Create PO Modal
   const [form, setForm] = useState({
@@ -272,6 +444,14 @@ export function PurchaseOrdersView() {
                           <Send className="w-3.5 h-3.5" /> Send
                         </button>
                       )}
+                      {po.status === "sent" && (
+                        <button
+                          onClick={() => setGrnPO(po)}
+                          className="p-2 hover:bg-green-50 rounded-lg text-green-700 transition-colors font-medium text-xs flex items-center gap-1"
+                        >
+                          <PackageCheck className="w-3.5 h-3.5" /> Receive
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -279,6 +459,15 @@ export function PurchaseOrdersView() {
             </table>
           </div>
         </div>
+      )}
+
+      {/* GRN Modal */}
+      {grnPO && (
+        <GrnModal
+          po={grnPO}
+          open={!!grnPO}
+          onClose={() => setGrnPO(null)}
+        />
       )}
 
       {/* Draft PO Modal */}

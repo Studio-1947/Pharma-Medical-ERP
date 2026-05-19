@@ -40,4 +40,8 @@ export class InventoryService {
   getBatchesForDispense(medicineId: string) {
     return this.repo.getActiveBatchesForDispense(medicineId);
   }
+
+  getStockValuation(warehouseId?: string) {
+    return this.repo.getStockValuation(warehouseId);
+  }
 }
