@@ -508,8 +508,8 @@ export class BillingService {
     return { data: payment, message: "Payment recorded" };
   }
 
-  async endOfDaySummary(branchId: string, date?: string) {
-    const d = date ?? new Date().toISOString().split("T")[0]!;
+  async endOfDaySummary(branchId: string | undefined, date?: string) {
+    const d = date ?? new Date().toISOString().slice(0, 10);
     const summary = await this.repo.endOfDaySummary(branchId, d);
     return { data: summary };
   }

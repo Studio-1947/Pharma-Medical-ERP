@@ -35,7 +35,7 @@ export function StockDashboard() {
     refetchInterval: 60_000,
   });
 
-  const lowStock: LowStockRow[] = lowStockRaw?.data?.rows ?? lowStockRaw?.rows ?? [];
+  const lowStock: LowStockRow[] = lowStockRaw?.data ?? lowStockRaw?.rows ?? [];
   const expiring: ExpiringBatch[] = expiringRaw?.data ?? [];
 
   return (

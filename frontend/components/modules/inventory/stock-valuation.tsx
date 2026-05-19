@@ -33,13 +33,13 @@ const SCHEDULE_COLORS: Record<string, string> = {
 export function StockValuation() {
   const [search, setSearch] = useState("");
 
-  const { data, isLoading, isError } = useQuery<{ rows: ValuationRow[] }>({
+  const { data, isLoading, isError } = useQuery<{ data: ValuationRow[] }>({
     queryKey: ["stock-valuation"],
     queryFn: () =>
-      apiClient.get("/inventory/medicines/valuation") as Promise<{ rows: ValuationRow[] }>,
+      apiClient.get("/inventory/medicines/valuation") as Promise<{ data: ValuationRow[] }>,
   });
 
-  const rows: ValuationRow[] = data?.rows ?? (data as any)?.data ?? [];
+  const rows: ValuationRow[] = data?.data ?? [];
 
   const filtered = rows.filter(
     (r) =>

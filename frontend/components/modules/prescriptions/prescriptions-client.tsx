@@ -3,14 +3,15 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
-import { FileText, CheckCircle2, XCircle, Clock, AlertTriangle } from "lucide-react";
+import {
+  FileText, CheckCircle2, XCircle, Clock, AlertTriangle, Plus, Trash2, Search,
+} from "lucide-react";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
 
-interface PrescriptionPatient {
-  name: string;
-  phone: string;
-}
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface PrescriptionPatient { name: string; phone: string; }
 
 interface Prescription {
   id: string;
@@ -25,6 +26,16 @@ interface Prescription {
   notes?: string;
   createdAt: string;
 }
+
+interface RxItem {
+  medicineName: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  quantityPrescribed: number | "";
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 type TabKey = "all" | "pending_verification" | "verified" | "rejected";
 
@@ -51,13 +62,13 @@ function statusBadge(status: string) {
       );
     case "partially_dispensed":
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
           Partially Dispensed
         </span>
       );
     case "fully_dispensed":
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
           Fully Dispensed
         </span>
       );
@@ -82,6 +93,369 @@ function statusBadge(status: string) {
   }
 }
 
+function blankItem(): RxItem {
+  return { medicineName: "", dosage: "", frequency: "", duration: "", quantityPrescribed: "" };
+}
+
+// ─── Create Prescription Form ─────────────────────────────────────────────────
+
+function CreatePrescriptionModal({
+  open,
+  onClose,
+}: {
+  open: boolean;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [patientSearch, setPatientSearch] = useState("");
+  const [selectedPatient, setSelectedPatient] = useState<{ id: string; name: string; phone: string } | null>(null);
+  const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+  const [doctorName, setDoctorName] = useState("");
+  const [doctorRegNo, setDoctorRegNo] = useState("");
+  const [hospitalName, setHospitalName] = useState("");
+  const [issuedDate, setIssuedDate] = useState(new Date().toISOString().split("T")[0]);
+  const [expiryDate, setExpiryDate] = useState("");
+  const [notes, setNotes] = useState("");
+  const [isControlled, setIsControlled] = useState(false);
+  const [items, setItems] = useState<RxItem[]>([blankItem()]);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const { data: patientResults } = useQuery({
+    queryKey: ["patient-search", patientSearch],
+    queryFn: () =>
+      apiClient.get("/patients", { params: { search: patientSearch, limit: 10 } }) as Promise<any>,
+    enabled: patientSearch.length >= 2,
+  });
+
+  const patients: any[] = (patientResults as any)?.data ?? [];
+
+  const mutation = useMutation({
+    mutationFn: (body: object) => apiClient.post("/prescriptions", body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.prescriptions.all() });
+      handleClose();
+    },
+    onError: (err: any) =>
+      setFormError(err?.response?.data?.message ?? "Failed to create prescription."),
+  });
+
+  function handleClose() {
+    setPatientSearch("");
+    setSelectedPatient(null);
+    setDoctorName("");
+    setDoctorRegNo("");
+    setHospitalName("");
+    setIssuedDate(new Date().toISOString().split("T")[0]);
+    setExpiryDate("");
+    setNotes("");
+    setIsControlled(false);
+    setItems([blankItem()]);
+    setFormError(null);
+    onClose();
+  }
+
+  function handleItemChange(idx: number, field: keyof RxItem, value: string | number) {
+    setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
+  }
+
+  function addItem() { setItems((prev) => [...prev, blankItem()]); }
+  function removeItem(idx: number) { setItems((prev) => prev.filter((_, i) => i !== idx)); }
+
+  function handleSubmit() {
+    if (!selectedPatient) { setFormError("Please select a patient."); return; }
+    if (!doctorName.trim()) { setFormError("Doctor name is required."); return; }
+    if (!issuedDate) { setFormError("Issue date is required."); return; }
+    if (!expiryDate) { setFormError("Expiry date is required."); return; }
+    setFormError(null);
+
+    const rxItems = items
+      .filter((i) => i.medicineName.trim())
+      .map((i) => ({
+        medicineName: i.medicineName.trim(),
+        dosage: i.dosage || undefined,
+        frequency: i.frequency || undefined,
+        duration: i.duration || undefined,
+        quantityPrescribed: i.quantityPrescribed !== "" ? Number(i.quantityPrescribed) : undefined,
+      }));
+
+    mutation.mutate({
+      patientId: selectedPatient.id,
+      doctorName: doctorName.trim(),
+      doctorRegNo: doctorRegNo.trim() || undefined,
+      hospitalName: hospitalName.trim() || undefined,
+      issuedDate,
+      expiryDate,
+      notes: notes.trim() || undefined,
+      isControlled,
+      items: rxItems.length > 0 ? rxItems : undefined,
+    });
+  }
+
+  return (
+    <Modal
+      title="New Prescription"
+      subtitle="Register a new patient prescription"
+      icon={<FileText size={16} />}
+      open={open}
+      onClose={handleClose}
+      size="xl"
+    >
+      <div className="px-6 py-5 space-y-5">
+        {/* Patient search */}
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Patient <span className="text-red-500">*</span></label>
+          {selectedPatient ? (
+            <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+              <div>
+                <span className="font-medium text-sm">{selectedPatient.name}</span>
+                <span className="text-muted-foreground text-xs ml-2">{selectedPatient.phone}</span>
+              </div>
+              <button
+                onClick={() => { setSelectedPatient(null); setPatientSearch(""); }}
+                className="text-xs text-red-500 hover:underline"
+              >
+                Change
+              </button>
+            </div>
+          ) : (
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search by name or phone..."
+                value={patientSearch}
+                onChange={(e) => { setPatientSearch(e.target.value); setShowPatientDropdown(true); }}
+                onFocus={() => setShowPatientDropdown(true)}
+                className="w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              {showPatientDropdown && patients.length > 0 && (
+                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  {patients.map((p: any) => (
+                    <button
+                      key={p.id}
+                      onClick={() => {
+                        setSelectedPatient({ id: p.id, name: `${p.firstName} ${p.lastName}`, phone: p.phone });
+                        setShowPatientDropdown(false);
+                        setPatientSearch("");
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center justify-between"
+                    >
+                      <span className="font-medium">{p.firstName} {p.lastName}</span>
+                      <span className="text-muted-foreground text-xs">{p.phone}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Doctor + Hospital */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Doctor Name <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              value={doctorName}
+              onChange={(e) => setDoctorName(e.target.value)}
+              placeholder="Dr. Name"
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Doctor Reg. No.</label>
+            <input
+              type="text"
+              value={doctorRegNo}
+              onChange={(e) => setDoctorRegNo(e.target.value)}
+              placeholder="MCI Registration No."
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Hospital / Clinic Name</label>
+          <input
+            type="text"
+            value={hospitalName}
+            onChange={(e) => setHospitalName(e.target.value)}
+            placeholder="Apollo Hospitals, City Clinic..."
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+        </div>
+
+        {/* Dates */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Issue Date <span className="text-red-500">*</span></label>
+            <input
+              type="date"
+              value={issuedDate}
+              onChange={(e) => setIssuedDate(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Expiry Date <span className="text-red-500">*</span></label>
+            <input
+              type="date"
+              value={expiryDate}
+              onChange={(e) => setExpiryDate(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        {/* Notes + controlled flag */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="sm:col-span-2 space-y-1">
+            <label className="text-sm font-medium">Notes</label>
+            <textarea
+              rows={2}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Additional notes..."
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+            />
+          </div>
+          <div className="flex items-center gap-2 pt-5">
+            <input
+              id="is-controlled"
+              type="checkbox"
+              checked={isControlled}
+              onChange={(e) => setIsControlled(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+            />
+            <label htmlFor="is-controlled" className="text-sm font-medium select-none cursor-pointer">
+              Controlled Drug
+              <span className="block text-xs text-muted-foreground font-normal">Schedule H / H1 / X</span>
+            </label>
+          </div>
+        </div>
+
+        {/* Items */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium">Prescribed Medicines</label>
+            <button
+              onClick={addItem}
+              className="flex items-center gap-1 text-xs text-primary hover:underline"
+            >
+              <Plus size={12} /> Add Medicine
+            </button>
+          </div>
+          <div className="rounded-lg border overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted text-muted-foreground text-xs">
+                <tr>
+                  <th className="text-left px-3 py-2 font-medium">Medicine</th>
+                  <th className="text-left px-3 py-2 font-medium">Dosage</th>
+                  <th className="text-left px-3 py-2 font-medium">Frequency</th>
+                  <th className="text-left px-3 py-2 font-medium">Duration</th>
+                  <th className="text-left px-3 py-2 font-medium w-20">Qty</th>
+                  <th className="w-8" />
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {items.map((item, idx) => (
+                  <tr key={idx}>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="text"
+                        value={item.medicineName}
+                        onChange={(e) => handleItemChange(idx, "medicineName", e.target.value)}
+                        placeholder="Medicine name"
+                        className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="text"
+                        value={item.dosage}
+                        onChange={(e) => handleItemChange(idx, "dosage", e.target.value)}
+                        placeholder="500mg"
+                        className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="text"
+                        value={item.frequency}
+                        onChange={(e) => handleItemChange(idx, "frequency", e.target.value)}
+                        placeholder="BD / TDS"
+                        className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="text"
+                        value={item.duration}
+                        onChange={(e) => handleItemChange(idx, "duration", e.target.value)}
+                        placeholder="5 days"
+                        className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <input
+                        type="number"
+                        min={1}
+                        value={item.quantityPrescribed}
+                        onChange={(e) =>
+                          handleItemChange(idx, "quantityPrescribed", e.target.value === "" ? "" : Number(e.target.value))
+                        }
+                        placeholder="10"
+                        className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </td>
+                    <td className="px-1">
+                      <button
+                        onClick={() => removeItem(idx)}
+                        disabled={items.length === 1}
+                        className="p-1 text-slate-400 hover:text-red-500 disabled:opacity-30 transition-colors"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {formError && (
+          <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <AlertTriangle size={14} /> {formError}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            onClick={handleClose}
+            className="px-4 py-2 border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={mutation.isPending}
+            className="flex items-center gap-2 px-5 py-2 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          >
+            {mutation.isPending ? (
+              <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving...</>
+            ) : (
+              <><FileText size={14} /> Create Prescription</>
+            )}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+
 export function PrescriptionsClient() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<TabKey>("all");
@@ -89,6 +463,7 @@ export function PrescriptionsClient() {
   const [verifyingPrescription, setVerifyingPrescription] = useState<Prescription | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [verifyError, setVerifyError] = useState("");
+  const [createOpen, setCreateOpen] = useState(false);
 
   const queryParams = {
     status: activeTab === "all" ? undefined : activeTab,
@@ -153,9 +528,17 @@ export function PrescriptionsClient() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900">Prescriptions</h1>
-        <p className="text-muted-foreground mt-1">Review and verify patient prescriptions.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Prescriptions</h1>
+          <p className="text-muted-foreground mt-1">Review, verify, and register patient prescriptions.</p>
+        </div>
+        <button
+          onClick={() => setCreateOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+        >
+          <Plus size={16} /> New Prescription
+        </button>
       </div>
 
       {/* Tabs */}
@@ -186,6 +569,12 @@ export function PrescriptionsClient() {
         <div className="text-center py-16 text-muted-foreground">
           <FileText className="mx-auto mb-3 opacity-30" size={48} />
           <p className="font-medium">No prescriptions found.</p>
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="mt-3 text-sm text-primary hover:underline"
+          >
+            Register the first prescription
+          </button>
         </div>
       ) : (
         <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
@@ -264,6 +653,9 @@ export function PrescriptionsClient() {
         </div>
       )}
 
+      {/* Create Prescription Modal */}
+      <CreatePrescriptionModal open={createOpen} onClose={() => setCreateOpen(false)} />
+
       {/* Verify Modal */}
       <Modal
         title="Review Prescription"
@@ -272,7 +664,7 @@ export function PrescriptionsClient() {
         size="md"
       >
         {verifyingPrescription && (
-          <div className="space-y-4">
+          <div className="px-6 py-5 space-y-4">
             {verifyError && (
               <div className="px-3 py-2 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">
                 {verifyError}

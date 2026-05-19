@@ -67,7 +67,7 @@ export class BillingController {
   @Get("reports/end-of-day")
   @Roles("admin", "reports_analyst")
   @ApiOperation({ summary: "End-of-day sales summary for a branch" })
-  eod(@Query("branchId") branchId: string, @Query("date") date?: string) {
+  eod(@Query("branchId") branchId?: string, @Query("date") date?: string) {
     return this.service.endOfDaySummary(branchId, date);
   }
 }

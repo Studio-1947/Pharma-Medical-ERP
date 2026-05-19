@@ -115,19 +115,25 @@ export class BillingRepository {
     }, {} as Record<string, number>);
   }
 
-  async endOfDaySummary(branchId: string, date: string) {
+  async endOfDaySummary(branchId: string | undefined, date: string) {
     const result = await this.db.execute(sql`
       SELECT
-        COUNT(*)::int AS invoice_count,
-        COALESCE(SUM(total_amount), 0)::numeric AS total_sales,
-        COALESCE(SUM(tax_amount), 0)::numeric AS total_tax,
-        COALESCE(SUM(discount_amount), 0)::numeric AS total_discounts
+        COUNT(*)::int            AS "totalInvoices",
+        COALESCE(SUM(CAST(total_amount    AS FLOAT)), 0) AS "totalSales",
+        COALESCE(SUM(CAST(tax_amount      AS FLOAT)), 0) AS "totalTax",
+        COALESCE(SUM(CAST(discount_amount AS FLOAT)), 0) AS "totalDiscounts"
       FROM sales_invoices
-      WHERE branch_id = ${branchId}
-        AND DATE(created_at) = ${date}
+      WHERE DATE(created_at) = ${date}
         AND status != 'cancelled'
+        ${branchId ? sql`AND branch_id = ${branchId}` : sql``}
     `);
-    const row = result.rows ? result.rows[0] : (Array.isArray(result) ? result[0] : undefined);
-    return row;
+    const rows = (result as any).rows ?? result;
+    const row = Array.isArray(rows) ? rows[0] : undefined;
+    return {
+      totalInvoices: Number(row?.totalInvoices ?? 0),
+      totalSales:    Number(row?.totalSales    ?? 0),
+      totalTax:      Number(row?.totalTax      ?? 0),
+      totalDiscounts: Number(row?.totalDiscounts ?? 0),
+    };
   }
 }
