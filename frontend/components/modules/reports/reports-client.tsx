@@ -10,6 +10,7 @@ import {
   TrendingUp, ShoppingCart, FileText, Calendar, Download,
   IndianRupee, Package, CheckCircle, Clock,
 } from "lucide-react";
+import axios from "axios";
 import { apiClient } from "@/lib/api-client";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -416,9 +417,12 @@ function ComplianceTab() {
 
   const downloadCsv = async (url: string, params: object, filename: string) => {
     try {
-      const response = await apiClient.get(url, {
+      const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+      const token = typeof window !== "undefined" ? localStorage.getItem("pharmerp_access_token") : null;
+      const response = await axios.get(`${base}${url}`, {
         params: { ...params, format: "csv" },
         responseType: "blob",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");

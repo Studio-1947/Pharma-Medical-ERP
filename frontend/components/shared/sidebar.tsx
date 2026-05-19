@@ -12,6 +12,7 @@ import {
   ShoppingCart,
   Truck,
   BarChart2,
+  ClipboardList,
   Settings,
   ShieldCheck,
 } from "lucide-react";
@@ -29,6 +30,7 @@ const baseNavItems = [
   { href: "/hr", label: "HR Management", icon: Users },
   { href: "/distribution", label: "Distribution", icon: Truck },
   { href: "/analytics", label: "Analytics", icon: BarChart2 },
+  { href: "/reports", label: "Reports & Compliance", icon: ClipboardList },
 ];
 
 export function Sidebar() {

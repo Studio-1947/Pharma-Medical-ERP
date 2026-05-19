@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import { Plus, Search, FileText, CheckCircle, XCircle, Send, PlusCircle, PackageCheck, Trash2 } from "lucide-react";
+import { Plus, Search, FileText, CheckCircle, XCircle, Send, PlusCircle, PackageCheck, Trash2, Loader2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 
 interface POItem {
@@ -37,29 +37,49 @@ interface GrnLineItem {
 }
 
 function GrnModal({
-  po,
+  poId,
+  poNumber,
   open,
   onClose,
 }: {
-  po: PO;
+  poId: string;
+  poNumber: string;
   open: boolean;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
-  const [lines, setLines] = useState<GrnLineItem[]>(
-    po.items.map((item) => ({
-      poItemId: item.id,
-      batchNo: "",
-      expiryDate: "",
-      receivedQty: item.orderedQty,
-      unitCost: item.unitCost,
-    }))
-  );
+  const [lines, setLines] = useState<GrnLineItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const { data: poDetailRaw, isLoading: loadingDetail } = useQuery({
+    queryKey: ["po-detail", poId],
+    queryFn: () => apiClient.get(`/procurement/purchase-orders/${poId}`),
+    enabled: open && !!poId,
+  });
+
+  const poDetail: PO | null = (() => {
+    const d = poDetailRaw as any;
+    return d?.data ?? d ?? null;
+  })();
+
+  // Initialise lines once we have detail
+  const [linesInitialised, setLinesInitialised] = useState(false);
+  if (poDetail?.items && poDetail.items.length > 0 && !linesInitialised) {
+    setLines(
+      poDetail.items.map((item) => ({
+        poItemId: item.id,
+        batchNo: "",
+        expiryDate: "",
+        receivedQty: item.orderedQty,
+        unitCost: item.unitCost,
+      }))
+    );
+    setLinesInitialised(true);
+  }
 
   const mutation = useMutation({
     mutationFn: (items: GrnLineItem[]) =>
-      apiClient.post(`/procurement/purchase-orders/${po.id}/grn`, { items }),
+      apiClient.post(`/procurement/purchase-orders/${poId}/grn`, { items }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["purchase-orders"] });
       onClose();
@@ -90,13 +110,21 @@ function GrnModal({
   return (
     <Modal
       title="Goods Received Note (GRN)"
-      subtitle={`Receiving stock for PO: ${po.poNumber}`}
+      subtitle={`Receiving stock for PO: ${poNumber}`}
       icon={<PackageCheck size={16} />}
       open={open}
       onClose={onClose}
       size="2xl"
     >
       <form onSubmit={handleSubmit} className="px-6 py-5">
+        {loadingDetail ? (
+          <div className="flex items-center justify-center py-12 text-muted-foreground gap-2 text-sm">
+            <Loader2 size={16} className="animate-spin" /> Loading order details...
+          </div>
+        ) : lines.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground text-sm">No line items found for this order.</div>
+        ) : null}
+        {!loadingDetail && lines.length > 0 && (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -113,10 +141,10 @@ function GrnModal({
                 <tr key={idx} className="py-1">
                   <td className="py-2 pr-3">
                     <span className="font-mono text-xs text-blue-600">
-                      {po.items[idx]?.medicineId ?? line.poItemId}
+                      {(poDetail?.items[idx] as any)?.medicine?.name ?? (poDetail?.items[idx] as any)?.medicineId ?? line.poItemId}
                     </span>
                     <div className="text-[10px] text-muted-foreground">
-                      Ordered: {po.items[idx]?.orderedQty}
+                      Ordered: {poDetail?.items[idx]?.orderedQty}
                     </div>
                   </td>
                   <td className="py-2 pr-3">
@@ -160,6 +188,7 @@ function GrnModal({
             </tbody>
           </table>
         </div>
+        )}
 
         {error && (
           <div className="mt-3 text-sm text-red-600 flex items-center gap-1.5">
@@ -203,7 +232,7 @@ export function PurchaseOrdersView() {
   const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedPO, setSelectedPO] = useState<PO | null>(null);
-  const [grnPO, setGrnPO] = useState<PO | null>(null);
+  const [grnPO, setGrnPO] = useState<{ id: string; poNumber: string } | null>(null);
 
   // For Create PO Modal
   const [form, setForm] = useState({
@@ -446,7 +475,7 @@ export function PurchaseOrdersView() {
                       )}
                       {po.status === "sent" && (
                         <button
-                          onClick={() => setGrnPO(po)}
+                          onClick={() => setGrnPO({ id: po.id, poNumber: po.poNumber })}
                           className="p-2 hover:bg-green-50 rounded-lg text-green-700 transition-colors font-medium text-xs flex items-center gap-1"
                         >
                           <PackageCheck className="w-3.5 h-3.5" /> Receive
@@ -464,7 +493,8 @@ export function PurchaseOrdersView() {
       {/* GRN Modal */}
       {grnPO && (
         <GrnModal
-          po={grnPO}
+          poId={grnPO.id}
+          poNumber={grnPO.poNumber}
           open={!!grnPO}
           onClose={() => setGrnPO(null)}
         />
