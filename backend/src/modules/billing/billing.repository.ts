@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, desc, eq, gte, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, isNull, lte, sql } from "drizzle-orm";
 import Redis from "ioredis";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
@@ -45,8 +45,14 @@ export class BillingRepository {
     if (params.patientId) conditions.push(eq(schema.salesInvoices.patientId, params.patientId));
     if (params.staffId) conditions.push(eq(schema.salesInvoices.staffId, params.staffId));
     if (params.status) conditions.push(eq(schema.salesInvoices.status, params.status as any));
+    if (params.search) conditions.push(ilike(schema.salesInvoices.invoiceNo, `%${params.search}%`));
     if (params.from) conditions.push(gte(schema.salesInvoices.createdAt, new Date(params.from)));
-    if (params.to) conditions.push(lte(schema.salesInvoices.createdAt, new Date(params.to)));
+    if (params.to) {
+      // When only a date is provided (no time), include the full day
+      const toDate = new Date(params.to);
+      if (!params.to.includes("T")) toDate.setHours(23, 59, 59, 999);
+      conditions.push(lte(schema.salesInvoices.createdAt, toDate));
+    }
 
     const where = conditions.length ? and(...conditions) : undefined;
     const [items, [countRow]] = await Promise.all([

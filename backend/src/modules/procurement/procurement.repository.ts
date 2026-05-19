@@ -116,13 +116,13 @@ export class ProcurementRepository {
     const where = and(...conditions);
 
     const [items, [countRow]] = await Promise.all([
-      this.db
-        .select()
-        .from(schema.purchaseOrders)
-        .where(where)
-        .orderBy(desc(schema.purchaseOrders.createdAt))
-        .limit(params.limit)
-        .offset((params.page - 1) * params.limit),
+      this.db.query.purchaseOrders.findMany({
+        where,
+        with: { supplier: { columns: { id: true, name: true, code: true } } },
+        orderBy: [desc(schema.purchaseOrders.createdAt)],
+        limit: params.limit,
+        offset: (params.page - 1) * params.limit,
+      }),
       this.db
         .select({ count: sql<number>`count(*)::int` })
         .from(schema.purchaseOrders)

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { Plus, Search, FileText, CheckCircle, XCircle, Send, PlusCircle, PackageCheck, Trash2, Loader2 } from "lucide-react";
@@ -21,10 +21,12 @@ interface PO {
   warehouseId: string;
   status: string;
   expectedDelivery?: string;
-  totalAmount: string;
+  totalValue: string;
+  subtotal: string;
+  taxAmount: string;
   notes?: string;
   items: POItem[];
-  supplier?: { name: string };
+  supplier?: { id: string; name: string; code: string };
   warehouse?: { name: string };
 }
 
@@ -50,6 +52,7 @@ function GrnModal({
   const qc = useQueryClient();
   const [lines, setLines] = useState<GrnLineItem[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const linesInitialisedRef = useRef(false);
 
   const { data: poDetailRaw, isLoading: loadingDetail } = useQuery({
     queryKey: ["po-detail", poId],
@@ -62,20 +65,20 @@ function GrnModal({
     return d?.data ?? d ?? null;
   })();
 
-  // Initialise lines once we have detail
-  const [linesInitialised, setLinesInitialised] = useState(false);
-  if (poDetail?.items && poDetail.items.length > 0 && !linesInitialised) {
-    setLines(
-      poDetail.items.map((item) => ({
-        poItemId: item.id,
-        batchNo: "",
-        expiryDate: "",
-        receivedQty: item.orderedQty,
-        unitCost: item.unitCost,
-      }))
-    );
-    setLinesInitialised(true);
-  }
+  useEffect(() => {
+    if (poDetail?.items && poDetail.items.length > 0 && !linesInitialisedRef.current) {
+      linesInitialisedRef.current = true;
+      setLines(
+        poDetail.items.map((item) => ({
+          poItemId: item.id,
+          batchNo: "",
+          expiryDate: "",
+          receivedQty: item.orderedQty,
+          unitCost: item.unitCost,
+        }))
+      );
+    }
+  }, [poDetail]);
 
   const mutation = useMutation({
     mutationFn: (items: GrnLineItem[]) =>
@@ -446,7 +449,7 @@ export function PurchaseOrdersView() {
                       {po.expectedDelivery || "--"}
                     </td>
                     <td className="px-6 py-4 font-bold text-slate-800">
-                      ₹{po.totalAmount}
+                      ₹{parseFloat(po.totalValue ?? "0").toFixed(2)}
                     </td>
                     <td className="px-6 py-4 text-right flex gap-2 justify-end">
                       {po.status === "draft" && (
@@ -473,12 +476,13 @@ export function PurchaseOrdersView() {
                           <Send className="w-3.5 h-3.5" /> Send
                         </button>
                       )}
-                      {po.status === "sent" && (
+                      {(po.status === "sent" || po.status === "partially_received") && (
                         <button
                           onClick={() => setGrnPO({ id: po.id, poNumber: po.poNumber })}
                           className="p-2 hover:bg-green-50 rounded-lg text-green-700 transition-colors font-medium text-xs flex items-center gap-1"
                         >
-                          <PackageCheck className="w-3.5 h-3.5" /> Receive
+                          <PackageCheck className="w-3.5 h-3.5" />
+                          {po.status === "partially_received" ? "Receive More" : "Receive"}
                         </button>
                       )}
                     </td>

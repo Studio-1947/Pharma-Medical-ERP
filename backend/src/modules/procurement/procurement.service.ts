@@ -68,9 +68,9 @@ export class ProcurementService {
     const existing = await this.repo.findPOById(id);
     if (!existing) throw new NotFoundException(`Purchase order ${id} not found`);
 
-    if (existing.status !== "pending_approval") {
+    if (!["pending_approval", "draft"].includes(existing.status)) {
       throw new UnprocessableEntityException(
-        `Purchase order must be in pending_approval status to approve. Current status: ${existing.status}`,
+        `Purchase order must be in draft or pending_approval status to approve. Current status: ${existing.status}`,
       );
     }
 

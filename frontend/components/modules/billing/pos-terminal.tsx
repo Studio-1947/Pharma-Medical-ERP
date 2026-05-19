@@ -155,21 +155,32 @@ export function PosTerminal() {
     },
   });
 
-  const handlePayConfirm = async (mode: string, splits?: any[]) => {
+  const handlePayConfirm = async (mode: string, splits?: { mode: string; amount: number; ref?: string }[]) => {
+    const resolvedBranchId = branchId || user?.branchId;
+    if (!resolvedBranchId) {
+      alert("No branch selected. Please log in again.");
+      return;
+    }
+
+    // Build payments array matching the backend schema
+    const payments = splits?.length
+      ? splits.map((s) => ({
+          mode: s.mode,
+          amount: String(s.amount.toFixed(2)),
+          ...(s.ref ? { referenceNo: s.ref } : {}),
+        }))
+      : [{ mode, amount: String(total.toFixed(2)) }];
+
     const payload = {
-      branchId: branchId || user?.branchId || "00000000-0000-0000-0000-000000000000",
+      branchId: resolvedBranchId,
       patientId: patientId || undefined,
-      paymentMode: mode,
       items: items.map((i) => ({
         medicineId: i.medicineId,
-        batchId: i.batchId,
         quantity: i.quantity,
-        unitPrice: String(i.unitPrice),
-        discountPct: String(i.discountPct),
-        taxPct: String(i.taxPct),
+        discountPct: String(i.discountPct ?? "0"),
       })),
       discountAmount: "0",
-      paymentSplits: splits,
+      payments,
     };
 
     if (!isOnline) {

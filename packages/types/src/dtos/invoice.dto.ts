@@ -42,8 +42,9 @@ export const queryInvoiceSchema = z.object({
   patientId: z.string().uuid().optional(),
   staffId: z.string().uuid().optional(),
   status: z.string().optional(),
-  from: z.string().datetime().optional(),
-  to: z.string().datetime().optional(),
+  search: z.string().optional(),
+  from: z.string().optional(),
+  to: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });

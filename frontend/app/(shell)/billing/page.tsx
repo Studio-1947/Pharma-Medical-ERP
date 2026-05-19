@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import Link from "next/link";
 import { apiClient, queryKeys } from "@/lib/api-client";
-import { ShoppingCart, XCircle, RotateCcw, AlertCircle, Download } from "lucide-react";
+import { ShoppingCart, XCircle, RotateCcw, AlertCircle, Download, Search, Filter } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 
 // ─── PDF download button ──────────────────────────────────────────────────────
@@ -278,14 +278,31 @@ export default function BillingPage() {
   const [page, setPage] = useState(1);
   const [voidTarget, setVoidTarget] = useState<any | null>(null);
   const [returnTarget, setReturnTarget] = useState<any | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+
+  const filters = {
+    page,
+    limit: 20,
+    ...(search ? { search } : {}),
+    ...(statusFilter ? { status: statusFilter } : {}),
+    ...(dateFrom ? { from: dateFrom } : {}),
+    ...(dateTo ? { to: dateTo } : {}),
+  };
 
   const { data, isLoading } = useQuery({
-    queryKey: queryKeys.invoices.list({ page }),
-    queryFn: () => apiClient.get("/billing/invoices", { params: { page, limit: 20 } }) as any,
+    queryKey: queryKeys.invoices.list(filters),
+    queryFn: () => apiClient.get("/billing/invoices", { params: filters }) as any,
   });
 
   const invoices: any[] = (data as any)?.data ?? [];
   const meta = (data as any)?.meta;
+
+  function handleFilterChange() {
+    setPage(1);
+  }
 
   const statusColor: Record<string, string> = {
     confirmed: "bg-blue-100 text-blue-700",
@@ -298,7 +315,7 @@ export default function BillingPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-semibold">Billing</h2>
         <Link
           href="/billing/pos"
@@ -306,6 +323,54 @@ export default function BillingPage() {
         >
           <ShoppingCart size={16} /> Open POS
         </Link>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-wrap gap-3 mb-5 p-4 bg-muted/30 rounded-xl border">
+        <div className="relative flex-1 min-w-[180px]">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); handleFilterChange(); }}
+            placeholder="Search invoice no..."
+            className="w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 bg-background"
+          />
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => { setStatusFilter(e.target.value); handleFilterChange(); }}
+          className="border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+        >
+          <option value="">All statuses</option>
+          <option value="draft">Draft</option>
+          <option value="confirmed">Confirmed</option>
+          <option value="paid">Paid</option>
+          <option value="partially_paid">Partially Paid</option>
+          <option value="void">Void</option>
+          <option value="cancelled">Cancelled</option>
+        </select>
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => { setDateFrom(e.target.value); handleFilterChange(); }}
+          className="border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+          title="From date"
+        />
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => { setDateTo(e.target.value); handleFilterChange(); }}
+          className="border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/40"
+          title="To date"
+        />
+        {(search || statusFilter || dateFrom || dateTo) && (
+          <button
+            onClick={() => { setSearch(""); setStatusFilter(""); setDateFrom(""); setDateTo(""); setPage(1); }}
+            className="px-3 py-2 text-xs font-medium border rounded-lg hover:bg-muted text-muted-foreground transition-colors"
+          >
+            Clear
+          </button>
+        )}
       </div>
 
       {isLoading && <div className="text-center py-16 text-muted-foreground">Loading...</div>}
@@ -330,8 +395,12 @@ export default function BillingPage() {
                 <tr key={inv.id} className="hover:bg-muted/50">
                   <td className="px-4 py-3 font-mono text-xs font-medium">{inv.invoiceNo}</td>
                   <td className="px-4 py-3">
-                    {inv.patientId ? (
-                      inv.patientId.slice(0, 8) + "..."
+                    {inv.patient ? (
+                      <span className="font-medium text-slate-800">
+                        {inv.patient.name ?? `${inv.patient.firstName ?? ""} ${inv.patient.lastName ?? ""}`.trim()}
+                      </span>
+                    ) : inv.patientId ? (
+                      <span className="font-mono text-xs text-muted-foreground">{inv.patientId.slice(0, 8)}…</span>
                     ) : (
                       <span className="text-muted-foreground">Walk-in</span>
                     )}
