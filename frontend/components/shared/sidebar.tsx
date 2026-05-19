@@ -26,6 +26,7 @@ const baseNavItems = [
   { href: "/prescriptions", label: "Prescriptions", icon: FileText },
   { href: "/patients", label: "Patients", icon: Users },
   { href: "/procurement", label: "Procurement", icon: ShoppingCart },
+  { href: "/hr", label: "HR Management", icon: Users },
   { href: "/distribution", label: "Distribution", icon: Truck },
   { href: "/analytics", label: "Analytics", icon: BarChart2 },
 ];
