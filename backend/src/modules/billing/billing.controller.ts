@@ -64,6 +64,13 @@ export class BillingController {
     return this.service.recordPayment(recordPaymentSchema.parse(body), user.sub);
   }
 
+  @Get("invoices/:id/pdf")
+  @Roles("admin", "pharmacist", "cashier")
+  @ApiOperation({ summary: "Get presigned download URL for invoice PDF" })
+  getPdf(@Param("id") id: string) {
+    return this.service.getPdfUrl(id);
+  }
+
   @Get("reports/end-of-day")
   @Roles("admin", "reports_analyst")
   @ApiOperation({ summary: "End-of-day sales summary for a branch" })

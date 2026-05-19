@@ -59,4 +59,13 @@ export class AuthController {
   async logout(@CurrentUser() user: JwtPayload) {
     return this.authService.logout(user.sub);
   }
+
+  @UseGuards(JwtAuthGuard)
+  @Post("change-password")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Change current user's password" })
+  async changePassword(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
+    const { currentPassword, newPassword } = body as { currentPassword: string; newPassword: string };
+    return this.authService.changePassword(user.sub, currentPassword, newPassword);
+  }
 }

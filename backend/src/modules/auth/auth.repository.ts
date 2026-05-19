@@ -103,4 +103,11 @@ export class AuthRepository {
       .set({ lastLoginAt: new Date() })
       .where(eq(schema.users.id, userId));
   }
+
+  async updatePasswordHash(userId: string, passwordHash: string) {
+    await this.db
+      .update(schema.users)
+      .set({ passwordHash, passwordChangedAt: new Date(), updatedAt: new Date() })
+      .where(eq(schema.users.id, userId));
+  }
 }

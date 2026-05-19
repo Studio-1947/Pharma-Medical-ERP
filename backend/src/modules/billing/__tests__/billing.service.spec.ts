@@ -83,12 +83,17 @@ describe("BillingService (Compliance)", () => {
       add: vi.fn(),
     };
 
+    const mockS3 = {
+      getPresignedUrl: vi.fn(),
+    };
+
     service = new BillingService(
       mockRepo,
       mockDrizzle,
       mockTaxService,
       mockBatchRepo,
       mockMovementRepo,
+      mockS3 as any,
       mockPdfQueue as any,
     );
   });

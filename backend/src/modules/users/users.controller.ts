@@ -5,6 +5,7 @@ import {
   Param,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from "@nestjs/common";
@@ -13,6 +14,7 @@ import { UsersService } from "./users.service";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
+import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
 import { UserRole, updateUserSchema } from "@pharmerp/types";
 
 @ApiTags("users")
@@ -70,5 +72,20 @@ export class UsersController {
   @ApiOperation({ summary: "Reactivate a deactivated user account" })
   reactivate(@Param("id") id: string) {
     return this.usersService.reactivateUser(id);
+  }
+
+  @Get("me/notification-prefs")
+  @ApiOperation({ summary: "Get current user's notification preferences" })
+  getNotificationPrefs(@CurrentUser() user: JwtPayload) {
+    return this.usersService.getNotificationPrefs(user.sub);
+  }
+
+  @Put("me/notification-prefs")
+  @ApiOperation({ summary: "Save current user's notification preferences" })
+  updateNotificationPrefs(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: Record<string, { email: boolean; sms: boolean }>,
+  ) {
+    return this.usersService.updateNotificationPrefs(user.sub, body);
   }
 }

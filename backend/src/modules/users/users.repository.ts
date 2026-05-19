@@ -143,4 +143,19 @@ export class UsersRepository {
       });
     return user ?? null;
   }
+
+  async getNotificationPrefs(userId: string) {
+    const user = await this.db.query.users.findFirst({
+      where: eq(schema.users.id, userId),
+      columns: { notificationPrefs: true },
+    });
+    return user?.notificationPrefs ?? null;
+  }
+
+  async updateNotificationPrefs(userId: string, prefs: Record<string, { email: boolean; sms: boolean }>) {
+    await this.db
+      .update(schema.users)
+      .set({ notificationPrefs: prefs, updatedAt: new Date() })
+      .where(eq(schema.users.id, userId));
+  }
 }

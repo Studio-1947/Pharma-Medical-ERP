@@ -55,6 +55,21 @@ export class DistributionService {
     if (transfer.status !== "in_transit") {
       throw new BadRequestException("Only in-transit transfers can be delivered");
     }
+
+    // Validate: received + rejected cannot exceed dispatched qty per item
+    const itemMap = new Map(transfer.items.map((i: any) => [i.id, i]));
+    for (const ri of receivedItems) {
+      const item = itemMap.get(ri.itemId) as any;
+      if (!item) throw new BadRequestException(`Transfer item ${ri.itemId} not found`);
+      const total = ri.receivedQty + (ri.rejectedQty ?? 0);
+      if (total > item.requestedQty) {
+        throw new BadRequestException(
+          `Item ${ri.itemId}: received (${ri.receivedQty}) + rejected (${ri.rejectedQty ?? 0}) ` +
+          `exceeds dispatched quantity (${item.requestedQty})`,
+        );
+      }
+    }
+
     return this.repo.deliver(id, dto, receivedItems);
   }
 

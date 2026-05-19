@@ -89,6 +89,25 @@ export class AuthService {
     return { message: "Logged out successfully" };
   }
 
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const user = await this.repo.findUserById(userId);
+    if (!user) throw new UnauthorizedException("User not found");
+
+    const valid = await argon2.verify(user.passwordHash, currentPassword);
+    if (!valid) throw new UnauthorizedException("Current password is incorrect");
+
+    const newHash = await argon2.hash(newPassword, {
+      type: argon2.argon2id,
+      timeCost: 2,
+      memoryCost: 65536,
+      parallelism: 1,
+    });
+
+    await this.repo.updatePasswordHash(userId, newHash);
+    await this.repo.revokeAllUserTokens(userId);
+    return { message: "Password changed successfully. Please log in again." };
+  }
+
   // -----------------------------------------------------------------------
 
   private async issueTokens(

@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { Bell, Mail, MessageSquare, AlertTriangle, Clock } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Bell, Mail, MessageSquare, AlertTriangle, Clock, CheckCircle2 } from "lucide-react";
+import { apiClient } from "@/lib/api-client";
 
 interface NotifToggle {
   id: string;
@@ -47,13 +49,7 @@ const DEFAULT_SETTINGS: NotifToggle[] = [
   },
 ];
 
-function Toggle({
-  checked,
-  onChange,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
+function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
   return (
     <button
       type="button"
@@ -65,9 +61,7 @@ function Toggle({
       }`}
     >
       <span
-        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform ${
-          checked ? "translate-x-4.5" : "translate-x-0.5"
-        }`}
+        className="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow transition-transform"
         style={{ transform: checked ? "translateX(18px)" : "translateX(2px)" }}
       />
     </button>
@@ -75,19 +69,39 @@ function Toggle({
 }
 
 export function NotificationSettings() {
+  const qc = useQueryClient();
   const [settings, setSettings] = useState<NotifToggle[]>(DEFAULT_SETTINGS);
-  const [saved, setSaved] = useState(false);
+
+  const { data: prefsRaw } = useQuery({
+    queryKey: ["notification-prefs"],
+    queryFn: () => apiClient.get("/users/me/notification-prefs") as Promise<{ data: Record<string, { email: boolean; sms: boolean }> | null }>,
+  });
+
+  useEffect(() => {
+    const prefs = (prefsRaw as any)?.data;
+    if (!prefs) return;
+    setSettings((prev) =>
+      prev.map((s) => ({
+        ...s,
+        email: prefs[s.id]?.email ?? s.email,
+        sms: prefs[s.id]?.sms ?? s.sms,
+      })),
+    );
+  }, [prefsRaw]);
+
+  const mutation = useMutation({
+    mutationFn: (prefs: Record<string, { email: boolean; sms: boolean }>) =>
+      apiClient.put("/users/me/notification-prefs", prefs),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notification-prefs"] }),
+  });
 
   const update = (id: string, channel: "email" | "sms", value: boolean) => {
-    setSettings((prev) =>
-      prev.map((s) => (s.id === id ? { ...s, [channel]: value } : s))
-    );
-    setSaved(false);
+    setSettings((prev) => prev.map((s) => (s.id === id ? { ...s, [channel]: value } : s)));
   };
 
   const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    const prefs = Object.fromEntries(settings.map((s) => [s.id, { email: s.email, sms: s.sms }]));
+    mutation.mutate(prefs);
   };
 
   return (
@@ -129,12 +143,21 @@ export function NotificationSettings() {
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-3">
+        {mutation.isSuccess && (
+          <span className="flex items-center gap-1.5 text-sm text-green-600">
+            <CheckCircle2 size={14} /> Saved
+          </span>
+        )}
+        {mutation.isError && (
+          <span className="text-sm text-red-600">Save failed. Try again.</span>
+        )}
         <button
           onClick={handleSave}
-          className="px-5 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          disabled={mutation.isPending}
+          className="px-5 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
         >
-          {saved ? "Saved!" : "Save Preferences"}
+          {mutation.isPending ? "Saving..." : "Save Preferences"}
         </button>
       </div>
     </div>

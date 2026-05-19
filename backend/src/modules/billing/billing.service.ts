@@ -8,12 +8,13 @@ import { BillingRepository } from "./billing.repository";
 import { TaxService } from "./tax.service";
 import { BatchRepository } from "../inventory/batch.repository";
 import { StockMovementRepository } from "../inventory/stock-movement.repository";
+import { S3Service } from "../../common/s3/s3.service";
 import * as schema from "../../database/schema";
-import type { 
-  CreateInvoiceDto, 
-  QueryInvoiceDto, 
-  VoidInvoiceDto, 
-  ReturnInvoiceDto 
+import type {
+  CreateInvoiceDto,
+  QueryInvoiceDto,
+  VoidInvoiceDto,
+  ReturnInvoiceDto
 } from "@pharmerp/types";
 
 @Injectable()
@@ -24,6 +25,7 @@ export class BillingService {
     private readonly taxService: TaxService,
     private readonly batchRepo: BatchRepository,
     private readonly movementRepo: StockMovementRepository,
+    private readonly s3: S3Service,
     @InjectQueue("pdf-generation") private readonly pdfQueue: Queue,
   ) {}
 
@@ -512,5 +514,19 @@ export class BillingService {
     const d = date ?? new Date().toISOString().slice(0, 10);
     const summary = await this.repo.endOfDaySummary(branchId, d);
     return { data: summary };
+  }
+
+  async getPdfUrl(invoiceId: string) {
+    const inv = await this.repo.findById(invoiceId);
+    if (!inv) throw new NotFoundException(`Invoice ${invoiceId} not found`);
+
+    if (!(inv as any).pdfUrl) {
+      // PDF not yet generated — enqueue and inform caller
+      await this.pdfQueue.add({ invoiceId }, { attempts: 3, backoff: 5000 });
+      return { ready: false, message: "PDF generation queued. Retry in a few seconds." };
+    }
+
+    const url = await this.s3.getPresignedUrl((inv as any).pdfUrl, 300);
+    return { ready: true, url };
   }
 }

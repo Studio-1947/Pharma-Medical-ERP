@@ -6,6 +6,7 @@ import {
   timestamp,
   text,
   inet,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { userRoleEnum } from "./enums";
@@ -23,6 +24,7 @@ export const users = pgTable("users", {
   twoFaSecret: varchar("two_fa_secret", { length: 64 }),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }),
+  notificationPrefs: jsonb("notification_prefs").$type<Record<string, { email: boolean; sms: boolean }>>(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

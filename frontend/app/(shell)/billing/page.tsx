@@ -4,8 +4,42 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import Link from "next/link";
 import { apiClient, queryKeys } from "@/lib/api-client";
-import { ShoppingCart, XCircle, RotateCcw, AlertCircle } from "lucide-react";
+import { ShoppingCart, XCircle, RotateCcw, AlertCircle, Download } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
+
+// ─── PDF download button ──────────────────────────────────────────────────────
+
+function PdfButton({ invoiceId }: { invoiceId: string }) {
+  const [loading, setLoading] = useState(false);
+
+  const handleDownload = async () => {
+    setLoading(true);
+    try {
+      const res: any = await apiClient.get(`/billing/invoices/${invoiceId}/pdf`);
+      if (res.ready && res.url) {
+        window.open(res.url, "_blank");
+      } else {
+        alert("PDF is being generated. Please try again in a few seconds.");
+      }
+    } catch {
+      alert("Failed to get PDF link.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleDownload}
+      disabled={loading}
+      className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-800 hover:underline disabled:opacity-40"
+      title="Download PDF"
+    >
+      <Download size={12} />
+      {loading ? "..." : "PDF"}
+    </button>
+  );
+}
 
 // ─── Void modal ───────────────────────────────────────────────────────────────
 
@@ -326,6 +360,7 @@ export default function BillingPage() {
                   </td>
                   <td className="px-4 py-3 text-center">
                     <div className="flex items-center justify-center gap-2">
+                      <PdfButton invoiceId={inv.id} />
                       {(inv.status === "paid" || inv.status === "confirmed" || inv.status === "partially_paid") && (
                         <>
                           <button

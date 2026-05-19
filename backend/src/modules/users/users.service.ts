@@ -84,4 +84,14 @@ export class UsersService {
     if (!user) throw new NotFoundException("User not found");
     return user;
   }
+
+  async getNotificationPrefs(userId: string) {
+    const prefs = await this.repo.getNotificationPrefs(userId);
+    return { data: prefs };
+  }
+
+  async updateNotificationPrefs(userId: string, prefs: Record<string, { email: boolean; sms: boolean }>) {
+    await this.repo.updateNotificationPrefs(userId, prefs);
+    return { success: true };
+  }
 }
