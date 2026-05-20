@@ -36,7 +36,9 @@ export class BillingController {
   @Roles("admin", "pharmacist", "cashier")
   @ApiOperation({ summary: "Create invoice — atomically decrements stock (FEFO)" })
   create(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
-    return this.service.create(createInvoiceSchema.parse(body), user.sub);
+    // branchId is optional in the payload; fall back to the user's own branch from the JWT
+    const merged = { branchId: user.branchId, ...(body as object) };
+    return this.service.create(createInvoiceSchema.parse(merged), user.sub);
   }
 
   @Post("invoices/:id/void")

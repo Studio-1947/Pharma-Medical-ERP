@@ -85,20 +85,28 @@ apiClient.interceptors.response.use(
       const refreshToken = getStoredToken("pharmerp_refresh_token");
 
       if (!refreshToken) {
-        // No refresh token anywhere — session is unrecoverable
         processQueue(new Error("No refresh token"), null);
         clearAuthAndRedirect();
         return Promise.reject(new Error("No refresh token"));
       }
 
-      const res: any = await axios.post(`${BASE_URL}/auth/refresh`, {
-        refreshToken,
-      });
-      const { accessToken, refreshToken: newRefresh } = res.data;
-      localStorage.setItem("pharmerp_access_token", accessToken);
-      localStorage.setItem("pharmerp_refresh_token", newRefresh);
-      apiClient.defaults.headers["Authorization"] = `Bearer ${accessToken}`;
-      processQueue(null, accessToken);
+      const res: any = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken });
+      // TransformInterceptor spreads the payload to the top level, so tokens
+      // are available both at res.data.accessToken and res.data.data.accessToken
+      const newAccess: string = res.data?.accessToken ?? res.data?.data?.accessToken;
+      const newRefresh: string = res.data?.refreshToken ?? res.data?.data?.refreshToken;
+
+      if (!newAccess) throw new Error("Refresh response missing accessToken");
+
+      localStorage.setItem("pharmerp_access_token", newAccess);
+      if (newRefresh) localStorage.setItem("pharmerp_refresh_token", newRefresh);
+
+      // Update default headers AND the original request's header so the retry
+      // never sends the old expired token regardless of Axios config caching.
+      apiClient.defaults.headers["Authorization"] = `Bearer ${newAccess}`;
+      original.headers["Authorization"] = `Bearer ${newAccess}`;
+
+      processQueue(null, newAccess);
       return apiClient(original);
     } catch (err) {
       processQueue(err, null);
@@ -116,10 +124,25 @@ export async function bootstrapSession(): Promise<boolean> {
   if (!refreshToken) return false;
   try {
     const res: any = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken });
-    const { accessToken, refreshToken: newRefresh } = res.data;
-    localStorage.setItem("pharmerp_access_token", accessToken);
-    localStorage.setItem("pharmerp_refresh_token", newRefresh);
-    apiClient.defaults.headers["Authorization"] = `Bearer ${accessToken}`;
+    const newAccess: string = res.data?.accessToken ?? res.data?.data?.accessToken;
+    const newRefresh: string = res.data?.refreshToken ?? res.data?.data?.refreshToken;
+
+    if (!newAccess) return false;
+
+    localStorage.setItem("pharmerp_access_token", newAccess);
+    if (newRefresh) localStorage.setItem("pharmerp_refresh_token", newRefresh);
+    apiClient.defaults.headers["Authorization"] = `Bearer ${newAccess}`;
+
+    // Keep the Zustand store in sync so the in-memory state never goes stale.
+    try {
+      const raw = JSON.parse(localStorage.getItem("pharmerp-auth") ?? "{}");
+      if (raw?.state) {
+        raw.state.accessToken = newAccess;
+        if (newRefresh) raw.state.refreshToken = newRefresh;
+        localStorage.setItem("pharmerp-auth", JSON.stringify(raw));
+      }
+    } catch {}
+
     return true;
   } catch {
     return false;

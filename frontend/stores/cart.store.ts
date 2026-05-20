@@ -27,6 +27,7 @@ interface CartState {
   updateQty: (medicineId: string, batchId: string, qty: number) => void;
   removeItem: (medicineId: string, batchId: string) => void;
   setPatient: (id: string | null) => void;
+  setBranchId: (id: string) => void;
   setPrescriptionId: (id: string | null) => void;
   setLoyaltyPointsToRedeem: (points: number) => void;
   clear: () => void;
@@ -63,6 +64,7 @@ export const useCartStore = create<CartState>()(
       },
       removeItem: (_, batchId) => set((s) => ({ items: s.items.filter((i) => i.batchId !== batchId) })),
       setPatient: (id) => set({ patientId: id }),
+      setBranchId: (id) => set({ branchId: id }),
       setPrescriptionId: (id) => set({ prescriptionId: id }),
       setLoyaltyPointsToRedeem: (points) => set({ loyaltyPointsToRedeem: points }),
       clear: () => set({ items: [], patientId: null, prescriptionId: null, loyaltyPointsToRedeem: 0 }),
@@ -81,6 +83,10 @@ export const useCartStore = create<CartState>()(
         );
       },
     }),
-    { name: "pharmerp-cart", partialize: (s) => ({ items: s.items, patientId: s.patientId, prescriptionId: s.prescriptionId }) },
+    {
+      name: "pharmerp-cart",
+      skipHydration: true,
+      partialize: (s) => ({ items: s.items, patientId: s.patientId, prescriptionId: s.prescriptionId, branchId: s.branchId }),
+    },
   ),
 );

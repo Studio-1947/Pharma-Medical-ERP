@@ -38,7 +38,14 @@ export class BatchService {
       throw new NotFoundException(`Medicine ${dto.medicineId} not found`);
     }
 
-    const batch = await this.batchRepo.createBatch(dto);
+    // If no locationId but branchId provided, auto-assign the branch's default location
+    // so selectBatchesForDispense (which joins through locationId) can find this batch.
+    let resolvedLocationId = dto.locationId;
+    if (!resolvedLocationId && (dto as any).branchId) {
+      resolvedLocationId = await this.batchRepo.findOrCreateDefaultLocationForBranch((dto as any).branchId);
+    }
+
+    const batch = await this.batchRepo.createBatch({ ...dto, resolvedLocationId } as any);
 
     // Log the inbound stock movement
     await this.movementRepo.log({

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
-import { UserPlus, Search, Edit2, MapPin, Phone, Calendar } from "lucide-react";
+import { UserPlus, Search, Edit2, Phone, Calendar, Star } from "lucide-react";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
 
@@ -11,27 +11,44 @@ interface Patient {
   id: string;
   name: string;
   phone: string;
-  age?: number;
-  address?: string;
-  state?: string;
+  email?: string | null;
+  gender?: string | null;
+  bloodGroup?: string | null;
+  allergies?: string[] | null;
+  loyaltyPoints: number;
+  outstandingBalance: string;
+  isActive: boolean;
   createdAt: string;
 }
 
 interface PatientFormData {
   name: string;
   phone: string;
-  age: string;
+  email: string;
+  dateOfBirth: string;
+  gender: string;
   address: string;
   state: string;
+  bloodGroup: string;
 }
 
 const emptyForm: PatientFormData = {
   name: "",
   phone: "",
-  age: "",
+  email: "",
+  dateOfBirth: "",
+  gender: "",
   address: "",
   state: "",
+  bloodGroup: "",
 };
+
+const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+
+const inputCls =
+  "w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition placeholder:text-slate-400";
+
+const labelCls = "block text-xs font-semibold text-slate-600 mb-1";
 
 export function PatientsClient() {
   const queryClient = useQueryClient();
@@ -98,9 +115,12 @@ export function PatientsClient() {
     setForm({
       name: patient.name ?? "",
       phone: patient.phone ?? "",
-      age: patient.age != null ? String(patient.age) : "",
-      address: patient.address ?? "",
-      state: patient.state ?? "",
+      email: patient.email ?? "",
+      dateOfBirth: "",
+      gender: patient.gender ?? "",
+      address: "",
+      state: "",
+      bloodGroup: patient.bloodGroup ?? "",
     });
     setFormError("");
     setIsOpen(true);
@@ -120,13 +140,17 @@ export function PatientsClient() {
       setFormError("Name and phone are required.");
       return;
     }
-    const payload = {
+    const payload: Record<string, any> = {
       name: form.name.trim(),
       phone: form.phone.trim(),
-      age: form.age ? Number(form.age) : undefined,
-      address: form.address.trim() || undefined,
-      state: form.state.trim() || undefined,
     };
+    if (form.email.trim()) payload.email = form.email.trim();
+    if (form.dateOfBirth) payload.dateOfBirth = new Date(form.dateOfBirth).toISOString();
+    if (form.gender) payload.gender = form.gender;
+    if (form.address.trim()) payload.address = form.address.trim();
+    if (form.state.trim()) payload.state = form.state.trim();
+    if (form.bloodGroup) payload.bloodGroup = form.bloodGroup;
+
     if (editingPatient) {
       updateMutation.mutate({ id: editingPatient.id, data: payload });
     } else {
@@ -167,9 +191,7 @@ export function PatientsClient() {
       {/* Table */}
       {isLoading ? (
         <div className="animate-pulse space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 bg-muted rounded-xl" />
-          ))}
+          {[1, 2, 3].map((i) => <div key={i} className="h-16 bg-muted rounded-xl" />)}
         </div>
       ) : patients.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
@@ -185,8 +207,9 @@ export function PatientsClient() {
                 <tr>
                   <th className="px-6 py-4">Patient</th>
                   <th className="px-6 py-4">Phone</th>
-                  <th className="px-6 py-4">Age</th>
-                  <th className="px-6 py-4">Address</th>
+                  <th className="px-6 py-4">Gender</th>
+                  <th className="px-6 py-4">Blood Group</th>
+                  <th className="px-6 py-4">Loyalty</th>
                   <th className="px-6 py-4">Registered</th>
                   <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
@@ -199,41 +222,36 @@ export function PatientsClient() {
                         <div className="w-9 h-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-sm shrink-0">
                           {(patient.name?.[0] ?? "P").toUpperCase()}
                         </div>
-                        <span className="font-medium">{patient.name}</span>
+                        <div>
+                          <p className="font-medium">{patient.name}</p>
+                          {patient.email && <p className="text-xs text-muted-foreground">{patient.email}</p>}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-1.5 text-muted-foreground">
-                        <Phone className="w-3.5 h-3.5" />
-                        {patient.phone}
+                        <Phone className="w-3.5 h-3.5" />{patient.phone}
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-muted-foreground">
-                      {patient.age != null ? `${patient.age} yrs` : "--"}
+                    <td className="px-6 py-4 text-muted-foreground capitalize">{patient.gender ?? "--"}</td>
+                    <td className="px-6 py-4">
+                      {patient.bloodGroup ? (
+                        <span className="bg-red-50 text-red-700 border border-red-100 text-xs font-bold px-2 py-0.5 rounded">{patient.bloodGroup}</span>
+                      ) : <span className="text-muted-foreground">--</span>}
                     </td>
                     <td className="px-6 py-4">
-                      {patient.address ? (
-                        <div className="flex items-center gap-1.5 text-muted-foreground max-w-[200px] truncate">
-                          <MapPin className="w-3.5 h-3.5 shrink-0" />
-                          <span className="truncate">{patient.address}{patient.state ? `, ${patient.state}` : ""}</span>
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">--</span>
-                      )}
+                      <div className="flex items-center gap-1 text-yellow-700 font-medium text-sm">
+                        <Star className="w-3.5 h-3.5" />{patient.loyaltyPoints ?? 0}
+                      </div>
                     </td>
                     <td className="px-6 py-4 text-muted-foreground">
                       <div className="flex items-center gap-1.5">
                         <Calendar className="w-3.5 h-3.5" />
-                        {patient.createdAt
-                          ? format(new Date(patient.createdAt), "MMM d, yyyy")
-                          : "--"}
+                        {patient.createdAt ? format(new Date(patient.createdAt), "MMM d, yyyy") : "--"}
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={() => openEdit(patient)}
-                        className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-primary"
-                      >
+                      <button onClick={() => openEdit(patient)} className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-primary">
                         <Edit2 className="w-4 h-4" />
                       </button>
                     </td>
@@ -242,25 +260,11 @@ export function PatientsClient() {
               </tbody>
             </table>
           </div>
-
-          {/* Pagination controls */}
           <div className="flex items-center justify-between px-6 py-4 border-t text-sm text-muted-foreground">
             <span>Page {page}</span>
             <div className="flex gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-3 py-1 border rounded-lg hover:bg-muted transition-colors disabled:opacity-40"
-              >
-                Previous
-              </button>
-              <button
-                onClick={() => setPage((p) => p + 1)}
-                disabled={patients.length < 20}
-                className="px-3 py-1 border rounded-lg hover:bg-muted transition-colors disabled:opacity-40"
-              >
-                Next
-              </button>
+              <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1 border rounded-lg hover:bg-muted transition-colors disabled:opacity-40">Previous</button>
+              <button onClick={() => setPage((p) => p + 1)} disabled={patients.length < 20} className="px-3 py-1 border rounded-lg hover:bg-muted transition-colors disabled:opacity-40">Next</button>
             </div>
           </div>
         </div>
@@ -269,80 +273,155 @@ export function PatientsClient() {
       {/* Register / Edit Modal */}
       <Modal
         title={editingPatient ? "Edit Patient" : "Register Patient"}
+        subtitle={editingPatient ? "Update patient details below." : "Fill in the patient's details to register them."}
         open={isOpen}
         onClose={handleClose}
         size="md"
       >
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {formError && (
-            <div className="px-3 py-2 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">
-              {formError}
+        <form onSubmit={handleSubmit} className="flex flex-col h-full">
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+            {formError && (
+              <div className="px-3 py-2.5 rounded-lg bg-red-50 text-red-700 text-sm border border-red-200">
+                {formError}
+              </div>
+            )}
+
+            {/* Contact info */}
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-3">Contact Information</p>
+              <div className="space-y-3">
+                <div>
+                  <label className={labelCls}>Full Name <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    value={form.name}
+                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. Ramesh Kumar"
+                    className={inputCls}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>Phone <span className="text-red-500">*</span></label>
+                    <input
+                      type="tel"
+                      value={form.phone}
+                      onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
+                      placeholder="+91 9876543210"
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Email</label>
+                    <input
+                      type="email"
+                      value={form.email}
+                      onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                      placeholder="email@example.com"
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
-          )}
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Full Name <span className="text-red-500">*</span></label>
-            <input
-              type="text"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="Patient full name"
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
+
+            <div className="border-t border-slate-100" />
+
+            {/* Personal info */}
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-3">Personal Details</p>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>Gender</label>
+                    <select
+                      value={form.gender}
+                      onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))}
+                      className={inputCls}
+                    >
+                      <option value="">Select gender</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelCls}>Date of Birth</label>
+                    <input
+                      type="date"
+                      value={form.dateOfBirth}
+                      onChange={(e) => setForm((f) => ({ ...f, dateOfBirth: e.target.value }))}
+                      max={new Date().toISOString().split("T")[0]}
+                      className={inputCls}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className={labelCls}>Blood Group</label>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {BLOOD_GROUPS.map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, bloodGroup: f.bloodGroup === g ? "" : g }))}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                          form.bloodGroup === g
+                            ? "bg-red-600 text-white border-red-600 shadow-sm"
+                            : "bg-white text-slate-600 border-slate-200 hover:border-red-300 hover:text-red-600"
+                        }`}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100" />
+
+            {/* Address */}
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-3">Address</p>
+              <div className="space-y-3">
+                <div>
+                  <label className={labelCls}>Street / City</label>
+                  <input
+                    type="text"
+                    value={form.address}
+                    onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
+                    placeholder="e.g. 12 Park Street, Kolkata"
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className={labelCls}>State</label>
+                  <input
+                    type="text"
+                    value={form.state}
+                    onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
+                    placeholder="e.g. West Bengal"
+                    className={inputCls}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Phone Number <span className="text-red-500">*</span></label>
-            <input
-              type="tel"
-              value={form.phone}
-              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-              placeholder="+91 9876543210"
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Age</label>
-            <input
-              type="number"
-              min={0}
-              max={150}
-              value={form.age}
-              onChange={(e) => setForm((f) => ({ ...f, age: e.target.value }))}
-              placeholder="Age in years"
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">Address</label>
-            <input
-              type="text"
-              value={form.address}
-              onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-              placeholder="Street, City"
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-medium">State</label>
-            <input
-              type="text"
-              value={form.state}
-              onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
-              placeholder="State"
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
-          </div>
-          <div className="flex justify-end gap-3 pt-2">
+
+          {/* Sticky footer */}
+          <div className="shrink-0 flex justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/60">
             <button
               type="button"
               onClick={handleClose}
-              className="px-4 py-2 border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+              className="px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSaving}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-60"
+              className="px-5 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/90 transition-colors disabled:opacity-60 min-w-[130px]"
             >
               {isSaving ? "Saving..." : editingPatient ? "Update Patient" : "Register Patient"}
             </button>

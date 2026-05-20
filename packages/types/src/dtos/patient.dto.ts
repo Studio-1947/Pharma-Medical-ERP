@@ -4,13 +4,14 @@ export const createPatientSchema = z.object({
   name: z.string().min(1).max(255),
   phone: z.string().min(7).max(20),
   email: z.string().email().optional(),
-  dateOfBirth: z.string().datetime().optional(),
+  dateOfBirth: z.coerce.date().optional(),
   gender: z.enum(["male", "female", "other"]).optional(),
   address: z.string().optional(),
+  state: z.string().max(100).optional(),
   allergies: z.array(z.string()).optional(),
   bloodGroup: z.enum(["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]).optional(),
   insuranceId: z.string().max(100).optional(),
-  insuranceExpiry: z.string().datetime().optional(),
+  insuranceExpiry: z.coerce.date().optional(),
   notes: z.string().optional(),
 });
 

@@ -74,12 +74,12 @@ export class BatchRepository {
     });
   }
 
-  async createBatch(data: CreateBatchDto) {
+  async createBatch(data: CreateBatchDto & { resolvedLocationId?: string }) {
     const [batch] = await this.db
       .insert(schema.inventoryBatches)
       .values({
         medicineId: data.medicineId,
-        locationId: data.locationId,
+        locationId: data.resolvedLocationId ?? data.locationId,
         batchNo: data.batchNo,
         expiryDate: data.expiryDate,
         quantity: data.quantity,
@@ -90,6 +90,46 @@ export class BatchRepository {
       })
       .returning();
     return batch!;
+  }
+
+  /**
+   * Returns the first storage location for a branch, creating a default
+   * warehouse + location if none exists. Ensures every directly-created batch
+   * has a locationId so selectBatchesForDispense can find it.
+   */
+  async findOrCreateDefaultLocationForBranch(branchId: string): Promise<string> {
+    // Find existing warehouse for branch
+    const [existingWarehouse] = await this.db
+      .select({ id: schema.warehouses.id })
+      .from(schema.warehouses)
+      .where(and(eq(schema.warehouses.branchId, branchId), eq(schema.warehouses.isActive, true)))
+      .limit(1);
+
+    let warehouseId: string;
+    if (existingWarehouse) {
+      warehouseId = existingWarehouse.id;
+    } else {
+      const [newWarehouse] = await this.db
+        .insert(schema.warehouses)
+        .values({ branchId, name: "Main Store", code: `WH-${branchId.slice(0, 8).toUpperCase()}`, isDefault: true })
+        .returning({ id: schema.warehouses.id });
+      warehouseId = newWarehouse!.id;
+    }
+
+    // Find existing storage location in warehouse
+    const [existingLocation] = await this.db
+      .select({ id: schema.storageLocations.id })
+      .from(schema.storageLocations)
+      .where(eq(schema.storageLocations.warehouseId, warehouseId))
+      .limit(1);
+
+    if (existingLocation) return existingLocation.id;
+
+    const [newLocation] = await this.db
+      .insert(schema.storageLocations)
+      .values({ warehouseId, label: "Default Shelf", aisle: "A", shelf: "1", bin: "1" })
+      .returning({ id: schema.storageLocations.id });
+    return newLocation!.id;
   }
 
   async updateBatchStatus(id: string, status: string) {

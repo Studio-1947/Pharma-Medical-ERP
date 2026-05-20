@@ -45,12 +45,13 @@ export class BillingService {
    * GST split, and split payments.
    */
   async create(dto: CreateInvoiceDto, staffId: string) {
+    if (!dto.branchId) throw new UnprocessableEntityException("branchId is required to create an invoice");
     return await this.drizzle.db.transaction(async (tx) => {
       // 0. Load branch and detect inter-state
       const [branch] = await tx
         .select({ code: schema.branches.code, state: schema.branches.state })
         .from(schema.branches)
-        .where(eq(schema.branches.id, dto.branchId));
+        .where(eq(schema.branches.id, dto.branchId!));
 
       if (!branch) throw new NotFoundException(`Branch ${dto.branchId} not found`);
 
@@ -161,9 +162,9 @@ export class BillingService {
       for (const item of dto.items) {
         const med = medicines.find(m => m.id === item.medicineId)!;
         const batchAllocations = await this.batchRepo.selectBatchesForDispense(
-          item.medicineId, 
-          dto.branchId, 
-          item.quantity, 
+          item.medicineId,
+          dto.branchId!,
+          item.quantity,
           tx
         );
         for (const alloc of batchAllocations) {
@@ -292,13 +293,13 @@ export class BillingService {
       }
 
       // 5. Insert Invoice, Items, and Payments
-      const invoiceNo = await this.repo.nextInvoiceNumber(dto.branchId, branch.code);
-      
+      const invoiceNo = await this.repo.nextInvoiceNumber(dto.branchId!, branch.code);
+
       const invoiceData: typeof schema.salesInvoices.$inferInsert = {
         invoiceNo,
         patientId: dto.patientId,
         staffId,
-        branchId: dto.branchId,
+        branchId: dto.branchId!,
         prescriptionId: dto.prescriptionId,
         subtotal: subtotal.toFixed(2),
         discountAmount: discountAmount.toFixed(2),

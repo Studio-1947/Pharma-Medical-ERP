@@ -3,6 +3,7 @@ import { z } from "zod";
 export const createBatchSchema = z.object({
   medicineId: z.string().uuid(),
   locationId: z.string().uuid().optional(),
+  branchId: z.string().uuid().optional(),
   batchNo: z.string().min(1).max(100),
   expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD"),
   quantity: z.number().int().min(1),

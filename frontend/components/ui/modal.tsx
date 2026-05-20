@@ -75,7 +75,7 @@ export function Modal({ title, subtitle, open, onClose, children, size = "lg", i
         </div>
 
         {/* Content */}
-        <div className="overflow-y-auto flex-1">{children}</div>
+        <div className="flex flex-col flex-1 min-h-0">{children}</div>
       </div>
     </div>
   );

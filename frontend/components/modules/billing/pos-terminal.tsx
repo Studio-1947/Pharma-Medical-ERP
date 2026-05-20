@@ -7,6 +7,7 @@ import { useCartStore } from "@/stores/cart.store";
 import { PaymentModal } from "./payment-modal";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
+import { useBranchStore } from "@/stores/branch.store";
 import { queueOfflineInvoice, syncOfflineQueue } from "@/lib/pos-db";
 
 const CONTROLLED_CLASSES = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"];
@@ -20,14 +21,21 @@ export function PosTerminal() {
   const [patientSearch, setPatientSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
+  // Rehydrate the persisted cart from localStorage on first client render.
+  // This prevents the SSR/client mismatch (server sees empty cart, client sees saved items).
+  useEffect(() => {
+    useCartStore.persist.rehydrate();
+  }, []);
+
   const {
     items, addItem, updateQty, removeItem, clear, totals,
-    patientId, branchId,
+    patientId,
     prescriptionId, setPrescriptionId,
     loyaltyPointsToRedeem, setLoyaltyPointsToRedeem,
     setPatient, hasControlledItems,
   } = useCartStore();
   const { user } = useAuthStore();
+  const { activeBranch } = useBranchStore();
   const { subtotal, tax, discount, total } = totals();
 
   const needsRx = hasControlledItems();
@@ -139,9 +147,6 @@ export function PosTerminal() {
   });
 
   const handlePayConfirm = async (mode: string, splits?: { mode: string; amount: number; ref?: string }[]) => {
-    const resolvedBranchId = branchId || user?.branchId;
-    if (!resolvedBranchId) { alert("No branch selected. Please log in again."); return; }
-
     if (needsRx && !prescriptionId?.trim()) {
       alert("This sale includes Schedule H/controlled medicines. Please enter a verified Prescription ID before checkout.");
       return;
@@ -151,8 +156,13 @@ export function PosTerminal() {
       ? splits.map((s) => ({ mode: s.mode, amount: String(s.amount.toFixed(2)), ...(s.ref ? { referenceNo: s.ref } : {}) }))
       : [{ mode, amount: String(finalTotal.toFixed(2)) }];
 
+    // branchId is optional in the body — backend controller injects it from the
+    // JWT claim for branch users. Only include it when the frontend has one
+    // explicitly (e.g. super-admin with an active branch selected in topbar).
+    const explicitBranchId = user?.branchId ?? activeBranch?.id;
+
     const payload = {
-      branchId: resolvedBranchId,
+      ...(explicitBranchId ? { branchId: explicitBranchId } : {}),
       patientId: patientId || undefined,
       prescriptionId: prescriptionId?.trim() || undefined,
       loyaltyPointsToRedeem,

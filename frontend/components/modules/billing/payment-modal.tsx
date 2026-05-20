@@ -1,9 +1,19 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Modal } from "@/components/ui/modal";
+import { X, Banknote, Smartphone, CreditCard, Shield, FileText, Layers, Plus, Trash2 } from "lucide-react";
+
+const MODE_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
+  cash:      { label: "Cash",      icon: <Banknote size={16} />,    color: "emerald" },
+  upi:       { label: "UPI",       icon: <Smartphone size={16} />,  color: "violet" },
+  card:      { label: "Card",      icon: <CreditCard size={16} />,  color: "blue" },
+  insurance: { label: "Insurance", icon: <Shield size={16} />,      color: "amber" },
+  credit:    { label: "Credit",    icon: <FileText size={16} />,    color: "rose" },
+  mixed:     { label: "Mixed",     icon: <Layers size={16} />,      color: "slate" },
+};
 
 const MODES = ["cash", "upi", "card", "insurance", "credit"] as const;
+const QUICK_AMOUNTS = [20, 50, 100, 200, 500, 1000];
 
 interface Props {
   open: boolean;
@@ -31,162 +41,237 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading }: Props
   }, [open, total]);
 
   const isMulti = mode === "mixed";
-
   const addSplit = () => setSplits((s) => [...s, { mode: "cash", amount: "", ref: "" }]);
+  const removeSplit = (i: number) => setSplits((s) => s.filter((_, idx) => idx !== i));
   const updateSplit = (i: number, field: string, val: string) =>
     setSplits((s) => s.map((r, idx) => (idx === i ? { ...r, [field]: val } : r)));
 
   const totalAllocated = splits.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
-
-  // Change due for Cash Mode only
   const changeDue = Math.max(0, (parseFloat(cashTendered) || 0) - total);
+  const splitGap = total - totalAllocated;
+
+  const handleModeSwitch = (m: string) => {
+    setMode(m);
+    setError("");
+    if (m === "mixed") {
+      setSplits([
+        { mode: "cash", amount: String((total / 2).toFixed(2)), ref: "" },
+        { mode: "upi",  amount: String((total / 2).toFixed(2)), ref: "" },
+      ]);
+    } else {
+      setSplits([{ mode: m, amount: String(total.toFixed(2)), ref: "" }]);
+      setCashTendered(String(total.toFixed(2)));
+    }
+  };
 
   const handleConfirm = () => {
     setError("");
-    const parsed = splits.map((s) => ({
-      mode: s.mode,
-      amount: parseFloat(s.amount) || 0,
-      ref: s.ref,
-    }));
-
     if (isMulti) {
-      // Validate that total sum equals exactly the total invoice amount
       if (Math.abs(totalAllocated - total) > 0.01) {
-        setError(`Total split amounts (₹${totalAllocated.toFixed(2)}) must exactly equal invoice total (₹${total.toFixed(2)}).`);
+        setError(`Split total ₹${totalAllocated.toFixed(2)} must equal ₹${total.toFixed(2)}.`);
         return;
       }
-      onConfirm("mixed", parsed);
+      onConfirm("mixed", splits.map((s) => ({ mode: s.mode, amount: parseFloat(s.amount) || 0, ref: s.ref })));
     } else {
       onConfirm(mode, [{ mode, amount: total, ref: splits[0]?.ref }]);
     }
   };
 
+  if (!open) return null;
+
   return (
-    <Modal title="Collect Payment" open={open} onClose={onClose} size="sm">
-      <div className="space-y-4">
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-600 text-xs px-3 py-2 rounded-lg font-medium">
-            {error}
-          </div>
-        )}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
 
-        <div className="text-center">
-          <p className="text-sm text-muted-foreground">Amount Due</p>
-          <p className="text-3xl font-bold text-primary">₹{total.toFixed(2)}</p>
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b">
+          <h2 className="text-lg font-bold text-gray-900">Collect Payment</h2>
+          <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
+            <X size={18} />
+          </button>
         </div>
 
-        <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-2">Payment Mode</label>
-          <div className="flex flex-wrap gap-2">
-            {[...MODES, "mixed"].map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => {
-                  setMode(m);
-                  setError("");
-                  if (m === "mixed") {
-                    setSplits([
-                      { mode: "cash", amount: String((total / 2).toFixed(2)), ref: "" },
-                      { mode: "upi", amount: String((total / 2).toFixed(2)), ref: "" },
-                    ]);
-                  } else {
-                    setSplits([{ mode: m, amount: String(total.toFixed(2)), ref: "" }]);
-                  }
-                }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize border transition duration-200 ${
-                  mode === m ? "bg-primary text-primary-foreground border-primary" : "border-border hover:bg-muted"
-                }`}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
-        </div>
+        <div className="px-6 py-5 space-y-5">
 
-        {isMulti ? (
-          <div className="space-y-2 border p-3 rounded-lg bg-muted/20">
-            <p className="text-xs font-semibold text-gray-600 mb-1">Split Breakdown</p>
-            {splits.map((s, i) => (
-              <div key={i} className="flex gap-2 items-center">
-                <select
-                  value={s.mode}
-                  onChange={(e) => updateSplit(i, "mode", e.target.value)}
-                  className="border rounded-lg px-2 py-1.5 text-xs flex-1 bg-background"
-                >
-                  {MODES.map((m) => (
-                    <option key={m} value={m}>
-                      {m.toUpperCase()}
-                    </option>
-                  ))}
-                </select>
-                <input
-                  value={s.amount}
-                  onChange={(e) => updateSplit(i, "amount", e.target.value)}
-                  placeholder="Amount"
-                  type="number"
-                  step="0.01"
-                  className="border rounded-lg px-2 py-1.5 text-xs w-24 bg-background focus:outline-none"
-                />
-                <input
-                  value={s.ref}
-                  onChange={(e) => updateSplit(i, "ref", e.target.value)}
-                  placeholder="Ref (Opt)"
-                  className="border rounded-lg px-2 py-1.5 text-xs flex-1 bg-background focus:outline-none"
-                />
-              </div>
-            ))}
-            <div className="flex justify-between items-center text-xs font-medium pt-1">
-              <button
-                type="button"
-                onClick={addSplit}
-                className="text-primary hover:underline font-semibold"
-              >
-                + Add split
-              </button>
-              <span className={totalAllocated === total ? "text-green-600" : "text-amber-600"}>
-                Sum: ₹{totalAllocated.toFixed(2)}
-              </span>
+          {/* Amount due */}
+          <div className="bg-slate-50 rounded-xl px-5 py-4 text-center border border-slate-200">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">Amount Due</p>
+            <p className="text-4xl font-black text-slate-900">₹{total.toFixed(2)}</p>
+          </div>
+
+          {/* Error */}
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-600 text-xs px-3 py-2 rounded-lg font-medium">
+              {error}
+            </div>
+          )}
+
+          {/* Payment mode grid */}
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2.5">Payment Mode</p>
+            <div className="grid grid-cols-3 gap-2">
+              {([...MODES, "mixed"] as string[]).map((m) => {
+                const meta = MODE_META[m]!;
+                const active = mode === m;
+                return (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => handleModeSwitch(m)}
+                    className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 text-xs font-semibold transition-all duration-150 ${
+                      active
+                        ? "border-slate-800 bg-slate-800 text-white shadow-md shadow-slate-800/30"
+                        : "border-gray-200 bg-gray-50 text-gray-600 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-800"
+                    }`}
+                  >
+                    {meta.icon}
+                    {meta.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
-        ) : mode === "cash" ? (
-          <div className="bg-muted/30 p-3 rounded-lg space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-medium">Cash Received</label>
+
+          {/* Mode-specific section */}
+          {isMulti ? (
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Split Breakdown</p>
+              <div className="space-y-2 bg-gray-50 rounded-xl p-3 border">
+                {splits.map((s, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <select
+                      value={s.mode}
+                      onChange={(e) => updateSplit(i, "mode", e.target.value)}
+                      className="border rounded-lg px-2 py-2 text-xs flex-1 bg-white focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    >
+                      {MODES.map((m) => (
+                        <option key={m} value={m}>{MODE_META[m]!.label}</option>
+                      ))}
+                    </select>
+                    <div className="relative">
+                      <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium">₹</span>
+                      <input
+                        value={s.amount}
+                        onChange={(e) => updateSplit(i, "amount", e.target.value)}
+                        type="number"
+                        step="0.01"
+                        className="border rounded-lg pl-6 pr-2 py-2 text-xs w-24 bg-white focus:outline-none focus:ring-2 focus:ring-primary/40 text-right font-semibold"
+                      />
+                    </div>
+                    <input
+                      value={s.ref}
+                      onChange={(e) => updateSplit(i, "ref", e.target.value)}
+                      placeholder="Ref (opt)"
+                      className="border rounded-lg px-2 py-2 text-xs w-24 bg-white focus:outline-none focus:ring-2 focus:ring-primary/40"
+                    />
+                    {splits.length > 1 && (
+                      <button type="button" onClick={() => removeSplit(i)} className="text-red-400 hover:text-red-600 shrink-0">
+                        <Trash2 size={13} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <div className="flex items-center justify-between pt-1 border-t">
+                  <button type="button" onClick={addSplit} className="flex items-center gap-1 text-xs text-primary font-semibold hover:underline">
+                    <Plus size={12} /> Add split
+                  </button>
+                  <div className="text-xs font-semibold">
+                    {Math.abs(splitGap) < 0.01 ? (
+                      <span className="text-green-600">Balanced</span>
+                    ) : splitGap > 0 ? (
+                      <span className="text-amber-600">₹{splitGap.toFixed(2)} remaining</span>
+                    ) : (
+                      <span className="text-red-600">₹{Math.abs(splitGap).toFixed(2)} over</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          ) : mode === "cash" ? (
+            <div className="space-y-3">
+              {/* Quick amount buttons */}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Quick Amount</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {QUICK_AMOUNTS.filter((a) => a >= total).slice(0, 3).concat(
+                    QUICK_AMOUNTS.filter((a) => a < total).slice(-3)
+                  ).slice(0, 6).map((amt) => (
+                    <button key={amt} type="button"
+                      onClick={() => setCashTendered(String(amt.toFixed(2)))}
+                      className={`py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                        parseFloat(cashTendered) === amt
+                          ? "bg-emerald-500 text-white border-emerald-500"
+                          : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700"
+                      }`}
+                    >
+                      ₹{amt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Cash received + change */}
+              <div className="bg-gray-50 rounded-xl p-4 border space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">Cash Received</span>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">₹</span>
+                    <input
+                      value={cashTendered}
+                      onChange={(e) => setCashTendered(e.target.value)}
+                      type="number"
+                      step="0.01"
+                      className="border rounded-lg pl-7 pr-3 py-2 text-sm font-bold w-32 bg-white focus:outline-none focus:ring-2 focus:ring-primary/50 text-right"
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-between border-t pt-2.5">
+                  <span className="text-sm font-semibold text-gray-600">Change Due</span>
+                  <span className={`text-xl font-black ${changeDue > 0 ? "text-emerald-600" : "text-gray-400"}`}>
+                    ₹{changeDue.toFixed(2)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+          ) : (
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                {mode === "upi" ? "UPI Transaction ID" : mode === "card" ? "Card Auth / Last 4 Digits" : "Reference Number"}
+              </label>
               <input
-                value={cashTendered}
-                onChange={(e) => setCashTendered(e.target.value)}
-                placeholder="0.00"
-                type="number"
-                step="0.01"
-                className="border rounded-lg px-2.5 py-1 text-sm font-semibold w-32 bg-background focus:outline-none focus:ring-2 focus:ring-primary/50 text-right"
+                value={splits[0]?.ref ?? ""}
+                onChange={(e) => updateSplit(0, "ref", e.target.value)}
+                placeholder={
+                  mode === "upi" ? "e.g. UPI123456789" :
+                  mode === "card" ? "e.g. XXXX 4242" :
+                  "Optional reference"
+                }
+                className="w-full border rounded-xl px-4 py-3 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:bg-white transition-colors"
               />
             </div>
-            <div className="flex items-center justify-between text-xs font-semibold text-gray-700 pt-1 border-t">
-              <span>Change Due:</span>
-              <span className="text-base font-bold text-green-600">₹{changeDue.toFixed(2)}</span>
-            </div>
-          </div>
-        ) : (
-          <div>
-            <label className="block text-xs font-medium mb-1">Reference / Txn ID</label>
-            <input
-              value={splits[0]?.ref ?? ""}
-              onChange={(e) => updateSplit(0, "ref", e.target.value)}
-              placeholder="Optional (UPI ID, card auth code...)"
-              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
-          </div>
-        )}
+          )}
+        </div>
 
-        <button
-          onClick={handleConfirm}
-          disabled={loading}
-          className="w-full bg-green-600 text-white py-2.5 rounded-lg font-semibold text-sm hover:bg-green-700 disabled:opacity-60 transition duration-200 shadow-sm"
-        >
-          {loading ? "Processing..." : `Confirm Payment (₹${total.toFixed(2)})`}
-        </button>
+        {/* Footer */}
+        <div className="px-6 pb-6">
+          <button
+            onClick={handleConfirm}
+            disabled={loading}
+            className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3.5 rounded-xl font-bold text-base transition-all duration-150 shadow-lg shadow-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
+          >
+            {loading ? (
+              <span className="flex items-center justify-center gap-2">
+                <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                Processing...
+              </span>
+            ) : (
+              `Confirm Payment  ₹${total.toFixed(2)}`
+            )}
+          </button>
+        </div>
       </div>
-    </Modal>
+    </div>
   );
 }
