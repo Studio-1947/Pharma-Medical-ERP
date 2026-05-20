@@ -17,6 +17,9 @@ export function PosTerminal() {
   const [isOnline, setIsOnline] = useState(true);
   const [printOpen, setPrintOpen] = useState(false);
   const [lastInvoice, setLastInvoice] = useState<any>(null);
+  const [lastReceiptItems, setLastReceiptItems] = useState<any[]>([]);
+  const [lastReceiptPatient, setLastReceiptPatient] = useState<any>(null);
+  const [lastReceiptPayments, setLastReceiptPayments] = useState<any[]>([]);
   const [patientSearch, setPatientSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -139,6 +142,8 @@ export function PosTerminal() {
     onSuccess: (data: any) => {
       const invoice = data?.data?.invoice ?? data?.data ?? data;
       setLastInvoice(invoice);
+      setLastReceiptItems([...items]);
+      setLastReceiptPatient(selectedPatient ?? null);
       clear();
       setPayOpen(false);
       setPrintOpen(true);
@@ -154,6 +159,7 @@ export function PosTerminal() {
     const payments = splits?.length
       ? splits.map((s) => ({ mode: s.mode, amount: String(s.amount.toFixed(2)), ...(s.ref ? { referenceNo: s.ref } : {}) }))
       : [{ mode, amount: String(finalTotal.toFixed(2)) }];
+    setLastReceiptPayments(payments);
 
     const payload = {
       patientId: patientId || undefined,
@@ -461,33 +467,142 @@ export function PosTerminal() {
 
       {/* Invoice print preview */}
       {printOpen && lastInvoice && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-md w-full p-6 shadow-xl space-y-4 max-h-[85vh] overflow-y-auto">
-            <div className="text-center">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 print:bg-white print:p-0 print:items-start print:justify-start">
+          <div className="bg-white rounded-xl w-full max-w-xl shadow-2xl max-h-[90vh] flex flex-col print:max-h-none print:shadow-none print:rounded-none">
+
+            {/* Non-print header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b print:hidden">
               <span className="bg-green-100 text-green-700 font-semibold px-3 py-1 rounded-full text-xs">Invoice Completed!</span>
-              <h3 className="text-lg font-bold text-gray-900 mt-2">Print & Review</h3>
-            </div>
-            <hr />
-            <div className="space-y-1 text-xs text-gray-800">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Invoice No:</span>
-                <span className="font-bold">{lastInvoice.invoiceNo}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Date:</span>
-                <span>{new Date(lastInvoice.createdAt).toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between pt-1 font-bold border-t">
-                <span>Total Amount:</span>
-                <span>₹{parseFloat(lastInvoice.totalAmount).toFixed(2)}</span>
-              </div>
-            </div>
-            <div className="flex gap-2 pt-2">
-              <button onClick={() => { setPrintOpen(false); setLastInvoice(null); }} className="flex-1 py-2 border rounded-lg text-xs font-semibold hover:bg-muted transition">
-                Dismiss
+              <button onClick={() => { setPrintOpen(false); setLastInvoice(null); }} className="w-7 h-7 rounded-full flex items-center justify-center hover:bg-gray-100 text-gray-400">
+                <X size={15} />
               </button>
-              <button onClick={() => window.print()} className="flex-1 py-2 bg-primary text-primary-foreground rounded-lg text-xs font-bold hover:bg-primary/90 transition inline-flex items-center justify-center gap-1.5">
-                <Printer size={12} /> Print (Ctrl+P)
+            </div>
+
+            {/* Scrollable receipt body */}
+            <div id="invoice-print-area" className="overflow-y-auto flex-1 px-6 py-5 space-y-4 print:overflow-visible print:p-6">
+
+              {/* Store header */}
+              <div className="text-center space-y-0.5">
+                <h2 className="text-lg font-black tracking-tight text-gray-900 uppercase">MedERP Pharmacy</h2>
+                <p className="text-xs text-gray-500">Tax Invoice / Bill of Supply</p>
+              </div>
+
+              <hr className="border-dashed" />
+
+              {/* Invoice meta */}
+              <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                <div>
+                  <span className="text-gray-500">Invoice No</span>
+                  <p className="font-bold text-gray-900 font-mono">{lastInvoice.invoiceNo}</p>
+                </div>
+                <div className="text-right">
+                  <span className="text-gray-500">Date & Time</span>
+                  <p className="font-semibold text-gray-900">{new Date(lastInvoice.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</p>
+                </div>
+                {lastReceiptPatient && (
+                  <>
+                    <div>
+                      <span className="text-gray-500">Patient</span>
+                      <p className="font-semibold text-gray-900">{lastReceiptPatient.name}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-gray-500">Phone</span>
+                      <p className="font-semibold text-gray-900">{lastReceiptPatient.phone}</p>
+                    </div>
+                  </>
+                )}
+                {!lastReceiptPatient && (
+                  <div className="col-span-2">
+                    <span className="text-gray-500">Patient</span>
+                    <p className="font-semibold text-gray-400 italic">Walk-in Customer</p>
+                  </div>
+                )}
+              </div>
+
+              <hr className="border-dashed" />
+
+              {/* Items table */}
+              <div>
+                <div className="grid grid-cols-12 text-[10px] font-bold uppercase text-gray-500 pb-1 border-b gap-1">
+                  <span className="col-span-5">Medicine</span>
+                  <span className="col-span-1 text-center">Qty</span>
+                  <span className="col-span-2 text-right">MRP</span>
+                  <span className="col-span-2 text-right">Disc</span>
+                  <span className="col-span-2 text-right">Amount</span>
+                </div>
+                <div className="divide-y divide-dashed">
+                  {lastReceiptItems.map((item, idx) => (
+                    <div key={idx} className="grid grid-cols-12 text-xs py-1.5 gap-1 items-start">
+                      <div className="col-span-5">
+                        <p className="font-semibold text-gray-900 leading-tight">{item.name}</p>
+                        <p className="text-[10px] text-gray-400 font-mono">{item.batchNo}</p>
+                      </div>
+                      <span className="col-span-1 text-center font-medium text-gray-700">{item.quantity}</span>
+                      <span className="col-span-2 text-right text-gray-700">₹{item.unitPrice.toFixed(2)}</span>
+                      <span className="col-span-2 text-right text-gray-500">{item.discountPct > 0 ? `${item.discountPct}%` : "—"}</span>
+                      <span className="col-span-2 text-right font-semibold text-gray-900">₹{item.lineTotal.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <hr className="border-dashed" />
+
+              {/* Totals */}
+              <div className="space-y-1 text-xs">
+                <div className="flex justify-between text-gray-600">
+                  <span>Subtotal</span>
+                  <span>₹{parseFloat(lastInvoice.subtotal ?? "0").toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-gray-600">
+                  <span>Tax (GST)</span>
+                  <span>₹{parseFloat(lastInvoice.taxAmount ?? "0").toFixed(2)}</span>
+                </div>
+                {parseFloat(lastInvoice.discountAmount ?? "0") > 0 && (
+                  <div className="flex justify-between text-green-700">
+                    <span>Discount</span>
+                    <span>−₹{parseFloat(lastInvoice.discountAmount).toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-black text-base pt-2 border-t border-gray-300 text-gray-900">
+                  <span>TOTAL</span>
+                  <span>₹{parseFloat(lastInvoice.totalAmount).toFixed(2)}</span>
+                </div>
+              </div>
+
+              <hr className="border-dashed" />
+
+              {/* Payment */}
+              <div className="space-y-1 text-xs">
+                <p className="text-[10px] font-bold uppercase text-gray-500 tracking-wide">Payment</p>
+                {lastReceiptPayments.map((p, i) => (
+                  <div key={i} className="flex justify-between text-gray-700">
+                    <span className="capitalize font-medium">{p.mode}{p.referenceNo ? ` — ${p.referenceNo}` : ""}</span>
+                    <span>₹{parseFloat(p.amount).toFixed(2)}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Footer */}
+              <div className="text-center pt-2">
+                <p className="text-[10px] text-gray-400">Thank you for choosing MedERP Pharmacy</p>
+                <p className="text-[10px] text-gray-300 mt-0.5">Goods once sold will not be taken back without valid reason</p>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex gap-2 px-6 pb-5 pt-3 border-t print:hidden">
+              <button
+                onClick={() => { setPrintOpen(false); setLastInvoice(null); }}
+                className="flex-1 py-2.5 border rounded-lg text-sm font-semibold hover:bg-gray-50 transition"
+              >
+                New Sale
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="flex-1 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-bold hover:bg-gray-800 transition inline-flex items-center justify-center gap-2"
+              >
+                <Printer size={14} /> Print (Ctrl+P)
               </button>
             </div>
           </div>
