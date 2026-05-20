@@ -57,6 +57,13 @@
       "when": 1779184109469,
       "tag": "0007_slow_living_mummy",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779279281231,
+      "tag": "0008_goofy_senator_kelly",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "sales_invoices" ALTER COLUMN "branch_id" DROP NOT NULL;

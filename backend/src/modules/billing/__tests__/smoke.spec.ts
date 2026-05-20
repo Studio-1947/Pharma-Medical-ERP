@@ -38,34 +38,32 @@ describe("TaxService smoke", () => {
   });
 });
 
-// ─── Invoice query DTO — branchId field present (REGRESSION BUG-01) ──────────
+// ─── Invoice query DTO — pagination defaults (REGRESSION BUG-01) ─────────────
 
-describe("queryInvoiceSchema — branchId filter (REGRESSION BUG-01)", () => {
-  it("should accept branchId as valid UUID", async () => {
+describe("queryInvoiceSchema — pagination defaults (REGRESSION BUG-01)", () => {
+  it("should apply default page=1 and limit=20 when not provided", async () => {
     const { queryInvoiceSchema } = await import("@pharmerp/types");
-    const result = queryInvoiceSchema.safeParse({
-      branchId: "123e4567-e89b-12d3-a456-426614174000",
-      page: "1",
-      limit: "20",
-    });
+    const result = queryInvoiceSchema.safeParse({});
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.branchId).toBe("123e4567-e89b-12d3-a456-426614174000");
+      expect(result.data.page).toBe(1);
+      expect(result.data.limit).toBe(20);
     }
   });
 
-  it("should default branchId to undefined when not provided", async () => {
+  it("should coerce string page/limit to numbers", async () => {
     const { queryInvoiceSchema } = await import("@pharmerp/types");
-    const result = queryInvoiceSchema.safeParse({ page: "1", limit: "10" });
+    const result = queryInvoiceSchema.safeParse({ page: "2", limit: "50" });
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.branchId).toBeUndefined();
+      expect(result.data.page).toBe(2);
+      expect(result.data.limit).toBe(50);
     }
   });
 
-  it("should reject an invalid UUID for branchId", async () => {
+  it("should reject limit above 100", async () => {
     const { queryInvoiceSchema } = await import("@pharmerp/types");
-    const result = queryInvoiceSchema.safeParse({ branchId: "not-a-uuid" });
+    const result = queryInvoiceSchema.safeParse({ limit: "200" });
     expect(result.success).toBe(false);
   });
 });
@@ -100,7 +98,6 @@ describe("createInvoiceSchema — payment mode validation", () => {
   it("should accept valid payment modes", async () => {
     const { createInvoiceSchema } = await import("@pharmerp/types");
     const base = {
-      branchId: "123e4567-e89b-12d3-a456-426614174000",
       items: [{ medicineId: "123e4567-e89b-12d3-a456-426614174001", quantity: 1 }],
     };
     for (const mode of ["cash", "card", "upi", "insurance", "credit", "mixed"] as const) {
@@ -115,7 +112,6 @@ describe("createInvoiceSchema — payment mode validation", () => {
   it("should reject unknown payment mode", async () => {
     const { createInvoiceSchema } = await import("@pharmerp/types");
     const result = createInvoiceSchema.safeParse({
-      branchId: "123e4567-e89b-12d3-a456-426614174000",
       items: [{ medicineId: "123e4567-e89b-12d3-a456-426614174001", quantity: 1 }],
       payments: [{ mode: "bitcoin", amount: "100" }],
     });

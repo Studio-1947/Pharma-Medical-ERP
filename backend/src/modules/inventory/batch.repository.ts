@@ -1,5 +1,5 @@
 import { Injectable, UnprocessableEntityException } from "@nestjs/common";
-import { and, asc, desc, eq, gt, gte, isNotNull, isNull, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, isNull, lt, lte, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 import type {
@@ -223,13 +223,11 @@ export class BatchRepository {
 
   /**
    * FEFO batch selector. Call INSIDE a Drizzle transaction (pass tx).
-   * Filters to branchId via: inventoryBatches.locationId -> storageLocations.warehouseId -> warehouses.branchId
-   * Skips: expired (expiryDate <= today), non-active, zero-qty, null locationId.
+   * Skips: expired (expiryDate <= today), non-active, zero-qty.
    * Throws UnprocessableEntityException if available < needed.
    */
   async selectBatchesForDispense(
     medicineId: string,
-    branchId: string,
     needed: number,
     tx?: any,
   ): Promise<Array<{ batchId: string; batchNo: string; expiryDate: string; allocate: number; mrpAtEntry: string }>> {
@@ -245,22 +243,12 @@ export class BatchRepository {
         mrpAtEntry: schema.inventoryBatches.mrpAtEntry,
       })
       .from(schema.inventoryBatches)
-      .innerJoin(
-        schema.storageLocations,
-        eq(schema.inventoryBatches.locationId, schema.storageLocations.id),
-      )
-      .innerJoin(
-        schema.warehouses,
-        eq(schema.storageLocations.warehouseId, schema.warehouses.id),
-      )
       .where(
         and(
           eq(schema.inventoryBatches.medicineId, medicineId),
-          eq(schema.warehouses.branchId, branchId),
           eq(schema.inventoryBatches.status, "active"),
           gt(schema.inventoryBatches.quantity, 0),
           gt(schema.inventoryBatches.expiryDate, today),
-          isNotNull(schema.inventoryBatches.locationId),
         ),
       )
       .orderBy(asc(schema.inventoryBatches.expiryDate));

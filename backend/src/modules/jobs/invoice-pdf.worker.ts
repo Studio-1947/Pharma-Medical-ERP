@@ -60,11 +60,10 @@ export class InvoicePdfWorker {
       return;
     }
 
-    // Load branch
-    const [branch] = await db
-      .select()
-      .from(schema.branches)
-      .where(eq(schema.branches.id, invoice.branchId));
+    // Load branch if set (branchId is optional)
+    const [branch] = invoice.branchId
+      ? await db.select().from(schema.branches).where(eq(schema.branches.id, invoice.branchId))
+      : [];
 
     try {
       const pdfBuffer = await this.buildPdf(invoice, branch ?? null);

@@ -64,7 +64,7 @@ export const salesInvoices = pgTable(
     staffId: uuid("staff_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    branchId: uuid("branch_id").notNull(),
+    branchId: uuid("branch_id"),
     prescriptionId: uuid("prescription_id"),
     subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull(),
     discountAmount: numeric("discount_amount", { precision: 12, scale: 2 })

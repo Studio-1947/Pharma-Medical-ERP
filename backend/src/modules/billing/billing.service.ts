@@ -45,29 +45,8 @@ export class BillingService {
    * GST split, and split payments.
    */
   async create(dto: CreateInvoiceDto, staffId: string) {
-    if (!dto.branchId) throw new UnprocessableEntityException("branchId is required to create an invoice");
     return await this.drizzle.db.transaction(async (tx) => {
-      // 0. Load branch and detect inter-state
-      const [branch] = await tx
-        .select({ code: schema.branches.code, state: schema.branches.state })
-        .from(schema.branches)
-        .where(eq(schema.branches.id, dto.branchId!));
-
-      if (!branch) throw new NotFoundException(`Branch ${dto.branchId} not found`);
-
-      let interState = false;
-      if (dto.patientId) {
-        const [patient] = await tx
-          .select({ state: schema.patients.state })
-          .from(schema.patients)
-          .where(eq(schema.patients.id, dto.patientId));
-        
-        // If patient state and branch state are both provided and different, it's inter-state
-        // For West Bengal only deployment, this will usually be false
-        if (patient?.state && branch.state) {
-          interState = patient.state.trim().toLowerCase() !== branch.state.trim().toLowerCase();
-        }
-      }
+      const interState = false;
 
       // 1. Load all medicines and check Schedule H gate
       const medicineIds = dto.items.map(i => i.medicineId);
@@ -163,7 +142,6 @@ export class BillingService {
         const med = medicines.find(m => m.id === item.medicineId)!;
         const batchAllocations = await this.batchRepo.selectBatchesForDispense(
           item.medicineId,
-          dto.branchId!,
           item.quantity,
           tx
         );
@@ -293,13 +271,12 @@ export class BillingService {
       }
 
       // 5. Insert Invoice, Items, and Payments
-      const invoiceNo = await this.repo.nextInvoiceNumber(dto.branchId!, branch.code);
+      const invoiceNo = await this.repo.nextInvoiceNumber();
 
       const invoiceData: typeof schema.salesInvoices.$inferInsert = {
         invoiceNo,
         patientId: dto.patientId,
         staffId,
-        branchId: dto.branchId!,
         prescriptionId: dto.prescriptionId,
         subtotal: subtotal.toFixed(2),
         discountAmount: discountAmount.toFixed(2),
@@ -450,14 +427,7 @@ export class BillingService {
 
     const returnTotal = returnLineData.reduce((sum, l) => sum + l.lineTotal, 0);
 
-    // Get branch code for invoice number
-    const [branch] = await this.drizzle.db
-      .select({ code: schema.branches.code })
-      .from(schema.branches)
-      .where(eq(schema.branches.id, original.branchId));
-    if (!branch) throw new NotFoundException(`Branch not found`);
-
-    const returnInvoiceNo = await this.repo.nextInvoiceNumber(original.branchId, branch.code);
+    const returnInvoiceNo = await this.repo.nextInvoiceNumber();
 
     // Determine refund payment mode from original invoice
     const refundMode = original.payments?.[0]?.mode ?? "cash";
@@ -490,7 +460,6 @@ export class BillingService {
         invoiceNo: returnInvoiceNo,
         patientId: original.patientId,
         staffId,
-        branchId: original.branchId,
         prescriptionId: original.prescriptionId,
         subtotal: returnTotal.toFixed(2),
         discountAmount: "0.00",

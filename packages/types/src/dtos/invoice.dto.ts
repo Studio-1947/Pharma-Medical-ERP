@@ -18,7 +18,6 @@ export const paymentEntrySchema = z.object({
 export const createInvoiceSchema = z.object({
   patientId: z.string().uuid().optional(),
   prescriptionId: z.string().uuid().optional(),
-  branchId: z.string().uuid().optional(),
   discountAmount: z.string().regex(/^\d+(\.\d{1,2})?$/).default("0"),
   loyaltyPointsToRedeem: z.number().int().min(0).default(0),
   notes: z.string().optional(),
@@ -40,7 +39,6 @@ export const returnInvoiceSchema = z.object({
 });
 
 export const queryInvoiceSchema = z.object({
-  branchId: z.string().uuid().optional(),
   patientId: z.string().uuid().optional(),
   staffId: z.string().uuid().optional(),
   status: z.string().optional(),

@@ -16,15 +16,14 @@ export class BillingRepository {
     return this.drizzle.db;
   }
 
-  async nextInvoiceNumber(branchId: string, branchCode: string): Promise<string> {
+  async nextInvoiceNumber(): Promise<string> {
     const today = new Date().toISOString().split("T")[0]!; // YYYY-MM-DD
-    const key = `invoice_seq:${branchId}:${today}`;
+    const key = `invoice_seq:${today}`;
     const seq = await this.redis.incr(key);
     if (seq === 1) {
-      // Set TTL on first use of this day's key. 48hr covers midnight race conditions.
       await this.redis.expire(key, 86400 * 2);
     }
-    return `${branchCode.toUpperCase()}-${today.replace(/-/g, "")}-${String(seq).padStart(4, "0")}`;
+    return `INV-${today.replace(/-/g, "")}-${String(seq).padStart(4, "0")}`;
   }
 
   async createInvoiceWithItems(
@@ -42,7 +41,6 @@ export class BillingRepository {
 
   async findPaginated(params: QueryInvoiceDto) {
     const conditions: any[] = [];
-    if (params.branchId) conditions.push(eq(schema.salesInvoices.branchId, params.branchId));
     if (params.patientId) conditions.push(eq(schema.salesInvoices.patientId, params.patientId));
     if (params.staffId) conditions.push(eq(schema.salesInvoices.staffId, params.staffId));
     if (params.status) conditions.push(eq(schema.salesInvoices.status, params.status as any));
