@@ -5,6 +5,7 @@ import { useState, useEffect, useRef } from "react";
 import { ToastProvider } from "@/components/ui/toast";
 import { bootstrapSession } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
+import { NavigationProgress } from "@/components/shared/navigation-progress";
 
 function SessionBootstrap({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, logout } = useAuthStore();
@@ -43,6 +44,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
+        <NavigationProgress />
         <SessionBootstrap>{children}</SessionBootstrap>
       </ToastProvider>
     </QueryClientProvider>
