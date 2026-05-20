@@ -42,6 +42,7 @@ export class BillingRepository {
 
   async findPaginated(params: QueryInvoiceDto) {
     const conditions: any[] = [];
+    if (params.branchId) conditions.push(eq(schema.salesInvoices.branchId, params.branchId));
     if (params.patientId) conditions.push(eq(schema.salesInvoices.patientId, params.patientId));
     if (params.staffId) conditions.push(eq(schema.salesInvoices.staffId, params.staffId));
     if (params.status) conditions.push(eq(schema.salesInvoices.status, params.status as any));

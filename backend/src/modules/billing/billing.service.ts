@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import Decimal from "decimal.js";
 import { DrizzleService } from "../../database/drizzle.service";
 import { InjectQueue } from "@nestjs/bull";
@@ -364,20 +364,27 @@ export class BillingService {
 
   async voidInvoice(id: string, dto: VoidInvoiceDto, userId: string) {
     const existing = await this.findOne(id);
-    if (existing.data.status === "cancelled") {
-      throw new UnprocessableEntityException("Invoice already voided");
-    }
-    // Return stock
+    // Return stock inside transaction — use a conditional status update as
+    // a mutex so that concurrent void calls cannot double-return stock.
     await this.drizzle.db.transaction(async (tx) => {
+      const [claimed] = await tx
+        .update(schema.salesInvoices)
+        .set({ status: "cancelled", updatedAt: new Date() })
+        .where(and(eq(schema.salesInvoices.id, id), ne(schema.salesInvoices.status, "cancelled")))
+        .returning({ id: schema.salesInvoices.id });
+
+      if (!claimed) {
+        throw new UnprocessableEntityException("Invoice already voided");
+      }
+
       for (const item of existing.data.items) {
-        const [deducted] = await tx
+        await tx
           .update(schema.inventoryBatches)
-          .set({ 
-            quantity: sql`${schema.inventoryBatches.quantity} + ${item.quantity}`, 
-            updatedAt: new Date() 
+          .set({
+            quantity: sql`${schema.inventoryBatches.quantity} + ${item.quantity}`,
+            updatedAt: new Date(),
           })
-          .where(eq(schema.inventoryBatches.id, item.batchId))
-          .returning({ id: schema.inventoryBatches.id });
+          .where(eq(schema.inventoryBatches.id, item.batchId));
 
         await this.movementRepo.log({
           batchId: item.batchId,
@@ -390,7 +397,6 @@ export class BillingService {
           notes: dto.reason,
         }, tx);
       }
-      await this.repo.voidInvoice(id);
     });
     return { message: "Invoice voided" };
   }

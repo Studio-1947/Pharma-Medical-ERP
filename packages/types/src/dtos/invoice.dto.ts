@@ -40,6 +40,7 @@ export const returnInvoiceSchema = z.object({
 });
 
 export const queryInvoiceSchema = z.object({
+  branchId: z.string().uuid().optional(),
   patientId: z.string().uuid().optional(),
   staffId: z.string().uuid().optional(),
   status: z.string().optional(),

@@ -27,9 +27,12 @@ export function LoginForm() {
     try {
       const res: any = await apiClient.post("/auth/login", data);
       setTokens(res.accessToken, res.refreshToken);
-      // Decode basic user info from token payload
-      const payload = JSON.parse(atob(res.accessToken.split(".")[1]));
-      setUser({ id: payload.sub, email: payload.email, role: payload.role, branchId: payload.branchId });
+      try {
+        const payload = JSON.parse(atob(res.accessToken.split(".")[1]!));
+        setUser({ id: payload.sub, email: payload.email, role: payload.role, branchId: payload.branchId });
+      } catch {
+        // Token decode failed — user info will load on next request
+      }
       router.push("/dashboard");
     } catch (err: any) {
       const errorData = err?.response?.data;

@@ -46,7 +46,7 @@ export async function queueOfflineInvoice(payload: object) {
 export async function syncOfflineQueue(
   submitFn: (payload: object) => Promise<void>,
 ) {
-  const pending = await posDb.offlineInvoices.where("synced").equals(0).toArray();
+  const pending = await posDb.offlineInvoices.filter((r) => !r.synced).toArray();
   for (const item of pending) {
     try {
       await submitFn(item.payload);

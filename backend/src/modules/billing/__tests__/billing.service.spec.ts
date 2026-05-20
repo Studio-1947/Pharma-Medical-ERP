@@ -224,4 +224,62 @@ describe("BillingService (Compliance)", () => {
       await expect(service.create(dto as any, "staff-1")).rejects.toThrow(UnprocessableEntityException);
     });
   });
+
+  describe("Void Invoice — race condition guard (BILL-11)", () => {
+    it("should throw if invoice is already voided (status = cancelled)", async () => {
+      mockRepo.findById.mockResolvedValue({
+        id: "inv-1",
+        status: "cancelled",
+        items: [],
+        payments: [],
+        branchId: "b1",
+      });
+
+      // findOne wraps findById
+      mockRepo.findById.mockResolvedValue({
+        id: "inv-1",
+        status: "cancelled",
+        items: [],
+      });
+
+      // Simulate the tx conditional update returning nothing (already cancelled)
+      const txMock = {
+        update: vi.fn().mockReturnThis(),
+        set: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        returning: vi.fn().mockResolvedValue([]),
+      };
+      mockDrizzle.db.transaction = vi.fn((cb) => cb(txMock));
+
+      await expect(
+        service.voidInvoice("inv-1", { reason: "test" }, "staff-1"),
+      ).rejects.toThrow(UnprocessableEntityException);
+    });
+
+    it("should not attempt double stock return on concurrent void", async () => {
+      const items = [{ batchId: "batch-1", medicineId: "med-1", quantity: 2 }];
+      mockRepo.findById.mockResolvedValue({
+        id: "inv-1",
+        status: "confirmed",
+        items,
+      });
+
+      let callCount = 0;
+      const txMock: any = {
+        update: vi.fn().mockReturnThis(),
+        set: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        returning: vi.fn().mockImplementation(() => {
+          callCount++;
+          // First call: status update claiming the void
+          if (callCount === 1) return Promise.resolve([{ id: "inv-1" }]);
+          return Promise.resolve([{ id: "batch-1" }]);
+        }),
+      };
+      mockDrizzle.db.transaction = vi.fn((cb) => cb(txMock));
+
+      await service.voidInvoice("inv-1", { reason: "error entry" }, "staff-1");
+      expect(mockMovementRepo.log).toHaveBeenCalledTimes(1);
+    });
+  });
 });

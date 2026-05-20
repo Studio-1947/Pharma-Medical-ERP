@@ -26,18 +26,6 @@ export function useCreateInvoice() {
   });
 }
 
-export function useFinalizeInvoice(id: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (data: unknown) =>
-      apiClient.post(`/billing/invoices/${id}/finalize`, data) as Promise<any>,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.invoices.all() });
-      qc.invalidateQueries({ queryKey: queryKeys.invoices.detail(id) });
-    },
-  });
-}
-
 export function useVoidInvoice() {
   const qc = useQueryClient();
   return useMutation({
@@ -51,7 +39,7 @@ export function useDailySummary(branchId?: string, date?: string) {
   return useQuery({
     queryKey: ["billing", "daily-summary", branchId, date],
     queryFn: () =>
-      apiClient.get("/billing/daily-summary", {
+      apiClient.get("/billing/reports/end-of-day", {
         params: { branchId, date },
       }) as Promise<any>,
     enabled: !!branchId,

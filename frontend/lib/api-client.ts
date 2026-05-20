@@ -9,12 +9,24 @@ export const apiClient = axios.create({
   headers: { "Content-Type": "application/json" },
 });
 
-// Attach access token from localStorage
+// Read token from the direct localStorage key, falling back to the Zustand
+// persist store so the two never drift apart after a page reload.
+function getStoredToken(key: "pharmerp_access_token" | "pharmerp_refresh_token"): string | null {
+  if (typeof window === "undefined") return null;
+  const direct = localStorage.getItem(key);
+  if (direct) return direct;
+  try {
+    const store = JSON.parse(localStorage.getItem("pharmerp-auth") ?? "{}");
+    const storeKey = key === "pharmerp_access_token" ? "accessToken" : "refreshToken";
+    return (store?.state?.[storeKey] as string | null | undefined) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+// Attach access token to every outgoing request
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
-  const token =
-    typeof window !== "undefined"
-      ? localStorage.getItem("pharmerp_access_token")
-      : null;
+  const token = getStoredToken("pharmerp_access_token");
   if (token) config.headers["Authorization"] = `Bearer ${token}`;
   return config;
 });
@@ -30,7 +42,23 @@ function processQueue(error: unknown, token: string | null) {
   failedQueue = [];
 }
 
-// Auto-refresh on 401
+function clearAuthAndRedirect() {
+  localStorage.removeItem("pharmerp_access_token");
+  localStorage.removeItem("pharmerp_refresh_token");
+  // Clear Zustand auth state so the store doesn't re-set the session cookie
+  try {
+    const raw = JSON.parse(localStorage.getItem("pharmerp-auth") ?? "{}");
+    if (raw?.state) {
+      raw.state.accessToken = null;
+      raw.state.refreshToken = null;
+      raw.state.isAuthenticated = false;
+      localStorage.setItem("pharmerp-auth", JSON.stringify(raw));
+    }
+  } catch {}
+  window.location.href = "/login";
+}
+
+// Auto-refresh access token on 401
 apiClient.interceptors.response.use(
   (res) => res.data,
   async (error: AxiosError) => {
@@ -54,7 +82,15 @@ apiClient.interceptors.response.use(
     isRefreshing = true;
 
     try {
-      const refreshToken = localStorage.getItem("pharmerp_refresh_token");
+      const refreshToken = getStoredToken("pharmerp_refresh_token");
+
+      if (!refreshToken) {
+        // No refresh token anywhere — session is unrecoverable
+        processQueue(new Error("No refresh token"), null);
+        clearAuthAndRedirect();
+        return Promise.reject(new Error("No refresh token"));
+      }
+
       const res: any = await axios.post(`${BASE_URL}/auth/refresh`, {
         refreshToken,
       });
@@ -66,15 +102,29 @@ apiClient.interceptors.response.use(
       return apiClient(original);
     } catch (err) {
       processQueue(err, null);
-      localStorage.removeItem("pharmerp_access_token");
-      localStorage.removeItem("pharmerp_refresh_token");
-      window.location.href = "/login";
+      clearAuthAndRedirect();
       return Promise.reject(err);
     } finally {
       isRefreshing = false;
     }
   },
 );
+
+// Exported so the session bootstrap can call a token refresh explicitly
+export async function bootstrapSession(): Promise<boolean> {
+  const refreshToken = getStoredToken("pharmerp_refresh_token");
+  if (!refreshToken) return false;
+  try {
+    const res: any = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken });
+    const { accessToken, refreshToken: newRefresh } = res.data;
+    localStorage.setItem("pharmerp_access_token", accessToken);
+    localStorage.setItem("pharmerp_refresh_token", newRefresh);
+    apiClient.defaults.headers["Authorization"] = `Bearer ${accessToken}`;
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export const queryKeys = {
   medicines: {
