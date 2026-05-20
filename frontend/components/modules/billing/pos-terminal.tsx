@@ -44,6 +44,134 @@ export function PosTerminal() {
   const loyaltyDiscount = loyaltyPointsToRedeem / 10;
   const finalTotal = Math.max(0, total - loyaltyDiscount);
 
+  const printReceipt = () => {
+    if (!lastInvoice) return;
+    const w = window.open("", "_blank", "width=794,height=1050");
+    if (!w) return;
+    const itemRows = lastReceiptItems.map((item, i) => `
+      <tr>
+        <td>
+          <div class="medicine-name">${i + 1}. ${item.name}</div>
+          <div class="batch-label">Batch: ${item.batchNo}</div>
+        </td>
+        <td class="text-center">${item.quantity}</td>
+        <td class="text-right">₹${item.unitPrice.toFixed(2)}</td>
+        <td class="text-right">${item.discountPct > 0 ? item.discountPct + "%" : "—"}</td>
+        <td class="text-right">${item.taxPct > 0 ? item.taxPct + "%" : "—"}</td>
+        <td class="text-right"><b>₹${item.lineTotal.toFixed(2)}</b></td>
+      </tr>`).join("");
+
+    const payRows = lastReceiptPayments.map(p => `
+      <tr>
+        <td><span class="badge">${p.mode}</span>${p.referenceNo ? `  <span style="color:#888;font-size:12px">Ref: ${p.referenceNo}</span>` : ""}</td>
+        <td class="text-right"><b>₹${parseFloat(p.amount).toFixed(2)}</b></td>
+      </tr>`).join("");
+
+    const discountAmt = parseFloat(lastInvoice.discountAmount ?? "0");
+
+    w.document.write(`<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Invoice ${lastInvoice.invoiceNo}</title>
+<style>
+  @page { size: A4; margin: 18mm 20mm; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; font-size:14px; color:#111; width:100%; }
+  h1 { font-size:22px; font-weight:900; text-align:center; text-transform:uppercase; letter-spacing:2px; margin-bottom:4px; }
+  .subtitle { text-align:center; color:#666; font-size:12px; margin-bottom:16px; }
+  .divider { border:none; border-top:1.5px dashed #bbb; margin:14px 0; }
+  .divider-solid { border:none; border-top:2px solid #333; margin:14px 0; }
+  .meta { display:grid; grid-template-columns:1fr 1fr; gap:6px 16px; margin-bottom:14px; }
+  .meta .label { color:#888; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; }
+  .meta .val { font-weight:700; font-size:14px; margin-top:1px; }
+  .meta .right { text-align:right; }
+  table { width:100%; border-collapse:collapse; }
+  thead th { font-size:11px; text-transform:uppercase; color:#888; letter-spacing:0.5px; padding:7px 6px; border-bottom:2px solid #ddd; font-weight:700; }
+  tbody td { padding:9px 6px; vertical-align:top; border-bottom:1px dashed #e5e5e5; font-size:13px; }
+  tbody tr:last-child td { border-bottom:none; }
+  .totals-table { width:100%; border-collapse:collapse; }
+  .totals-table td { padding:5px 6px; font-size:13px; }
+  .totals-table .total-row td { font-size:18px; font-weight:900; padding-top:10px; color:#111; }
+  .totals-table .total-row td:last-child { font-size:20px; }
+  .section-label { font-size:11px; font-weight:700; text-transform:uppercase; color:#888; letter-spacing:0.7px; margin:12px 0 6px; }
+  .badge { display:inline-block; background:#f3f4f6; border:1px solid #e5e7eb; border-radius:4px; padding:2px 8px; font-size:11px; font-weight:600; text-transform:capitalize; }
+  .footer { text-align:center; color:#bbb; font-size:11px; margin-top:20px; padding-top:12px; border-top:1px dashed #ddd; line-height:1.7; }
+  .medicine-name { font-weight:600; font-size:14px; }
+  .batch-label { color:#999; font-size:11px; margin-top:2px; }
+  .text-right { text-align:right; }
+  .text-center { text-align:center; }
+  .text-green { color:#16a34a; }
+</style>
+</head><body>
+  <h1>MedERP Pharmacy</h1>
+  <p class="subtitle">Tax Invoice / Bill of Supply</p>
+  <hr class="divider-solid"/>
+
+  <div class="meta">
+    <div>
+      <div class="label">Invoice No</div>
+      <div class="val" style="font-family:monospace;letter-spacing:0.5px">${lastInvoice.invoiceNo}</div>
+    </div>
+    <div class="right">
+      <div class="label">Date &amp; Time</div>
+      <div class="val">${new Date(lastInvoice.createdAt).toLocaleString("en-IN", { dateStyle: "long", timeStyle: "short" })}</div>
+    </div>
+    ${lastReceiptPatient ? `
+    <div>
+      <div class="label">Patient Name</div>
+      <div class="val">${lastReceiptPatient.name}</div>
+    </div>
+    <div class="right">
+      <div class="label">Phone</div>
+      <div class="val">${lastReceiptPatient.phone}</div>
+    </div>
+    ${lastReceiptPatient.gender ? `<div><div class="label">Gender</div><div class="val">${lastReceiptPatient.gender}</div></div>` : ""}
+    ` : `
+    <div style="grid-column:span 2">
+      <div class="label">Patient</div>
+      <div class="val" style="color:#aaa;font-style:italic">Walk-in Customer</div>
+    </div>`}
+  </div>
+
+  <hr class="divider"/>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="text-align:left;width:45%">Medicine</th>
+        <th class="text-center" style="width:8%">Qty</th>
+        <th class="text-right" style="width:15%">MRP/Unit</th>
+        <th class="text-right" style="width:10%">Disc</th>
+        <th class="text-right" style="width:12%">Tax</th>
+        <th class="text-right" style="width:10%">Amount</th>
+      </tr>
+    </thead>
+    <tbody>${itemRows}</tbody>
+  </table>
+
+  <hr class="divider"/>
+
+  <table class="totals-table">
+    <tr><td style="color:#666">Subtotal</td><td class="text-right" style="color:#666">₹${parseFloat(lastInvoice.subtotal ?? "0").toFixed(2)}</td></tr>
+    <tr><td style="color:#666">Tax (GST)</td><td class="text-right" style="color:#666">₹${parseFloat(lastInvoice.taxAmount ?? "0").toFixed(2)}</td></tr>
+    ${discountAmt > 0 ? `<tr class="text-green"><td>Discount Applied</td><td class="text-right">−₹${discountAmt.toFixed(2)}</td></tr>` : ""}
+    <tr class="total-row"><td>TOTAL AMOUNT</td><td class="text-right">₹${parseFloat(lastInvoice.totalAmount).toFixed(2)}</td></tr>
+  </table>
+
+  <hr class="divider"/>
+
+  <div class="section-label">Payment Details</div>
+  <table class="totals-table">${payRows}</table>
+
+  <div class="footer">
+    <p><b>Thank you for choosing MedERP Pharmacy</b></p>
+    <p>Goods once sold will not be taken back without a valid reason.</p>
+    <p>For queries, please contact your pharmacist.</p>
+  </div>
+</body></html>`);
+    w.document.close();
+    w.focus();
+    setTimeout(() => { w.print(); w.close(); }, 300);
+  };
+
   // ── Patient lookup ──────────────────────────────────────────────────────────
   const { data: patientResults } = useQuery({
     queryKey: ["patient-search-pos", patientSearch],
@@ -123,7 +251,7 @@ export function PosTerminal() {
       if (e.key === "F2") { e.preventDefault(); searchRef.current?.focus(); }
       if (e.key === "F4") { e.preventDefault(); if (items.length > 0) setPayOpen(true); }
       if (e.key === "F6") { e.preventDefault(); if (items.length > 0 && confirm("Clear the entire cart?")) clear(); }
-      if (e.ctrlKey && (e.key === "p" || e.key === "P")) { e.preventDefault(); if (lastInvoice) window.print(); }
+      if (e.ctrlKey && (e.key === "p" || e.key === "P")) { e.preventDefault(); if (lastInvoice) printReceipt(); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
@@ -599,7 +727,7 @@ export function PosTerminal() {
                 New Sale
               </button>
               <button
-                onClick={() => window.print()}
+                onClick={printReceipt}
                 className="flex-1 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-bold hover:bg-gray-800 transition inline-flex items-center justify-center gap-2"
               >
                 <Printer size={14} /> Print (Ctrl+P)

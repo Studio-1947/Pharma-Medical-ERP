@@ -82,16 +82,4 @@ body {
   }
 }
 
-@media print {
-  body > * { display: none !important; }
-  #invoice-print-area,
-  #invoice-print-area * { display: revert !important; }
-  #invoice-print-area {
-    position: fixed;
-    inset: 0;
-    padding: 24px;
-    font-size: 12px;
-    background: white;
-  }
-}
 
