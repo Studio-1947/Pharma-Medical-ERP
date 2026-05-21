@@ -1,15 +1,21 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
-import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus } from "lucide-react";
 import { useCartStore } from "@/stores/cart.store";
 import { PaymentModal } from "./payment-modal";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { queueOfflineInvoice, syncOfflineQueue } from "@/lib/pos-db";
+import { Modal } from "@/components/ui/modal";
 
 const CONTROLLED_CLASSES = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"];
+
+const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+const formInputCls =
+  "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition placeholder:text-slate-400";
+const formLabelCls = "block text-xs font-semibold text-slate-600 mb-1";
 
 export function PosTerminal() {
   const [search, setSearch] = useState("");
@@ -22,6 +28,70 @@ export function PosTerminal() {
   const [lastReceiptPayments, setLastReceiptPayments] = useState<any[]>([]);
   const [patientSearch, setPatientSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+
+  const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
+  const [patientFormError, setPatientFormError] = useState("");
+  const [patientForm, setPatientForm] = useState({
+    name: "",
+    phone: "",
+    email: "",
+    gender: "",
+    dateOfBirth: "",
+    address: "",
+    state: "",
+    bloodGroup: "",
+  });
+
+  const queryClient = useQueryClient();
+
+  const createPatientMutation = useMutation({
+    mutationFn: (data: object) => apiClient.post("/patients", data) as any,
+    onSuccess: (res: any) => {
+      const p = res?.data ?? res;
+      queryClient.invalidateQueries({ queryKey: ["patient-search-pos"] });
+      queryClient.invalidateQueries({ queryKey: ["patients"] });
+      if (p?.id) {
+        setPatient(p.id);
+      }
+      setIsPatientModalOpen(false);
+      setPatientSearch("");
+      setPatientForm({
+        name: "",
+        phone: "",
+        email: "",
+        gender: "",
+        dateOfBirth: "",
+        address: "",
+        state: "",
+        bloodGroup: "",
+      });
+      setPatientFormError("");
+    },
+    onError: (err: any) => {
+      setPatientFormError(err?.response?.data?.message ?? "Failed to register patient.");
+    },
+  });
+
+  const handleRegisterPatientSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setPatientFormError("");
+    if (!patientForm.name.trim() || !patientForm.phone.trim()) {
+      setPatientFormError("Name and Phone are required.");
+      return;
+    }
+    const payload: Record<string, any> = {
+      name: patientForm.name.trim(),
+      phone: patientForm.phone.trim(),
+    };
+    if (patientForm.email.trim()) payload.email = patientForm.email.trim();
+    if (patientForm.dateOfBirth) payload.dateOfBirth = new Date(patientForm.dateOfBirth).toISOString();
+    if (patientForm.gender) payload.gender = patientForm.gender;
+    if (patientForm.address.trim()) payload.address = patientForm.address.trim();
+    if (patientForm.state.trim()) payload.state = patientForm.state.trim();
+    if (patientForm.bloodGroup) payload.bloodGroup = patientForm.bloodGroup;
+
+    createPatientMutation.mutate(payload);
+  };
 
   // Rehydrate the persisted cart from localStorage on first client render.
   // This prevents the SSR/client mismatch (server sees empty cart, client sees saved items).
@@ -176,7 +246,7 @@ export function PosTerminal() {
   const { data: patientResults } = useQuery({
     queryKey: ["patient-search-pos", patientSearch],
     queryFn: () => apiClient.get("/patients", { params: { search: patientSearch, limit: 5 } }) as any,
-    enabled: patientSearch.length >= 3,
+    enabled: (patientSearch?.length ?? 0) >= 3,
   });
 
   const { data: selectedPatientRaw } = useQuery({
@@ -195,6 +265,7 @@ export function PosTerminal() {
     let lastKeyTime = Date.now();
 
     const handleGlobalKeydown = async (e: KeyboardEvent) => {
+      if (!e.key) return;
       const currentTime = Date.now();
       if (e.key === "Enter") {
         if (buffer && currentTime - lastKeyTime < 50) {
@@ -225,7 +296,7 @@ export function PosTerminal() {
         } else {
           buffer = "";
         }
-      } else if (e.key.length === 1) {
+      } else if (e.key && e.key.length === 1) {
         buffer = currentTime - lastKeyTime < 50 ? buffer + e.key : e.key;
       }
       lastKeyTime = currentTime;
@@ -248,6 +319,7 @@ export function PosTerminal() {
   // ── Hotkeys ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if (!e.key) return;
       if (e.key === "F2") { e.preventDefault(); searchRef.current?.focus(); }
       if (e.key === "F4") { e.preventDefault(); if (items.length > 0) setPayOpen(true); }
       if (e.key === "F6") { e.preventDefault(); if (items.length > 0 && confirm("Clear the entire cart?")) clear(); }
@@ -261,7 +333,7 @@ export function PosTerminal() {
   const { data: searchResults, isFetching } = useQuery({
     queryKey: ["medicine-search", search],
     queryFn: () => apiClient.get("/inventory/medicines", { params: { search, limit: 8 } }) as any,
-    enabled: search.length >= 2,
+    enabled: (search?.length ?? 0) >= 2,
   });
 
   // ── Invoice creation ─────────────────────────────────────────────────────────
@@ -402,31 +474,86 @@ export function PosTerminal() {
                 </div>
               </div>
             ) : (
-              <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <input
-                  value={patientSearch}
-                  onChange={(e) => setPatientSearch(e.target.value)}
-                  placeholder="Search patient by name or phone (optional)..."
-                  className="w-full border rounded-xl pl-8 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 bg-background"
-                />
-                {patientResults_.length > 0 && patientSearch.length >= 3 && (
-                  <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-white border rounded-xl shadow-lg max-h-40 overflow-y-auto">
-                    {patientResults_.map((p: any) => (
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    value={patientSearch}
+                    onChange={(e) => setPatientSearch(e.target.value)}
+                    placeholder="Search patient by name or phone (optional)..."
+                    className="w-full border rounded-xl pl-8 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 bg-background"
+                  />
+                  {patientSearch.length >= 3 && (
+                    <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-white border rounded-xl shadow-lg max-h-56 overflow-y-auto divide-y divide-slate-100">
+                      {patientResults_.length > 0 ? (
+                        patientResults_.map((p: any) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => { setPatient(p.id); setPatientSearch(""); }}
+                            className="w-full text-left px-4 py-2.5 hover:bg-muted/50 text-sm flex items-center justify-between"
+                          >
+                            <div>
+                              <span className="font-medium">{p.name}</span>
+                              <span className="text-muted-foreground ml-2 text-xs">{p.phone}</span>
+                            </div>
+                            {p.loyaltyPoints > 0 && (
+                              <span className="text-xs text-yellow-600 font-medium bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-100">
+                                <Star size={10} className="inline mr-0.5 align-middle" />{p.loyaltyPoints} pts
+                              </span>
+                            )}
+                          </button>
+                        ))
+                      ) : (
+                        <div className="px-4 py-2.5 text-xs text-muted-foreground">No matching patients found.</div>
+                      )}
                       <button
-                        key={p.id}
-                        onClick={() => { setPatient(p.id); setPatientSearch(""); }}
-                        className="w-full text-left px-4 py-2.5 hover:bg-muted/50 text-sm"
+                        type="button"
+                        onClick={() => {
+                          const isPhone = /^[0-9+ \-]+$/.test(patientSearch);
+                          setPatientForm({
+                            name: isPhone ? "" : patientSearch,
+                            phone: isPhone ? patientSearch : "",
+                            email: "",
+                            gender: "",
+                            dateOfBirth: "",
+                            address: "",
+                            state: "",
+                            bloodGroup: "",
+                          });
+                          setPatientFormError("");
+                          setIsPatientModalOpen(true);
+                        }}
+                        className="w-full text-left px-4 py-3 hover:bg-blue-50 text-sm text-blue-600 font-medium flex items-center gap-2 bg-slate-50/50"
                       >
-                        <span className="font-medium">{p.name}</span>
-                        <span className="text-muted-foreground ml-2 text-xs">{p.phone}</span>
-                        {p.loyaltyPoints > 0 && (
-                          <span className="ml-2 text-xs text-yellow-600 font-medium">{p.loyaltyPoints} pts</span>
-                        )}
+                        <Plus size={14} />
+                        <span>Register "{patientSearch}" as a new patient</span>
                       </button>
-                    ))}
-                  </div>
-                )}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPatientForm({
+                      name: "",
+                      phone: "",
+                      email: "",
+                      gender: "",
+                      dateOfBirth: "",
+                      address: "",
+                      state: "",
+                      bloodGroup: "",
+                    });
+                    setPatientFormError("");
+                    setIsPatientModalOpen(true);
+                  }}
+                  className="px-4 bg-primary hover:bg-primary/95 active:scale-95 text-primary-foreground rounded-xl text-sm font-semibold transition-all duration-150 inline-flex items-center gap-1.5 shrink-0 shadow-sm border border-transparent"
+                  title="Quick Register Patient"
+                >
+                  <UserPlus size={15} />
+                  <span className="hidden sm:inline">Add Patient</span>
+                </button>
               </div>
             )}
           </div>
@@ -592,6 +719,162 @@ export function PosTerminal() {
         onConfirm={handlePayConfirm}
         loading={createMutation.isPending}
       />
+
+      <Modal
+        title="Quick Register Patient"
+        subtitle="Create a new patient profile directly from the POS terminal."
+        open={isPatientModalOpen}
+        onClose={() => setIsPatientModalOpen(false)}
+        size="md"
+        icon={<UserPlus size={18} />}
+      >
+        <form onSubmit={handleRegisterPatientSubmit} className="flex flex-col h-full">
+          {/* Scrollable body */}
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+            {patientFormError && (
+              <div className="px-3 py-2.5 rounded-lg bg-red-50 text-red-700 text-xs border border-red-200 animate-in fade-in duration-150">
+                {patientFormError}
+              </div>
+            )}
+
+            {/* Essential Details */}
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Essential Information</p>
+              <div className="space-y-3">
+                <div>
+                  <label className={formLabelCls}>Full Name <span className="text-red-500">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    value={patientForm.name}
+                    onChange={(e) => setPatientForm((f) => ({ ...f, name: e.target.value }))}
+                    placeholder="e.g. John Doe"
+                    className={formInputCls}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={formLabelCls}>Phone Number <span className="text-red-500">*</span></label>
+                    <input
+                      type="tel"
+                      required
+                      value={patientForm.phone}
+                      onChange={(e) => setPatientForm((f) => ({ ...f, phone: e.target.value }))}
+                      placeholder="e.g. 9876543210"
+                      className={formInputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className={formLabelCls}>Email Address</label>
+                    <input
+                      type="email"
+                      value={patientForm.email}
+                      onChange={(e) => setPatientForm((f) => ({ ...f, email: e.target.value }))}
+                      placeholder="e.g. patient@domain.com"
+                      className={formInputCls}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t border-slate-100" />
+
+            {/* Secondary Details */}
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Additional Information (Optional)</p>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={formLabelCls}>Gender</label>
+                    <select
+                      value={patientForm.gender}
+                      onChange={(e) => setPatientForm((f) => ({ ...f, gender: e.target.value }))}
+                      className={formInputCls}
+                    >
+                      <option value="">Select gender</option>
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className={formLabelCls}>Date of Birth</label>
+                    <input
+                      type="date"
+                      value={patientForm.dateOfBirth}
+                      onChange={(e) => setPatientForm((f) => ({ ...f, dateOfBirth: e.target.value }))}
+                      max={new Date().toISOString().split("T")[0]}
+                      className={formInputCls}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className={formLabelCls}>Blood Group</label>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {BLOOD_GROUPS.map((g) => (
+                      <button
+                        key={g}
+                        type="button"
+                        onClick={() => setPatientForm((f) => ({ ...f, bloodGroup: f.bloodGroup === g ? "" : g }))}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                          patientForm.bloodGroup === g
+                            ? "bg-red-600 text-white border-red-600 shadow-sm animate-in zoom-in-95 duration-100"
+                            : "bg-white text-slate-600 border-slate-200 hover:border-red-300 hover:text-red-600"
+                        }`}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={formLabelCls}>Street / City</label>
+                    <input
+                      type="text"
+                      value={patientForm.address}
+                      onChange={(e) => setPatientForm((f) => ({ ...f, address: e.target.value }))}
+                      placeholder="e.g. 12 Park Street"
+                      className={formInputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className={formLabelCls}>State</label>
+                    <input
+                      type="text"
+                      value={patientForm.state}
+                      onChange={(e) => setPatientForm((f) => ({ ...f, state: e.target.value }))}
+                      placeholder="e.g. West Bengal"
+                      className={formInputCls}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Sticky footer */}
+          <div className="shrink-0 flex justify-end gap-3 px-6 py-4 border-t border-slate-100 bg-slate-50/60 rounded-b-2xl">
+            <button
+              type="button"
+              onClick={() => setIsPatientModalOpen(false)}
+              className="px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-700 hover:bg-slate-100 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={createPatientMutation.isPending}
+              className="px-5 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-semibold hover:bg-primary/95 active:scale-95 transition-all disabled:opacity-60 min-w-[130px]"
+            >
+              {createPatientMutation.isPending ? "Registering..." : "Register Patient"}
+            </button>
+          </div>
+        </form>
+      </Modal>
 
       {/* Invoice print preview */}
       {printOpen && lastInvoice && (
