@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
-import { Plus, Search, FileText, CheckCircle, XCircle, Send, PlusCircle, PackageCheck, Trash2, Loader2 } from "lucide-react";
+import { Plus, Search, FileText, CheckCircle, XCircle, Send, PlusCircle, PackageCheck, Trash2, Loader2, Edit2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 
 interface POItem {
@@ -234,8 +235,13 @@ function GrnModal({
 
 export function PurchaseOrdersView() {
   const queryClient = useQueryClient();
-  const { error: toastError, warning: toastWarning } = useToast();
+  const { user } = useAuthStore();
+  const { error: toastError, warning: toastWarning, success: toastSuccess } = useToast();
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+
   const [isOpen, setIsOpen] = useState(false);
+  const [editingPO, setEditingPO] = useState<PO | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [selectedPO, setSelectedPO] = useState<PO | null>(null);
   const [grnPO, setGrnPO] = useState<{ id: string; poNumber: string } | null>(null);
 
@@ -315,6 +321,33 @@ export function PurchaseOrdersView() {
     },
   });
 
+  const updatePOMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: object }) =>
+      apiClient.patch(`/procurement/purchase-orders/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+      toastSuccess("PO updated", "Purchase order has been updated.");
+      setEditingPO(null);
+      setIsOpen(false);
+    },
+    onError: (err: any) => {
+      toastError("Update failed", err?.response?.data?.message ?? "Could not update purchase order.");
+    },
+  });
+
+  const deletePOMutation = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/procurement/purchase-orders/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+      toastSuccess("PO deleted", "Draft purchase order has been removed.");
+      setConfirmDeleteId(null);
+    },
+    onError: (err: any) => {
+      toastError("Delete failed", err?.response?.data?.message ?? "Could not delete purchase order.");
+      setConfirmDeleteId(null);
+    },
+  });
+
   const approveMutation = useMutation({
     mutationFn: ({ id, approved }: { id: string; approved: boolean }) =>
       apiClient.post(`/procurement/purchase-orders/${id}/approve`, { approved }),
@@ -338,6 +371,7 @@ export function PurchaseOrdersView() {
   });
 
   function openCreate() {
+    setEditingPO(null);
     setForm({
       supplierId: suppliers[0]?.id || "",
       warehouseId: warehouses[0]?.id || "",
@@ -348,8 +382,28 @@ export function PurchaseOrdersView() {
     setIsOpen(true);
   }
 
+  function openEdit(po: PO) {
+    setEditingPO(po);
+    setForm({
+      supplierId: po.supplierId,
+      warehouseId: po.warehouseId,
+      expectedDelivery: po.expectedDelivery ?? "",
+      notes: po.notes ?? "",
+      items: po.items?.length
+        ? po.items.map((i) => ({
+            medicineId: i.medicineId,
+            orderedQty: i.orderedQty,
+            unitCost: i.unitCost,
+            taxPct: i.taxPct,
+          }))
+        : [{ medicineId: medicines[0]?.id || "", orderedQty: 1, unitCost: "0", taxPct: "0" }],
+    });
+    setIsOpen(true);
+  }
+
   function handleClose() {
     setIsOpen(false);
+    setEditingPO(null);
   }
 
   function handleAddItem() {
@@ -386,7 +440,11 @@ export function PurchaseOrdersView() {
       })),
     };
 
-    createPOMutation.mutate(payload);
+    if (editingPO) {
+      updatePOMutation.mutate({ id: editingPO.id, data: payload });
+    } else {
+      createPOMutation.mutate(payload);
+    }
   }
 
   return (
@@ -453,40 +511,76 @@ export function PurchaseOrdersView() {
                     <td className="px-6 py-4 font-bold text-slate-800">
                       ₹{parseFloat(po.totalValue ?? "0").toFixed(2)}
                     </td>
-                    <td className="px-6 py-4 text-right flex gap-2 justify-end">
-                      {po.status === "draft" && (
-                        <>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {po.status === "draft" && (
+                          <>
+                            <button
+                              onClick={() => openEdit(po as PO)}
+                              className="p-1.5 hover:bg-muted rounded-lg text-muted-foreground hover:text-primary transition-colors"
+                              title="Edit draft PO"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => approveMutation.mutate({ id: po.id, approved: true })}
+                              className="px-2 py-1 hover:bg-emerald-50 rounded-lg text-emerald-600 transition-colors font-medium text-xs"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => cancelMutation.mutate(po.id)}
+                              className="px-2 py-1 hover:bg-red-50 rounded-lg text-red-600 transition-colors font-medium text-xs"
+                            >
+                              Cancel
+                            </button>
+                          </>
+                        )}
+                        {po.status === "approved" && (
                           <button
-                            onClick={() => approveMutation.mutate({ id: po.id, approved: true })}
-                            className="p-2 hover:bg-emerald-50 rounded-lg text-emerald-600 transition-colors font-medium text-xs"
+                            onClick={() => sendMutation.mutate(po.id)}
+                            className="px-2 py-1 hover:bg-blue-50 rounded-lg text-blue-600 transition-colors font-medium text-xs flex items-center gap-1"
                           >
-                            Approve
+                            <Send className="w-3.5 h-3.5" /> Send
                           </button>
+                        )}
+                        {(po.status === "sent" || po.status === "partially_received") && (
                           <button
-                            onClick={() => cancelMutation.mutate(po.id)}
-                            className="p-2 hover:bg-red-50 rounded-lg text-red-600 transition-colors font-medium text-xs"
+                            onClick={() => setGrnPO({ id: po.id, poNumber: po.poNumber })}
+                            className="px-2 py-1 hover:bg-green-50 rounded-lg text-green-700 transition-colors font-medium text-xs flex items-center gap-1"
                           >
-                            Cancel
+                            <PackageCheck className="w-3.5 h-3.5" />
+                            {po.status === "partially_received" ? "Receive More" : "Receive"}
                           </button>
-                        </>
-                      )}
-                      {po.status === "approved" && (
-                        <button
-                          onClick={() => sendMutation.mutate(po.id)}
-                          className="p-2 hover:bg-blue-50 rounded-lg text-blue-600 transition-colors font-medium text-xs flex items-center gap-1"
-                        >
-                          <Send className="w-3.5 h-3.5" /> Send
-                        </button>
-                      )}
-                      {(po.status === "sent" || po.status === "partially_received") && (
-                        <button
-                          onClick={() => setGrnPO({ id: po.id, poNumber: po.poNumber })}
-                          className="p-2 hover:bg-green-50 rounded-lg text-green-700 transition-colors font-medium text-xs flex items-center gap-1"
-                        >
-                          <PackageCheck className="w-3.5 h-3.5" />
-                          {po.status === "partially_received" ? "Receive More" : "Receive"}
-                        </button>
-                      )}
+                        )}
+                        {isAdmin && (
+                          confirmDeleteId === po.id ? (
+                            <span className="flex items-center gap-1">
+                              <button
+                                onClick={() => deletePOMutation.mutate(po.id)}
+                                disabled={deletePOMutation.isPending}
+                                className="text-xs text-red-600 font-semibold hover:underline disabled:opacity-60"
+                              >
+                                {deletePOMutation.isPending ? "..." : "Confirm"}
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="text-xs text-muted-foreground hover:underline"
+                              >
+                                Cancel
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDeleteId(po.id)}
+                              className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-muted-foreground hover:text-red-600"
+                              title="Delete PO"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -510,7 +604,7 @@ export function PurchaseOrdersView() {
       {isOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-xl w-full border max-h-[90vh] overflow-y-auto p-6">
-            <h3 className="text-lg font-bold mb-4">Create Draft Purchase Order</h3>
+            <h3 className="text-lg font-bold mb-4">{editingPO ? "Edit Purchase Order" : "Create Draft Purchase Order"}</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
@@ -654,7 +748,7 @@ export function PurchaseOrdersView() {
                   type="submit"
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
                 >
-                  {createPOMutation.isPending ? "Creating..." : "Save Draft"}
+                  {(createPOMutation.isPending || updatePOMutation.isPending) ? "Saving..." : editingPO ? "Save Changes" : "Save Draft"}
                 </button>
               </div>
             </form>

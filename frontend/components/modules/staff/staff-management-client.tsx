@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Search, Download, Shield, CheckCircle2, XCircle, Edit2, Trash2, X } from "lucide-react";
+import { UserPlus, Search, Download, Shield, CheckCircle2, XCircle, Edit2, Trash2 } from "lucide-react";
+import { useToast } from "@/components/ui/toast";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
 import { StaffForm } from "@/components/modules/staff/staff-form";
@@ -59,8 +60,10 @@ function exportToCsv(users: UserDto[]) {
 }
 
 export function StaffManagementClient() {
+  const { success: toastSuccess } = useToast();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">("");
   const [showFilters, setShowFilters] = useState(false);
@@ -78,7 +81,11 @@ export function StaffManagementClient() {
 
   const deactivateMutation = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/users/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.users.all() }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all() });
+      toastSuccess("Account deactivated", "The user has lost system access.");
+      setConfirmDeactivateId(null);
+    },
   });
 
   // Client-side filtering
@@ -259,22 +266,31 @@ export function StaffManagementClient() {
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
-                        <button
-                          title="Deactivate"
-                          onClick={() => {
-                            if (
-                              confirm(
-                                `Deactivate ${user.firstName ?? user.email}? They will lose system access.`,
-                              )
-                            ) {
-                              deactivateMutation.mutate(user.id);
-                            }
-                          }}
-                          disabled={deactivateMutation.isPending}
-                          className="p-2 hover:bg-red-50 rounded-lg transition-colors text-muted-foreground hover:text-red-600 disabled:opacity-40"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {confirmDeactivateId === user.id ? (
+                          <span className="flex items-center gap-1">
+                            <button
+                              onClick={() => deactivateMutation.mutate(user.id)}
+                              disabled={deactivateMutation.isPending}
+                              className="text-xs text-red-600 font-semibold hover:underline disabled:opacity-60"
+                            >
+                              {deactivateMutation.isPending ? "..." : "Confirm"}
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeactivateId(null)}
+                              className="text-xs text-muted-foreground hover:underline"
+                            >
+                              Cancel
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            title="Deactivate"
+                            onClick={() => setConfirmDeactivateId(user.id)}
+                            className="p-2 hover:bg-red-50 rounded-lg transition-colors text-muted-foreground hover:text-red-600"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

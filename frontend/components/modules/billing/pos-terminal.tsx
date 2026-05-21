@@ -28,6 +28,7 @@ export function PosTerminal() {
   const [lastReceiptItems, setLastReceiptItems] = useState<any[]>([]);
   const [lastReceiptPatient, setLastReceiptPatient] = useState<any>(null);
   const [lastReceiptPayments, setLastReceiptPayments] = useState<any[]>([]);
+  const [clearConfirm, setClearConfirm] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -330,7 +331,7 @@ export function PosTerminal() {
       if (!e.key) return;
       if (e.key === "F2") { e.preventDefault(); searchRef.current?.focus(); }
       if (e.key === "F4") { e.preventDefault(); if (items.length > 0) setPayOpen(true); }
-      if (e.key === "F6") { e.preventDefault(); if (items.length > 0 && confirm("Clear the entire cart?")) clear(); }
+      if (e.key === "F6") { e.preventDefault(); if (items.length > 0) setClearConfirm(true); }
       if (e.ctrlKey && (e.key === "p" || e.key === "P")) { e.preventDefault(); if (lastInvoice) printReceipt(); }
     };
     window.addEventListener("keydown", handler);
@@ -415,6 +416,27 @@ export function PosTerminal() {
           <span className="text-xs font-semibold text-gray-700">{isOnline ? "Online Terminal" : "Offline Storage Mode"}</span>
         </div>
       </div>
+
+      {/* F6 Clear cart confirm banner */}
+      {clearConfirm && (
+        <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+          <span className="text-sm font-semibold text-red-700">Clear the entire cart? This cannot be undone.</span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => { clear(); setClearConfirm(false); }}
+              className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition-colors"
+            >
+              Yes, clear cart
+            </button>
+            <button
+              onClick={() => setClearConfirm(false)}
+              className="px-3 py-1.5 border text-xs font-medium rounded-lg hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Schedule H warning banner */}
       {needsRx && (

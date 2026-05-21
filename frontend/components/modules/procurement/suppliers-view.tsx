@@ -3,7 +3,9 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
-import { Plus, Search, Edit2, Phone, Mail, FileText } from "lucide-react";
+import { useAuthStore } from "@/stores/auth.store";
+import { useToast } from "@/components/ui/toast";
+import { Plus, Search, Edit2, Phone, Mail, FileText, Trash2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 
 interface Supplier {
@@ -21,6 +23,10 @@ interface Supplier {
 
 export function SuppliersView() {
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const { success: toastSuccess, error: toastError } = useToast();
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
@@ -72,6 +78,12 @@ export function SuppliersView() {
     mutationFn: (id: string) => apiClient.delete(`/procurement/suppliers/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+      toastSuccess("Supplier deleted", "Supplier has been removed.");
+      setConfirmDeleteId(null);
+    },
+    onError: (err: any) => {
+      toastError("Delete failed", err?.response?.data?.message ?? "Could not delete this supplier.");
+      setConfirmDeleteId(null);
     },
   });
 
@@ -205,23 +217,39 @@ export function SuppliersView() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t mt-4">
+              <div className="flex items-center justify-end gap-1 pt-4 border-t mt-4">
                 <button
                   onClick={() => openEdit(sup)}
                   className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors rounded-lg"
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
-                <button
-                  onClick={() => {
-                    if (confirm(`Are you sure you want to delete ${sup.name}?`)) {
-                      deleteMutation.mutate(sup.id);
-                    }
-                  }}
-                  className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors rounded-lg"
-                >
-                  🗑️
-                </button>
+                {isAdmin && (
+                  confirmDeleteId === sup.id ? (
+                    <span className="flex items-center gap-1">
+                      <button
+                        onClick={() => deleteMutation.mutate(sup.id)}
+                        disabled={deleteMutation.isPending}
+                        className="text-xs text-red-600 font-semibold hover:underline disabled:opacity-60"
+                      >
+                        {deleteMutation.isPending ? "..." : "Confirm"}
+                      </button>
+                      <button
+                        onClick={() => setConfirmDeleteId(null)}
+                        className="text-xs text-muted-foreground hover:underline"
+                      >
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDeleteId(sup.id)}
+                      className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors rounded-lg"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )
+                )}
               </div>
             </div>
           ))}

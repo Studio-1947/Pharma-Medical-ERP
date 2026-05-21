@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
+import { useAuthStore } from "@/stores/auth.store";
+import { useToast } from "@/components/ui/toast";
 import {
-  FileText, CheckCircle2, XCircle, Clock, AlertTriangle, Plus, Trash2, Search,
+  FileText, CheckCircle2, XCircle, Clock, AlertTriangle, Plus, Trash2, Search, Edit2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
@@ -454,13 +456,168 @@ function CreatePrescriptionModal({
   );
 }
 
+// ─── Edit Prescription Modal ──────────────────────────────────────────────────
+
+function EditPrescriptionModal({
+  prescription,
+  onClose,
+}: {
+  prescription: Prescription;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
+  const [doctorName, setDoctorName] = useState(prescription.doctorName);
+  const [hospitalName, setHospitalName] = useState(prescription.hospitalName ?? "");
+  const [issuedDate, setIssuedDate] = useState(prescription.issuedDate?.split("T")[0] ?? "");
+  const [expiryDate, setExpiryDate] = useState(prescription.expiryDate?.split("T")[0] ?? "");
+  const [notes, setNotes] = useState(prescription.notes ?? "");
+  const [isControlled, setIsControlled] = useState(prescription.isControlled ?? false);
+  const [formError, setFormError] = useState<string | null>(null);
+
+  const mutation = useMutation({
+    mutationFn: (body: object) => apiClient.patch(`/prescriptions/${prescription.id}`, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.prescriptions.all() });
+      onClose();
+    },
+    onError: (err: any) =>
+      setFormError(err?.response?.data?.message ?? "Failed to update prescription."),
+  });
+
+  function handleSubmit() {
+    if (!doctorName.trim()) { setFormError("Doctor name is required."); return; }
+    if (!issuedDate) { setFormError("Issue date is required."); return; }
+    if (!expiryDate) { setFormError("Expiry date is required."); return; }
+    setFormError(null);
+    mutation.mutate({
+      doctorName: doctorName.trim(),
+      hospitalName: hospitalName.trim() || undefined,
+      issuedDate,
+      expiryDate,
+      notes: notes.trim() || undefined,
+      isControlled,
+    });
+  }
+
+  return (
+    <Modal
+      title="Edit Prescription"
+      subtitle={`Editing prescription for ${prescription.patient?.name ?? "patient"}`}
+      icon={<Edit2 size={16} />}
+      open
+      onClose={onClose}
+      size="md"
+    >
+      <div className="px-6 py-5 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Doctor Name <span className="text-red-500">*</span></label>
+            <input
+              type="text"
+              value={doctorName}
+              onChange={(e) => setDoctorName(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Hospital / Clinic</label>
+            <input
+              type="text"
+              value={hospitalName}
+              onChange={(e) => setHospitalName(e.target.value)}
+              placeholder="Apollo Hospitals..."
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Issue Date <span className="text-red-500">*</span></label>
+            <input
+              type="date"
+              value={issuedDate}
+              onChange={(e) => setIssuedDate(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-medium">Expiry Date <span className="text-red-500">*</span></label>
+            <input
+              type="date"
+              value={expiryDate}
+              onChange={(e) => setExpiryDate(e.target.value)}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-sm font-medium">Notes</label>
+          <textarea
+            rows={3}
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Additional notes..."
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+          />
+        </div>
+
+        <div className="flex items-center gap-2">
+          <input
+            id="edit-controlled"
+            type="checkbox"
+            checked={isControlled}
+            onChange={(e) => setIsControlled(e.target.checked)}
+            className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+          />
+          <label htmlFor="edit-controlled" className="text-sm font-medium select-none cursor-pointer">
+            Controlled Drug
+            <span className="block text-xs text-muted-foreground font-normal">Schedule H / H1 / X</span>
+          </label>
+        </div>
+
+        {formError && (
+          <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+            <AlertTriangle size={14} /> {formError}
+          </div>
+        )}
+
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            onClick={onClose}
+            className="px-4 py-2 border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={mutation.isPending}
+            className="flex items-center gap-2 px-5 py-2 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+          >
+            {mutation.isPending ? (
+              <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving...</>
+            ) : "Save Changes"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function PrescriptionsClient() {
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const { success: toastSuccess, error: toastError } = useToast();
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [page, setPage] = useState(1);
   const [verifyingPrescription, setVerifyingPrescription] = useState<Prescription | null>(null);
+  const [editingPrescription, setEditingPrescription] = useState<Prescription | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [verifyError, setVerifyError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
@@ -483,6 +640,19 @@ export function PrescriptionsClient() {
     if (Array.isArray(d?.data?.data)) return d.data.data;
     return [];
   })();
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/prescriptions/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.prescriptions.all() });
+      toastSuccess("Prescription deleted", "The prescription record has been removed.");
+      setConfirmDeleteId(null);
+    },
+    onError: (err: any) => {
+      toastError("Delete failed", err?.response?.data?.message ?? "Could not delete this prescription.");
+      setConfirmDeleteId(null);
+    },
+  });
 
   const verifyMutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: object }) =>
@@ -615,14 +785,50 @@ export function PrescriptionsClient() {
                     </td>
                     <td className="px-6 py-4">{statusBadge(rx.status)}</td>
                     <td className="px-6 py-4 text-right">
-                      {rx.status === "pending_verification" && (
+                      <div className="flex items-center justify-end gap-1">
+                        {rx.status === "pending_verification" && (
+                          <button
+                            onClick={() => handleOpenVerify(rx)}
+                            className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors"
+                          >
+                            Verify
+                          </button>
+                        )}
                         <button
-                          onClick={() => handleOpenVerify(rx)}
-                          className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors"
+                          onClick={() => setEditingPrescription(rx)}
+                          className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-primary"
+                          title="Edit prescription"
                         >
-                          Verify
+                          <Edit2 className="w-4 h-4" />
                         </button>
-                      )}
+                        {isAdmin && (
+                          confirmDeleteId === rx.id ? (
+                            <span className="flex items-center gap-1">
+                              <button
+                                onClick={() => deleteMutation.mutate(rx.id)}
+                                disabled={deleteMutation.isPending}
+                                className="text-xs text-red-600 font-semibold hover:underline disabled:opacity-60"
+                              >
+                                {deleteMutation.isPending ? "..." : "Confirm"}
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="text-xs text-muted-foreground hover:underline"
+                              >
+                                Cancel
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDeleteId(rx.id)}
+                              className="p-2 hover:bg-red-50 rounded-lg transition-colors text-muted-foreground hover:text-red-600"
+                              title="Delete prescription"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -655,6 +861,14 @@ export function PrescriptionsClient() {
 
       {/* Create Prescription Modal */}
       <CreatePrescriptionModal open={createOpen} onClose={() => setCreateOpen(false)} />
+
+      {/* Edit Prescription Modal */}
+      {editingPrescription && (
+        <EditPrescriptionModal
+          prescription={editingPrescription}
+          onClose={() => setEditingPrescription(null)}
+        />
+      )}
 
       {/* Verify Modal */}
       <Modal

@@ -28,6 +28,7 @@ export function EmployeesView() {
   const [search, setSearch] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     userId: "",
@@ -228,23 +229,39 @@ export function EmployeesView() {
                         {emp.isActive ? "Active" : "Inactive"}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right flex gap-2 justify-end">
-                      <button
-                        onClick={() => openEdit(emp)}
-                        className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors rounded-lg"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          if (confirm(`Are you sure you want to delete ${emp.firstName}?`)) {
-                            deleteMutation.mutate(emp.id);
-                          }
-                        }}
-                        className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors rounded-lg"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => openEdit(emp)}
+                          className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors rounded-lg"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        {confirmDeleteId === emp.id ? (
+                          <span className="flex items-center gap-1">
+                            <button
+                              onClick={() => deleteMutation.mutate(emp.id)}
+                              disabled={deleteMutation.isPending}
+                              className="text-xs text-red-600 font-semibold hover:underline disabled:opacity-60"
+                            >
+                              {deleteMutation.isPending ? "..." : "Confirm"}
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="text-xs text-muted-foreground hover:underline"
+                            >
+                              Cancel
+                            </button>
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => setConfirmDeleteId(emp.id)}
+                            className="p-2 text-slate-500 hover:text-red-600 hover:bg-red-50 transition-colors rounded-lg"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

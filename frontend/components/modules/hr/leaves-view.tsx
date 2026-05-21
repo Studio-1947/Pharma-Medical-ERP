@@ -3,8 +3,9 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
-import { Plus, Search, Calendar, CheckCircle2, XCircle } from "lucide-react";
+import { Plus, Calendar, Edit2, Trash2 } from "lucide-react";
 
 interface LeaveRequest {
   id: string;
@@ -20,8 +21,13 @@ interface LeaveRequest {
 
 export function LeavesView() {
   const queryClient = useQueryClient();
-  const { error: toastError } = useToast();
+  const { user } = useAuthStore();
+  const { error: toastError, success: toastSuccess } = useToast();
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+
   const [isOpen, setIsOpen] = useState(false);
+  const [editingLeave, setEditingLeave] = useState<LeaveRequest | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     employeeId: "",
@@ -71,6 +77,32 @@ export function LeavesView() {
     },
   });
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: object }) =>
+      apiClient.patch(`/hr/leaves/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leaves"] });
+      toastSuccess("Leave updated", "Leave request has been updated.");
+      setEditingLeave(null);
+    },
+    onError: (err: any) => {
+      toastError("Update failed", err?.response?.data?.message ?? "Could not update leave request.");
+    },
+  });
+
+  const deleteLeaveMutation = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/hr/leaves/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["leaves"] });
+      toastSuccess("Leave deleted", "Leave request has been removed.");
+      setConfirmDeleteId(null);
+    },
+    onError: (err: any) => {
+      toastError("Delete failed", err?.response?.data?.message ?? "Could not delete leave request.");
+      setConfirmDeleteId(null);
+    },
+  });
+
   const reviewMutation = useMutation({
     mutationFn: ({ id, status, reviewNote }: { id: string; status: string; reviewNote?: string }) =>
       apiClient.patch(`/hr/leaves/${id}/review`, { status, reviewNote }),
@@ -78,6 +110,18 @@ export function LeavesView() {
       queryClient.invalidateQueries({ queryKey: ["leaves"] });
     },
   });
+
+  function openEdit(leave: LeaveRequest) {
+    setEditingLeave(leave);
+    setForm({
+      employeeId: leave.employeeId,
+      leaveType: leave.leaveType,
+      startDate: leave.startDate,
+      endDate: leave.endDate,
+      days: leave.days,
+      reason: leave.reason,
+    });
+  }
 
   function openCreate() {
     setForm({
@@ -93,16 +137,19 @@ export function LeavesView() {
 
   function handleClose() {
     setIsOpen(false);
+    setEditingLeave(null);
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.employeeId || !form.startDate || !form.endDate || !form.reason) return;
 
-    createMutation.mutate({
-      ...form,
-      days: Number(form.days),
-    });
+    const payload = { ...form, days: Number(form.days) };
+    if (editingLeave) {
+      updateMutation.mutate({ id: editingLeave.id, data: payload });
+    } else {
+      createMutation.mutate(payload);
+    }
   }
 
   return (
@@ -167,23 +214,59 @@ export function LeavesView() {
                         {l.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-right flex gap-2 justify-end">
-                      {l.status === "pending" && (
-                        <>
-                          <button
-                            onClick={() => reviewMutation.mutate({ id: l.id, status: "approved" })}
-                            className="p-1 hover:bg-emerald-50 text-emerald-600 rounded-lg transition-colors font-semibold text-xs"
-                          >
-                            Approve
-                          </button>
-                          <button
-                            onClick={() => reviewMutation.mutate({ id: l.id, status: "rejected" })}
-                            className="p-1 hover:bg-red-50 text-red-600 rounded-lg transition-colors font-semibold text-xs"
-                          >
-                            Reject
-                          </button>
-                        </>
-                      )}
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {l.status === "pending" && (
+                          <>
+                            <button
+                              onClick={() => reviewMutation.mutate({ id: l.id, status: "approved" })}
+                              className="px-2 py-1 hover:bg-emerald-50 text-emerald-600 rounded-lg transition-colors font-semibold text-xs"
+                            >
+                              Approve
+                            </button>
+                            <button
+                              onClick={() => reviewMutation.mutate({ id: l.id, status: "rejected" })}
+                              className="px-2 py-1 hover:bg-red-50 text-red-600 rounded-lg transition-colors font-semibold text-xs"
+                            >
+                              Reject
+                            </button>
+                            <button
+                              onClick={() => { openEdit(l); setIsOpen(true); }}
+                              className="p-1.5 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-primary"
+                              title="Edit leave request"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                          </>
+                        )}
+                        {isAdmin && (
+                          confirmDeleteId === l.id ? (
+                            <span className="flex items-center gap-1">
+                              <button
+                                onClick={() => deleteLeaveMutation.mutate(l.id)}
+                                disabled={deleteLeaveMutation.isPending}
+                                className="text-xs text-red-600 font-semibold hover:underline disabled:opacity-60"
+                              >
+                                {deleteLeaveMutation.isPending ? "..." : "Confirm"}
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="text-xs text-muted-foreground hover:underline"
+                              >
+                                Cancel
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDeleteId(l.id)}
+                              className="p-1.5 hover:bg-red-50 rounded-lg transition-colors text-muted-foreground hover:text-red-600"
+                              title="Delete leave"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -197,7 +280,7 @@ export function LeavesView() {
       {isOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full border max-h-[90vh] overflow-y-auto p-6">
-            <h3 className="text-lg font-bold mb-4">Request Absence/Leave</h3>
+            <h3 className="text-lg font-bold mb-4">{editingLeave ? "Edit Leave Request" : "Request Absence/Leave"}</h3>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1">
                 <label className="text-xs font-semibold">Employee *</label>

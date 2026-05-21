@@ -3,7 +3,9 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
-import { UserPlus, Search, Edit2, Phone, Calendar, Star } from "lucide-react";
+import { useAuthStore } from "@/stores/auth.store";
+import { useToast } from "@/components/ui/toast";
+import { UserPlus, Search, Edit2, Trash2, Phone, Calendar, Star } from "lucide-react";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
 
@@ -52,6 +54,10 @@ const labelCls = "block text-xs font-semibold text-slate-600 mb-1";
 
 export function PatientsClient() {
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const { success: toastSuccess, error: toastError } = useToast();
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -100,6 +106,19 @@ export function PatientsClient() {
     },
     onError: (err: any) => {
       setFormError(err?.response?.data?.message ?? "Failed to update patient.");
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/patients/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.patients.all() });
+      toastSuccess("Patient deleted", "Patient record has been permanently removed.");
+      setConfirmDeleteId(null);
+    },
+    onError: (err: any) => {
+      toastError("Delete failed", err?.response?.data?.message ?? "Could not delete this patient.");
+      setConfirmDeleteId(null);
     },
   });
 
@@ -251,9 +270,42 @@ export function PatientsClient() {
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <button onClick={() => openEdit(patient)} className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-primary">
-                        <Edit2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => openEdit(patient)}
+                          className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-primary"
+                          title="Edit patient"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        {isAdmin && (
+                          confirmDeleteId === patient.id ? (
+                            <span className="flex items-center gap-1 ml-1">
+                              <button
+                                onClick={() => deleteMutation.mutate(patient.id)}
+                                disabled={deleteMutation.isPending}
+                                className="text-xs text-red-600 font-semibold hover:underline disabled:opacity-60"
+                              >
+                                {deleteMutation.isPending ? "..." : "Confirm"}
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="text-xs text-muted-foreground hover:underline"
+                              >
+                                Cancel
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDeleteId(patient.id)}
+                              className="p-2 hover:bg-red-50 rounded-lg transition-colors text-muted-foreground hover:text-red-600"
+                              title="Delete patient"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

@@ -1,9 +1,11 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Search, Barcode, Pill } from "lucide-react";
+import { Plus, Search, Barcode, Pill, Trash2 } from "lucide-react";
 import { apiClient, queryKeys } from "@/lib/api-client";
+import { useAuthStore } from "@/stores/auth.store";
+import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { MedicineForm } from "./medicine-form";
 
@@ -26,10 +28,29 @@ interface ApiListResponse {
 }
 
 export function MedicineList() {
+  const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const { success: toastSuccess, error: toastError } = useToast();
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Medicine | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/inventory/medicines/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.medicines.list({}) });
+      toastSuccess("Medicine deleted", "The medicine has been removed from the formulary.");
+      setConfirmDeleteId(null);
+    },
+    onError: (err: any) => {
+      toastError("Delete failed", err?.response?.data?.message ?? "Could not delete this medicine.");
+      setConfirmDeleteId(null);
+    },
+  });
 
   const params = { search, page, limit: 20 };
 
@@ -141,6 +162,33 @@ export function MedicineList() {
                         >
                           <Barcode size={14} />
                         </a>
+                        {isAdmin && (
+                          confirmDeleteId === m.id ? (
+                            <span className="flex items-center gap-1">
+                              <button
+                                onClick={() => deleteMutation.mutate(m.id)}
+                                disabled={deleteMutation.isPending}
+                                className="text-xs text-red-600 font-semibold hover:underline disabled:opacity-60"
+                              >
+                                {deleteMutation.isPending ? "..." : "Confirm"}
+                              </button>
+                              <button
+                                onClick={() => setConfirmDeleteId(null)}
+                                className="text-xs text-muted-foreground hover:underline"
+                              >
+                                Cancel
+                              </button>
+                            </span>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmDeleteId(m.id)}
+                              className="p-1 text-muted-foreground hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Delete medicine"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          )
+                        )}
                       </div>
                     </td>
                   </tr>
