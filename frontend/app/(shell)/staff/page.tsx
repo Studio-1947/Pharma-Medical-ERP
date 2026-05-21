@@ -1,5 +1,5 @@
-import { StaffManagementClient } from "@/components/modules/staff/staff-management-client";
+import { redirect } from "next/navigation";
 
 export default function StaffPage() {
-  return <StaffManagementClient />;
+  redirect("/hr");
 }

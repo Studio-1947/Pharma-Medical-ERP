@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Search, Download, Shield, CheckCircle2, XCircle, Edit2, Trash2 } from "lucide-react";
+import { UserPlus, Search, Download, Shield, CheckCircle2, XCircle, Edit2, Trash2, X } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";

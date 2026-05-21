@@ -5,7 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { registerSchema, type RegisterDto, UserRole } from "@pharmerp/types";
 import { apiClient } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
-import { Mail, Lock, User, Briefcase, X } from "lucide-react";
+import { Mail, Lock, User, Briefcase, AlertCircle, Loader2 } from "lucide-react";
 
 const roles = [
   { label: "Admin", value: UserRole.ADMIN },
@@ -45,124 +45,171 @@ export function StaffForm({ onSuccess, onCancel }: StaffFormProps) {
         message: errorData?.message ?? "Failed to create staff member.",
         // @ts-ignore
         originalError: errorData?.originalError,
-        stack: errorData?.stack,
       });
     }
   };
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <label className="text-sm font-medium flex items-center gap-2">
-            <User className="w-4 h-4 text-muted-foreground" />
+      {/* Name row */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
             First Name
           </label>
-          <input
-            type="text"
-            {...register("firstName")}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
-            placeholder="John"
-          />
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <input
+              type="text"
+              {...register("firstName")}
+              className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${
+                errors.firstName ? "border-red-300 bg-red-50" : "border-slate-200 bg-white"
+              }`}
+              placeholder="John"
+            />
+          </div>
           {errors.firstName && (
-            <p className="text-red-500 text-xs">{errors.firstName.message}</p>
-          )}
-        </div>
-        <div className="space-y-1">
-          <label className="text-sm font-medium flex items-center gap-2">
-            <User className="w-4 h-4 text-muted-foreground" />
-            Last Name
-          </label>
-          <input
-            type="text"
-            {...register("lastName")}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
-            placeholder="Doe"
-          />
-          {errors.lastName && (
-            <p className="text-red-500 text-xs">{errors.lastName.message}</p>
-          )}
-        </div>
-      </div>
-
-      <div className="space-y-1">
-        <label className="text-sm font-medium flex items-center gap-2">
-          <Mail className="w-4 h-4 text-muted-foreground" />
-          Email
-        </label>
-        <input
-          type="email"
-          {...register("email")}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
-          placeholder="email@example.com"
-        />
-        {errors.email && (
-          <p className="text-red-500 text-xs">{errors.email.message}</p>
-        )}
-      </div>
-
-      <div className="space-y-1">
-        <label className="text-sm font-medium flex items-center gap-2">
-          <Lock className="w-4 h-4 text-muted-foreground" />
-          Initial Password
-        </label>
-        <input
-          type="password"
-          {...register("password")}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 transition-all"
-          placeholder="••••••••"
-        />
-        {errors.password && (
-          <p className="text-red-500 text-xs">{errors.password.message}</p>
-        )}
-      </div>
-
-      <div className="space-y-1">
-        <label className="text-sm font-medium flex items-center gap-2">
-          <Briefcase className="w-4 h-4 text-muted-foreground" />
-          Assign Role
-        </label>
-        <select
-          {...register("role")}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50 bg-background transition-all"
-        >
-          <option value="">Select role</option>
-          {roles.map((role) => (
-            <option key={role.value} value={role.value}>
-              {role.label}
-            </option>
-          ))}
-        </select>
-        {errors.role && (
-          <p className="text-red-500 text-xs">{errors.role.message}</p>
-        )}
-      </div>
-
-      {errors.root && (
-        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-2 rounded-lg text-sm space-y-1">
-           <p className="font-semibold">{errors.root.message}</p>
-          {(errors.root as any).originalError && (
-            <p className="text-[10px] opacity-80 font-mono">
-              {(errors.root as any).originalError}
+            <p className="text-red-500 text-xs flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />{errors.firstName.message}
             </p>
           )}
         </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+            Last Name
+          </label>
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <input
+              type="text"
+              {...register("lastName")}
+              className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${
+                errors.lastName ? "border-red-300 bg-red-50" : "border-slate-200 bg-white"
+              }`}
+              placeholder="Doe"
+            />
+          </div>
+          {errors.lastName && (
+            <p className="text-red-500 text-xs flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />{errors.lastName.message}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Email */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+          Email Address
+        </label>
+        <div className="relative">
+          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+          <input
+            type="email"
+            {...register("email")}
+            className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${
+              errors.email ? "border-red-300 bg-red-50" : "border-slate-200 bg-white"
+            }`}
+            placeholder="john.doe@pharmacy.com"
+          />
+        </div>
+        {errors.email && (
+          <p className="text-red-500 text-xs flex items-center gap-1">
+            <AlertCircle className="w-3 h-3" />{errors.email.message}
+          </p>
+        )}
+      </div>
+
+      {/* Password + Role row */}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+            Initial Password
+          </label>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+            <input
+              type="password"
+              {...register("password")}
+              className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${
+                errors.password ? "border-red-300 bg-red-50" : "border-slate-200 bg-white"
+              }`}
+              placeholder="Min. 8 characters"
+            />
+          </div>
+          {errors.password && (
+            <p className="text-red-500 text-xs flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />{errors.password.message}
+            </p>
+          )}
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+            Role
+          </label>
+          <div className="relative">
+            <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+            <select
+              {...register("role")}
+              className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-white transition-all appearance-none ${
+                errors.role ? "border-red-300 bg-red-50" : "border-slate-200"
+              }`}
+            >
+              <option value="">Select role...</option>
+              {roles.map((role) => (
+                <option key={role.value} value={role.value}>
+                  {role.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          {errors.role && (
+            <p className="text-red-500 text-xs flex items-center gap-1">
+              <AlertCircle className="w-3 h-3" />{errors.role.message}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {/* Root error */}
+      {errors.root && (
+        <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 text-red-700 px-3 py-2.5 rounded-lg text-sm">
+          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+          <div>
+            <p className="font-semibold">{errors.root.message}</p>
+            {(errors.root as any).originalError && (
+              <p className="text-xs opacity-70 font-mono mt-0.5">
+                {(errors.root as any).originalError}
+              </p>
+            )}
+          </div>
+        </div>
       )}
 
-      <div className="flex gap-3 pt-4">
+      {/* Actions */}
+      <div className="flex gap-2.5 pt-2 border-t border-slate-100 mt-1">
         <button
           type="button"
           onClick={onCancel}
-          className="flex-1 px-4 py-2 border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+          className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={isSubmitting}
-          className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg font-semibold text-sm hover:opacity-90 disabled:opacity-60 transition-all"
+          className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-2 rounded-lg font-semibold text-sm hover:bg-blue-700 disabled:opacity-60 transition-colors shadow-sm"
         >
-          {isSubmitting ? "Creating..." : "Create Staff"}
+          {isSubmitting ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Creating...
+            </>
+          ) : (
+            "Create Staff Member"
+          )}
         </button>
       </div>
     </form>

@@ -14,7 +14,6 @@ import {
   BarChart2,
   ClipboardList,
   Settings,
-  ShieldCheck,
 } from "lucide-react";
 
 import { useAuthStore } from "@/stores/auth.store";
@@ -41,7 +40,6 @@ export function Sidebar() {
 
   const navItems = [
     ...baseNavItems,
-    ...(isAdmin ? [{ href: "/staff", label: "Staff Management", icon: ShieldCheck }] : []),
     { href: "/settings", label: "Settings", icon: Settings },
   ];
 
