@@ -18,6 +18,7 @@ export const updateBatchSchema = z.object({
   expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD").optional(),
   costPrice: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
   mrpAtEntry: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  status: z.enum(["active", "quarantine", "expired", "depleted", "recalled"]).optional(),
 });
 
 export const updateBatchStatusSchema = z.object({

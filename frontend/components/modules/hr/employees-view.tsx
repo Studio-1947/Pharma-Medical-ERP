@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 import { Plus, Search, Edit2, Shield, Calendar, UserCheck, Trash2 } from "lucide-react";
 
 interface Employee {
@@ -23,6 +24,7 @@ interface Employee {
 
 export function EmployeesView() {
   const queryClient = useQueryClient();
+  const { error: toastError } = useToast();
   const [search, setSearch] = useState("");
   const [isOpen, setIsOpen] = useState(false);
   const [editingEmp, setEditingEmp] = useState<Employee | null>(null);
@@ -74,7 +76,7 @@ export function EmployeesView() {
       handleClose();
     },
     onError: (err: any) => {
-      alert(err?.response?.data?.message ?? "Error creating employee record");
+      toastError("Failed to create employee", err?.response?.data?.message ?? "An unexpected error occurred. Please try again.");
     },
   });
 
@@ -86,7 +88,7 @@ export function EmployeesView() {
       handleClose();
     },
     onError: (err: any) => {
-      alert(err?.response?.data?.message ?? "Error updating employee record");
+      toastError("Failed to update employee", err?.response?.data?.message ?? "An unexpected error occurred. Please try again.");
     },
   });
 

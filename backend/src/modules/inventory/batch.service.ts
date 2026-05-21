@@ -123,6 +123,21 @@ export class BatchService {
     return { data: updated, message: "Stock adjusted" };
   }
 
+  async remove(id: string) {
+    const existing = await this.batchRepo.findBatchById(id);
+    if (!existing) throw new NotFoundException(`Batch ${id} not found`);
+
+    const hasMovements = await this.batchRepo.hasMovements(id);
+    if (hasMovements) {
+      throw new UnprocessableEntityException(
+        "Cannot delete a batch that has stock movement history. Set its status to \"recalled\" or \"depleted\" instead.",
+      );
+    }
+
+    await this.batchRepo.deleteBatch(id);
+    return { message: "Batch deleted" };
+  }
+
   async getExpiringBatches(days: number, branchId?: string) {
     const batches = await this.batchRepo.findExpiringBatches(days, branchId);
     return { data: batches };

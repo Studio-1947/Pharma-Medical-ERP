@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Param,
   Patch,
@@ -84,6 +85,13 @@ export class BatchController {
       updateBatchStatusSchema.parse(body),
       user.sub,
     );
+  }
+
+  @Delete(":id")
+  @Roles("admin")
+  @ApiOperation({ summary: "Delete a batch (admin only — blocked if stock movements exist)" })
+  remove(@Param("id") id: string) {
+    return this.service.remove(id);
   }
 
   @Patch(":id/adjust")

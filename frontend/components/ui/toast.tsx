@@ -2,22 +2,24 @@
 
 import * as ToastPrimitive from "@radix-ui/react-toast";
 import { createContext, useContext, useReducer, useCallback, ReactNode } from "react";
-import { X, CheckCircle, AlertCircle, Info } from "lucide-react";
+import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from "lucide-react";
 
-type ToastVariant = "success" | "error" | "info";
+type ToastVariant = "success" | "error" | "info" | "warning";
 
 interface Toast {
   id: string;
   title: string;
   description?: string;
   variant: ToastVariant;
+  duration?: number;
 }
 
 interface ToastContextValue {
   toast: (opts: Omit<Toast, "id">) => void;
   success: (title: string, description?: string) => void;
-  error: (title: string, description?: string) => void;
+  error: (title: string, description?: string, duration?: number) => void;
   info: (title: string, description?: string) => void;
+  warning: (title: string, description?: string, duration?: number) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -41,12 +43,14 @@ const ICONS: Record<ToastVariant, ReactNode> = {
   success: <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />,
   error: <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />,
   info: <Info className="w-4 h-4 text-blue-500 shrink-0" />,
+  warning: <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />,
 };
 
 const BORDER: Record<ToastVariant, string> = {
   success: "border-green-200",
   error: "border-red-200",
   info: "border-blue-200",
+  warning: "border-amber-200 bg-amber-50",
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -55,7 +59,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const toast = useCallback((opts: Omit<Toast, "id">) => {
     const id = Math.random().toString(36).slice(2);
     dispatch({ type: "ADD", toast: { ...opts, id } });
-    setTimeout(() => dispatch({ type: "REMOVE", id }), 4500);
+    setTimeout(() => dispatch({ type: "REMOVE", id }), opts.duration ?? 4500);
   }, []);
 
   const success = useCallback(
@@ -65,8 +69,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   );
 
   const error = useCallback(
-    (title: string, description?: string) =>
-      toast({ title, description, variant: "error" }),
+    (title: string, description?: string, duration?: number) =>
+      toast({ title, description, variant: "error", duration }),
     [toast],
   );
 
@@ -76,8 +80,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [toast],
   );
 
+  const warning = useCallback(
+    (title: string, description?: string, duration?: number) =>
+      toast({ title, description, variant: "warning", duration }),
+    [toast],
+  );
+
   return (
-    <ToastContext.Provider value={{ toast, success, error, info }}>
+    <ToastContext.Provider value={{ toast, success, error, info, warning }}>
       <ToastPrimitive.Provider swipeDirection="right">
         {children}
         <ToastPrimitive.Viewport className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 w-80 outline-none" />
@@ -88,7 +98,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             onOpenChange={(open) => {
               if (!open) dispatch({ type: "REMOVE", id: t.id });
             }}
-            className={`bg-white border ${BORDER[t.variant]} rounded-lg shadow-lg p-4 flex items-start gap-3 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-bottom-5`}
+            className={`border ${BORDER[t.variant]} bg-white rounded-lg shadow-lg p-4 flex items-start gap-3 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-bottom-5`}
           >
             {ICONS[t.variant]}
             <div className="flex-1 min-w-0">

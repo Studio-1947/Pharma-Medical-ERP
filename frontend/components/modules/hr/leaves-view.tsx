@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 import { Plus, Search, Calendar, CheckCircle2, XCircle } from "lucide-react";
 
 interface LeaveRequest {
@@ -19,6 +20,7 @@ interface LeaveRequest {
 
 export function LeavesView() {
   const queryClient = useQueryClient();
+  const { error: toastError } = useToast();
   const [isOpen, setIsOpen] = useState(false);
 
   const [form, setForm] = useState({
@@ -65,7 +67,7 @@ export function LeavesView() {
       handleClose();
     },
     onError: (err: any) => {
-      alert(err?.response?.data?.message ?? "Error submitting leave request");
+      toastError("Failed to submit leave request", err?.response?.data?.message ?? "An unexpected error occurred. Please try again.");
     },
   });
 

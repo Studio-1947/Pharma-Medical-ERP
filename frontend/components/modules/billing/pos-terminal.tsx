@@ -9,6 +9,7 @@ import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { queueOfflineInvoice, syncOfflineQueue } from "@/lib/pos-db";
 import { Modal } from "@/components/ui/modal";
+import { useToast } from "@/components/ui/toast";
 
 const CONTROLLED_CLASSES = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"];
 
@@ -18,6 +19,7 @@ const formInputCls =
 const formLabelCls = "block text-xs font-semibold text-slate-600 mb-1";
 
 export function PosTerminal() {
+  const { warning: toastWarning, success: toastSuccess, info: toastInfo, error: toastError } = useToast();
   const [search, setSearch] = useState("");
   const [payOpen, setPayOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
@@ -358,7 +360,12 @@ export function PosTerminal() {
 
   const handlePayConfirm = async (mode: string, splits?: { mode: string; amount: number; ref?: string }[]) => {
     if (needsRx && !prescriptionId?.trim()) {
-      alert("This sale includes Schedule H/controlled medicines. Please enter a verified Prescription ID before checkout.");
+      toastWarning(
+        "Prescription required",
+        "This sale includes Schedule H / controlled medicines. Enter a verified Prescription ID in the cart before proceeding to checkout.",
+        8000,
+      );
+      return;
       return;
     }
 
@@ -384,7 +391,7 @@ export function PosTerminal() {
       await queueOfflineInvoice(payload);
       clear();
       setPayOpen(false);
-      alert("Saved offline — will sync when connection restored.");
+      toastInfo("Saved offline", "Invoice queued locally and will sync automatically when your connection is restored.");
       return;
     }
 
@@ -590,7 +597,10 @@ export function PosTerminal() {
                         const batchRes: any = await apiClient.get("/inventory/batches", { params: { medicineId: m.id, status: "active", limit: 50 } });
                         const batchArr: any[] = Array.isArray(batchRes) ? batchRes : Array.isArray(batchRes?.data?.data) ? batchRes.data.data : Array.isArray(batchRes?.data) ? batchRes.data : [];
                         const first = batchArr[0];
-                        if (!first) { alert("No batch/stock available for this item."); return; }
+                        if (!first) {
+                          toastWarning("Out of stock", `No active batch found for "${m.name}". Add stock via Inventory before billing.`, 7000);
+                          return;
+                        }
                         addItem({
                           medicineId: m.id, batchId: first.id, name: m.name, sku: m.sku,
                           batchNo: first.batchNo, unitPrice: parseFloat(m.priceMrp),
@@ -599,7 +609,7 @@ export function PosTerminal() {
                           scheduleClass: m.scheduleClass, requiresPrescription: m.requiresPrescription,
                         });
                         setSearch("");
-                      } catch { alert("Error getting batch stock details."); }
+                      } catch { toastError("Failed to load stock", "Could not fetch batch details. Check your connection and try again."); }
                     }}
                     className="flex items-center justify-between px-5 py-4 hover:bg-muted/40 text-sm text-left transition duration-150 cursor-pointer"
                   >

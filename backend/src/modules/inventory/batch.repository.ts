@@ -137,6 +137,7 @@ export class BatchRepository {
         ...(data.expiryDate !== undefined && { expiryDate: data.expiryDate }),
         ...(data.costPrice !== undefined && { costPrice: data.costPrice }),
         ...(data.mrpAtEntry !== undefined && { mrpAtEntry: data.mrpAtEntry }),
+        ...(data.status !== undefined && { status: data.status as any }),
         updatedAt: new Date(),
       })
       .where(eq(schema.inventoryBatches.id, id))
@@ -329,5 +330,20 @@ export class BatchRepository {
     }
 
     return allocations;
+  }
+
+  async hasMovements(batchId: string): Promise<boolean> {
+    const [row] = await this.db
+      .select({ id: schema.stockMovements.id })
+      .from(schema.stockMovements)
+      .where(eq(schema.stockMovements.batchId, batchId))
+      .limit(1);
+    return !!row;
+  }
+
+  async deleteBatch(id: string): Promise<void> {
+    await this.db
+      .delete(schema.inventoryBatches)
+      .where(eq(schema.inventoryBatches.id, id));
   }
 }

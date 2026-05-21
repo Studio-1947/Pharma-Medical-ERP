@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { useToast } from "@/components/ui/toast";
 import { Plus, Search, FileText, CheckCircle, XCircle, Send, PlusCircle, PackageCheck, Trash2, Loader2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 
@@ -233,6 +234,7 @@ function GrnModal({
 
 export function PurchaseOrdersView() {
   const queryClient = useQueryClient();
+  const { error: toastError, warning: toastWarning } = useToast();
   const [isOpen, setIsOpen] = useState(false);
   const [selectedPO, setSelectedPO] = useState<PO | null>(null);
   const [grnPO, setGrnPO] = useState<{ id: string; poNumber: string } | null>(null);
@@ -309,7 +311,7 @@ export function PurchaseOrdersView() {
       handleClose();
     },
     onError: (err: any) => {
-      alert(err?.response?.data?.message ?? "Error creating purchase order.");
+      toastError("Failed to create purchase order", err?.response?.data?.message ?? "An unexpected error occurred. Please try again.");
     },
   });
 
@@ -368,7 +370,7 @@ export function PurchaseOrdersView() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.supplierId || !form.warehouseId || form.items.some((i) => !i.medicineId || i.orderedQty <= 0)) {
-      alert("All fields are required and quantity must be greater than 0");
+      toastWarning("Incomplete order", "All fields are required and each item quantity must be greater than 0.");
       return;
     }
 

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { AlertTriangle, CheckCircle, Clock, Pencil, Plus, X } from "lucide-react";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
+import { useToast } from "@/components/ui/toast";
 
 interface Batch {
   id: string;
@@ -282,21 +283,37 @@ interface EditBatchFormProps {
   onSuccess: () => void;
 }
 
+const STATUS_OPTIONS = [
+  { value: "active",      label: "Active",      desc: "In stock, available for dispensing" },
+  { value: "quarantine",  label: "Quarantine",  desc: "Hold — pending quality check" },
+  { value: "recalled",    label: "Recalled",    desc: "Manufacturer recall — remove from stock" },
+  { value: "depleted",    label: "Depleted",    desc: "Stock exhausted — retire this batch" },
+  { value: "expired",     label: "Expired",     desc: "Past expiry date" },
+] as const;
+
 function EditBatchForm({ batch, onClose, onSuccess }: EditBatchFormProps) {
+  const { success: toastSuccess, error: toastError } = useToast();
   const [form, setForm] = useState({
     batchNo: batch.batchNo,
     expiryDate: batch.expiryDate.slice(0, 10),
     costPrice: parseFloat(batch.costPrice).toFixed(2),
     mrpAtEntry: parseFloat(batch.mrpAtEntry).toFixed(2),
+    status: batch.status,
   });
   const [error, setError] = useState("");
 
   const mutation = useMutation({
     mutationFn: (payload: object) => apiClient.patch(`/inventory/batches/${batch.id}`, payload) as any,
-    onSuccess: () => { onSuccess(); onClose(); },
+    onSuccess: () => {
+      toastSuccess("Batch updated", `Batch ${batch.batchNo} has been saved successfully.`);
+      onSuccess();
+      onClose();
+    },
     onError: (err: any) => {
       const msg = err?.response?.data?.message ?? err?.message ?? "Update failed";
-      setError(Array.isArray(msg) ? msg.join(", ") : String(msg));
+      const str = Array.isArray(msg) ? msg.join(", ") : String(msg);
+      setError(str);
+      toastError("Update failed", str);
     },
   });
 
@@ -315,6 +332,7 @@ function EditBatchForm({ batch, onClose, onSuccess }: EditBatchFormProps) {
       expiryDate: form.expiryDate,
       costPrice: cost.toFixed(2),
       mrpAtEntry: mrp.toFixed(2),
+      status: form.status,
     });
   };
 
@@ -377,8 +395,26 @@ function EditBatchForm({ batch, onClose, onSuccess }: EditBatchFormProps) {
             </div>
           </div>
 
-          <p className="text-xs text-muted-foreground bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
-            Quantity changes must be done via stock adjustment to maintain the audit trail.
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Status</label>
+            <select
+              value={form.status}
+              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            >
+              {STATUS_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label} — {o.desc}</option>
+              ))}
+            </select>
+            {(form.status === "recalled" || form.status === "depleted" || form.status === "expired") && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-1">
+                Setting status to <strong>{form.status}</strong> will hide this batch from active dispensing. The batch history and audit trail are preserved.
+              </p>
+            )}
+          </div>
+
+          <p className="text-xs text-muted-foreground bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+            To adjust quantity, use the stock adjustment feature — changes are logged in the audit trail.
           </p>
 
           {error && (
@@ -411,7 +447,11 @@ export function BatchList({ medicineId, medicine }: Props) {
   const [status, setStatus] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Batch | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { user } = useAuthStore();
+  const { success: toastSuccess, warning: toastWarning } = useToast();
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
   const params: Record<string, any> = { page, limit: 20 };
   if (medicineId) params.medicineId = medicineId;
@@ -424,6 +464,38 @@ export function BatchList({ medicineId, medicine }: Props) {
 
   // All batch numbers currently loaded — used for instant duplicate detection in AddStockForm
   const loadedBatchNos: string[] = ((data as any)?.data ?? []).map((b: Batch) => b.batchNo);
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/inventory/batches/${id}`) as any,
+    onSuccess: (_data, id) => {
+      const batch = ((data as any)?.data ?? []).find((b: Batch) => b.id === id);
+      toastSuccess(
+        "Batch deleted",
+        `Batch ${batch?.batchNo ?? id} has been permanently removed.`,
+      );
+      setConfirmDeleteId(null);
+      queryClient.invalidateQueries({ queryKey: ["batches"] });
+    },
+    onError: (err: any) => {
+      const msg: string = (() => {
+        const raw = err?.response?.data?.message ?? err?.message ?? "";
+        return Array.isArray(raw) ? raw.join(" ") : String(raw);
+      })();
+
+      const isMovementBlock = msg.toLowerCase().includes("stock movement");
+
+      if (isMovementBlock) {
+        toastWarning(
+          "Batch cannot be deleted",
+          "This batch has sales or purchase history attached to it. To retire it, use the Edit button and change its status to Recalled or Depleted — this removes it from active stock without losing the audit trail.",
+          9000,
+        );
+      } else {
+        toastWarning("Delete failed", msg, 6000);
+      }
+      setConfirmDeleteId(null);
+    },
+  });
 
   const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["batches"] });
@@ -517,14 +589,45 @@ export function BatchList({ medicineId, medicine }: Props) {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => setEditTarget(b)}
-                          title="Edit batch"
-                          className="inline-flex items-center gap-1 px-2 py-1 text-xs text-primary border border-primary/20 rounded-md hover:bg-primary/5 transition-colors"
-                        >
-                          <Pencil size={11} />
-                          Edit
-                        </button>
+                        {confirmDeleteId === b.id ? (
+                          <div className="inline-flex items-center gap-1.5">
+                            <span className="text-xs text-red-600 font-medium">Sure?</span>
+                            <button
+                              onClick={() => deleteMutation.mutate(b.id)}
+                              disabled={deleteMutation.isPending}
+                              className="px-2 py-0.5 text-xs bg-red-600 text-white rounded hover:bg-red-700 disabled:opacity-50 transition-colors"
+                            >
+                              {deleteMutation.isPending ? "..." : "Yes"}
+                            </button>
+                            <button
+                              onClick={() => setConfirmDeleteId(null)}
+                              className="px-2 py-0.5 text-xs border rounded hover:bg-muted transition-colors"
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              onClick={() => setEditTarget(b)}
+                              title="Edit batch"
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs text-primary border border-primary/20 rounded-md hover:bg-primary/5 transition-colors"
+                            >
+                              <Pencil size={11} />
+                              Edit
+                            </button>
+                            {isAdmin && (
+                              <button
+                                onClick={() => setConfirmDeleteId(b.id)}
+                                title="Delete batch"
+                                className="inline-flex items-center gap-1 px-2 py-1 text-xs text-red-600 border border-red-200 rounded-md hover:bg-red-50 transition-colors"
+                              >
+                                <X size={11} />
+                                Delete
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );

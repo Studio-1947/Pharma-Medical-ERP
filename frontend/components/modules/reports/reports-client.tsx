@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useToast } from "@/components/ui/toast";
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -407,6 +408,7 @@ function PurchaseTab() {
 // ─── Compliance Tab ───────────────────────────────────────────────────────────
 
 function ComplianceTab() {
+  const { error: toastError } = useToast();
   const [gstBranchId, setGstBranchId] = useState("");
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
@@ -432,7 +434,7 @@ function ComplianceTab() {
       link.click();
       link.remove();
     } catch {
-      alert("Download failed. Check console for details.");
+      toastError("Download failed", "Could not generate the CSV export. Check your connection and try again.");
     }
   };
 

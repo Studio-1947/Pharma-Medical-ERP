@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/auth.store";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { LogOut, User, Bell } from "lucide-react";
+import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 
 export function Header() {
   const { user, logout } = useAuthStore();
@@ -20,7 +21,7 @@ export function Header() {
 
   return (
     <header className="h-16 border-b flex items-center justify-between px-6 bg-card shrink-0">
-      <div />
+      <Breadcrumbs />
       <div className="flex items-center gap-3">
         {/* Notification bell */}
         <Link
