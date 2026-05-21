@@ -57,6 +57,7 @@ export class BillingService {
           scheduleClass: schema.medicines.scheduleClass,
           requiresPrescription: schema.medicines.requiresPrescription,
           taxPercent: schema.medicines.taxPercent,
+          stripSize: schema.medicines.stripSize,
           isActive: schema.medicines.isActive,
         })
         .from(schema.medicines)
@@ -152,8 +153,9 @@ export class BillingService {
 
       // 3. Compute Totals & Validate Payment Sum
       const lines = allAllocations.map(({ item, med, allocation }) => {
+        const unitMrp = parseFloat(allocation.mrpAtEntry) / (med.stripSize || 1);
         const { lineTotal, taxAmount, breakdown } = this.taxService.calculateLineTax(
-          parseFloat(allocation.mrpAtEntry),
+          unitMrp,
           allocation.allocate,
           parseFloat(item.discountPct ?? "0"),
           parseFloat(med.taxPercent),
@@ -297,7 +299,7 @@ export class BillingService {
         medicineId: line.item.medicineId,
         batchId: line.batchId,
         quantity: line.allocate,
-        unitPrice: line.mrpAtEntry,
+        unitPrice: String(parseFloat(line.mrpAtEntry) / (line.med.stripSize || 1)),
         discountPct: line.item.discountPct ?? "0",
         taxPct: String(parseFloat(line.med.taxPercent)),
         lineTotal: line.lineTotal.toFixed(2),

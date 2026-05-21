@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { AlertTriangle, CheckCircle, Clock, Plus, X } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, Pencil, Plus, X } from "lucide-react";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 
@@ -38,20 +38,50 @@ function expiryLabel(dateStr: string) {
 interface AddStockFormProps {
   onClose: () => void;
   onSuccess: () => void;
+  /** Batch numbers already present for the medicine pre-selected in this list view */
+  existingBatchNosForMedicine?: string[];
+  /** Pre-select a medicine so the user doesn't have to search when coming from a medicine's batch list */
+  lockedMedicine?: Medicine;
 }
 
-function AddStockForm({ onClose, onSuccess }: AddStockFormProps) {
+function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lockedMedicine }: AddStockFormProps) {
   const { user } = useAuthStore();
   const [medicineSearch, setMedicineSearch] = useState("");
-  const [selectedMedicine, setSelectedMedicine] = useState<Medicine | null>(null);
+  const [selectedMedicine, setSelectedMedicine] = useState<Medicine | null>(lockedMedicine ?? null);
   const [form, setForm] = useState({
     batchNo: "",
     expiryDate: "",
     quantity: "",
-    costPrice: "",
-    mrpAtEntry: "",
+    costPrice: lockedMedicine ? parseFloat(lockedMedicine.priceMrp).toFixed(2) : "",
+    mrpAtEntry: lockedMedicine ? parseFloat(lockedMedicine.priceMrp).toFixed(2) : "",
   });
   const [error, setError] = useState("");
+
+  // For medicines searched inside the form (not locked), fetch their existing batch numbers
+  const { data: dupCheck } = useQuery({
+    queryKey: ["batch-dup-check", selectedMedicine?.id],
+    queryFn: () =>
+      apiClient.get("/inventory/batches", {
+        params: { medicineId: selectedMedicine!.id, limit: 200 },
+      }) as any,
+    enabled: !!selectedMedicine && !lockedMedicine,
+    staleTime: 15_000,
+  });
+
+  const fetchedBatchNos: string[] = (() => {
+    const raw = dupCheck as any;
+    const list: Batch[] = Array.isArray(raw?.data?.data) ? raw.data.data : Array.isArray(raw?.data) ? raw.data : [];
+    return list.map((b) => b.batchNo.toLowerCase());
+  })();
+
+  // Use passed-in list when locked (instant, no extra fetch), otherwise use fetched list
+  const knownBatchNos = lockedMedicine
+    ? existingBatchNosForMedicine.map((n) => n.toLowerCase())
+    : fetchedBatchNos;
+
+  const isDuplicate =
+    form.batchNo.trim().length > 0 &&
+    knownBatchNos.includes(form.batchNo.trim().toLowerCase());
 
   const { data: medicineResults } = useQuery({
     queryKey: ["medicine-search-form", medicineSearch],
@@ -83,6 +113,7 @@ function AddStockForm({ onClose, onSuccess }: AddStockFormProps) {
     setError("");
     if (!selectedMedicine) { setError("Select a medicine first."); return; }
     if (!form.batchNo.trim()) { setError("Batch number is required."); return; }
+    if (isDuplicate) { setError(`Batch number "${form.batchNo.trim()}" already exists for this medicine.`); return; }
     if (!form.expiryDate) { setError("Expiry date is required."); return; }
     const qty = parseInt(form.quantity);
     if (!qty || qty < 1) { setError("Quantity must be at least 1."); return; }
@@ -163,8 +194,18 @@ function AddStockForm({ onClose, onSuccess }: AddStockFormProps) {
                 placeholder="e.g. B2024001"
                 value={form.batchNo}
                 onChange={(e) => setForm((f) => ({ ...f, batchNo: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary font-mono"
+                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 font-mono ${
+                  isDuplicate
+                    ? "border-red-400 focus:ring-red-200 bg-red-50"
+                    : "focus:ring-primary"
+                }`}
               />
+              {isDuplicate && (
+                <p className="text-xs text-red-600 flex items-center gap-1 mt-1">
+                  <AlertTriangle size={11} />
+                  This batch number already exists for the selected medicine.
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-gray-700">Expiry Date *</label>
@@ -235,14 +276,141 @@ function AddStockForm({ onClose, onSuccess }: AddStockFormProps) {
   );
 }
 
-interface Props {
-  medicineId?: string;
+interface EditBatchFormProps {
+  batch: Batch;
+  onClose: () => void;
+  onSuccess: () => void;
 }
 
-export function BatchList({ medicineId }: Props) {
+function EditBatchForm({ batch, onClose, onSuccess }: EditBatchFormProps) {
+  const [form, setForm] = useState({
+    batchNo: batch.batchNo,
+    expiryDate: batch.expiryDate.slice(0, 10),
+    costPrice: parseFloat(batch.costPrice).toFixed(2),
+    mrpAtEntry: parseFloat(batch.mrpAtEntry).toFixed(2),
+  });
+  const [error, setError] = useState("");
+
+  const mutation = useMutation({
+    mutationFn: (payload: object) => apiClient.patch(`/inventory/batches/${batch.id}`, payload) as any,
+    onSuccess: () => { onSuccess(); onClose(); },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message ?? err?.message ?? "Update failed";
+      setError(Array.isArray(msg) ? msg.join(", ") : String(msg));
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    if (!form.batchNo.trim()) { setError("Batch number is required."); return; }
+    if (!form.expiryDate) { setError("Expiry date is required."); return; }
+    const cost = parseFloat(form.costPrice);
+    if (isNaN(cost) || cost < 0) { setError("Valid cost price is required."); return; }
+    const mrp = parseFloat(form.mrpAtEntry);
+    if (isNaN(mrp) || mrp < 0) { setError("Valid MRP is required."); return; }
+
+    mutation.mutate({
+      batchNo: form.batchNo.trim(),
+      expiryDate: form.expiryDate,
+      costPrice: cost.toFixed(2),
+      mrpAtEntry: mrp.toFixed(2),
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b">
+          <div>
+            <h3 className="text-base font-semibold">Edit Batch</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">Updating batch for medicine ID: <span className="font-mono">{batch.medicineId.slice(0, 8)}…</span></p>
+          </div>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
+            <X size={18} />
+          </button>
+        </div>
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Batch Number *</label>
+              <input
+                type="text"
+                value={form.batchNo}
+                onChange={(e) => setForm((f) => ({ ...f, batchNo: e.target.value }))}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary font-mono"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Expiry Date *</label>
+              <input
+                type="date"
+                value={form.expiryDate}
+                onChange={(e) => setForm((f) => ({ ...f, expiryDate: e.target.value }))}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">Cost Price (₹) *</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.costPrice}
+                onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value }))}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium text-gray-700">MRP (₹) *</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                value={form.mrpAtEntry}
+                onChange={(e) => setForm((f) => ({ ...f, mrpAtEntry: e.target.value }))}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+            Quantity changes must be done via stock adjustment to maintain the audit trail.
+          </p>
+
+          {error && (
+            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+          )}
+
+          <div className="flex justify-end gap-3 pt-2">
+            <button type="button" onClick={onClose}
+              className="px-4 py-2 text-sm border rounded-lg hover:bg-muted transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={mutation.isPending}
+              className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50 transition-opacity">
+              {mutation.isPending ? "Saving..." : "Save Changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+interface Props {
+  medicineId?: string;
+  medicine?: Medicine;
+}
+
+export function BatchList({ medicineId, medicine }: Props) {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [addOpen, setAddOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<Batch | null>(null);
   const queryClient = useQueryClient();
 
   const params: Record<string, any> = { page, limit: 20 };
@@ -254,7 +422,10 @@ export function BatchList({ medicineId }: Props) {
     queryFn: () => apiClient.get("/inventory/batches", { params }) as any,
   });
 
-  const handleStockAdded = () => {
+  // All batch numbers currently loaded — used for instant duplicate detection in AddStockForm
+  const loadedBatchNos: string[] = ((data as any)?.data ?? []).map((b: Batch) => b.batchNo);
+
+  const handleRefresh = () => {
     queryClient.invalidateQueries({ queryKey: ["batches"] });
   };
 
@@ -301,6 +472,7 @@ export function BatchList({ medicineId }: Props) {
                   <th className="text-right px-4 py-3 font-medium">MRP</th>
                   <th className="text-center px-4 py-3 font-medium">Status</th>
                   <th className="text-center px-4 py-3 font-medium">Expiry Alert</th>
+                  <th className="text-center px-4 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
@@ -344,12 +516,22 @@ export function BatchList({ medicineId }: Props) {
                           {exp.text}
                         </span>
                       </td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => setEditTarget(b)}
+                          title="Edit batch"
+                          className="inline-flex items-center gap-1 px-2 py-1 text-xs text-primary border border-primary/20 rounded-md hover:bg-primary/5 transition-colors"
+                        >
+                          <Pencil size={11} />
+                          Edit
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
                 {(data as any).data?.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="text-center py-12 text-muted-foreground">
+                    <td colSpan={8} className="text-center py-12 text-muted-foreground">
                       No batches found. Use "Add Stock" to receive inventory.
                     </td>
                   </tr>
@@ -383,7 +565,20 @@ export function BatchList({ medicineId }: Props) {
       )}
 
       {addOpen && (
-        <AddStockForm onClose={() => setAddOpen(false)} onSuccess={handleStockAdded} />
+        <AddStockForm
+          onClose={() => setAddOpen(false)}
+          onSuccess={handleRefresh}
+          existingBatchNosForMedicine={medicineId ? loadedBatchNos : []}
+          lockedMedicine={medicineId && medicine ? medicine : undefined}
+        />
+      )}
+
+      {editTarget && (
+        <EditBatchForm
+          batch={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSuccess={handleRefresh}
+        />
       )}
     </div>
   );

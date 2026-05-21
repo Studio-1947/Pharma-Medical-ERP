@@ -39,6 +39,7 @@ export const medicines = pgTable(
     manufacturer: varchar("manufacturer", { length: 255 }),
     hsnCode: varchar("hsn_code", { length: 20 }),
     unit: varchar("unit", { length: 50 }).notNull().default("strip"),
+    stripSize: integer("strip_size").notNull().default(1),
     priceMrp: numeric("price_mrp", { precision: 12, scale: 2 }).notNull(),
     taxPercent: numeric("tax_percent", { precision: 5, scale: 2 })
       .notNull()
@@ -128,6 +129,10 @@ export const inventoryBatches = pgTable(
       t.expiryDate,
     ),
     statusIdx: index("batch_status_idx").on(t.status),
+    medicineBatchNoUniq: uniqueIndex("batch_medicine_batchno_uniq").on(
+      t.medicineId,
+      t.batchNo,
+    ),
   }),
 );
 

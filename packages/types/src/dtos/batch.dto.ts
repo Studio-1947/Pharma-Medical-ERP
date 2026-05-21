@@ -13,6 +13,13 @@ export const createBatchSchema = z.object({
   grnId: z.string().uuid().optional(),
 });
 
+export const updateBatchSchema = z.object({
+  batchNo: z.string().min(1).max(100).optional(),
+  expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD").optional(),
+  costPrice: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  mrpAtEntry: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+});
+
 export const updateBatchStatusSchema = z.object({
   status: z.enum(["active", "quarantine", "expired", "depleted", "recalled"]),
   notes: z.string().optional(),
@@ -32,6 +39,7 @@ export const queryBatchSchema = z.object({
 });
 
 export type CreateBatchDto = z.infer<typeof createBatchSchema>;
+export type UpdateBatchDto = z.infer<typeof updateBatchSchema>;
 export type UpdateBatchStatusDto = z.infer<typeof updateBatchStatusSchema>;
 export type AdjustBatchQuantityDto = z.infer<typeof adjustBatchQuantitySchema>;
 export type QueryBatchDto = z.infer<typeof queryBatchSchema>;

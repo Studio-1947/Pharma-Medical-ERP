@@ -101,7 +101,7 @@ export function PosTerminal() {
 
 
   const {
-    items, addItem, updateQty, removeItem, clear, totals,
+    items, addItem, updateQty, toggleUnit, removeItem, clear, totals,
     patientId,
     prescriptionId, setPrescriptionId,
     loyaltyPointsToRedeem, setLoyaltyPointsToRedeem,
@@ -118,18 +118,23 @@ export function PosTerminal() {
     if (!lastInvoice) return;
     const w = window.open("", "_blank", "width=794,height=1050");
     if (!w) return;
-    const itemRows = lastReceiptItems.map((item, i) => `
-      <tr>
-        <td>
-          <div class="medicine-name">${i + 1}. ${item.name}</div>
-          <div class="batch-label">Batch: ${item.batchNo}</div>
-        </td>
-        <td class="text-center">${item.quantity}</td>
-        <td class="text-right">₹${item.unitPrice.toFixed(2)}</td>
-        <td class="text-right">${item.discountPct > 0 ? item.discountPct + "%" : "—"}</td>
-        <td class="text-right">${item.taxPct > 0 ? item.taxPct + "%" : "—"}</td>
-        <td class="text-right"><b>₹${item.lineTotal.toFixed(2)}</b></td>
-      </tr>`).join("");
+    const itemRows = lastReceiptItems.map((item, i) => {
+      const isLoose = item.saleUnit === "loose";
+      const displayPrice = isLoose ? item.unitPrice / (item.stripSize || 1) : item.unitPrice;
+      const displayQty = isLoose ? `${item.quantity} Tab` : `${item.quantity} Strip`;
+      return `
+        <tr>
+          <td>
+            <div class="medicine-name">${i + 1}. ${item.name}</div>
+            <div class="batch-label">Batch: ${item.batchNo}</div>
+          </td>
+          <td class="text-center">${displayQty}</td>
+          <td class="text-right">₹${displayPrice.toFixed(2)}</td>
+          <td class="text-right">${item.discountPct > 0 ? item.discountPct + "%" : "—"}</td>
+          <td class="text-right">${item.taxPct > 0 ? item.taxPct + "%" : "—"}</td>
+          <td class="text-right"><b>₹${item.lineTotal.toFixed(2)}</b></td>
+        </tr>`;
+    }).join("");
 
     const payRows = lastReceiptPayments.map(p => `
       <tr>
@@ -285,6 +290,7 @@ export function PosTerminal() {
                     medicineId: medicine.id, batchId: firstBatch.id,
                     name: medicine.name, sku: medicine.sku, batchNo: firstBatch.batchNo,
                     unitPrice: parseFloat(medicine.priceMrp),
+                    stripSize: medicine.stripSize ? parseInt(medicine.stripSize) : 1,
                     taxPct: parseFloat(medicine.taxPercent ?? "0"), discountPct: 0, quantity: 1,
                     scheduleClass: medicine.scheduleClass, requiresPrescription: medicine.requiresPrescription,
                   });
@@ -367,7 +373,7 @@ export function PosTerminal() {
       loyaltyPointsToRedeem,
       items: items.map((i) => ({
         medicineId: i.medicineId,
-        quantity: i.quantity,
+        quantity: i.saleUnit === "pack" ? i.quantity * (i.stripSize || 1) : i.quantity,
         discountPct: String(i.discountPct ?? "0"),
       })),
       discountAmount: "0",
@@ -588,6 +594,7 @@ export function PosTerminal() {
                         addItem({
                           medicineId: m.id, batchId: first.id, name: m.name, sku: m.sku,
                           batchNo: first.batchNo, unitPrice: parseFloat(m.priceMrp),
+                          stripSize: m.stripSize ? parseInt(m.stripSize) : 1,
                           taxPct: parseFloat(m.taxPercent ?? "0"), discountPct: 0, quantity: 1,
                           scheduleClass: m.scheduleClass, requiresPrescription: m.requiresPrescription,
                         });
@@ -651,7 +658,7 @@ export function PosTerminal() {
                     <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
                       <span>{item.batchNo}</span>
                       <span>·</span>
-                      <span>₹{item.unitPrice.toFixed(2)}</span>
+                      <span>₹{(item.saleUnit === "loose" ? item.unitPrice / (item.stripSize || 1) : item.unitPrice).toFixed(2)} / {item.saleUnit === "loose" ? "Tab" : "Strip"}</span>
                       {item.scheduleClass && CONTROLLED_CLASSES.includes(item.scheduleClass) && (
                         <span className="bg-red-50 text-red-600 text-[10px] font-bold px-1 rounded">{item.scheduleClass}</span>
                       )}
@@ -662,14 +669,24 @@ export function PosTerminal() {
                   </button>
                 </div>
                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-muted/30">
-                  <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-md">
-                    <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity - 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
-                      <Minus size={10} />
-                    </button>
-                    <span className="w-8 text-center text-xs font-semibold">{item.quantity}</span>
-                    <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity + 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
-                      <Plus size={10} />
-                    </button>
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-md">
+                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity - 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
+                        <Minus size={10} />
+                      </button>
+                      <span className="w-8 text-center text-xs font-semibold">{item.quantity}</span>
+                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity + 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
+                        <Plus size={10} />
+                      </button>
+                    </div>
+                    {item.stripSize > 1 && (
+                      <button
+                        onClick={() => toggleUnit(item.medicineId, item.batchId)}
+                        className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                      >
+                        {item.saleUnit === "pack" ? "Strips" : "Loose"}
+                      </button>
+                    )}
                   </div>
                   <span className="text-sm font-bold text-gray-900">₹{item.lineTotal.toFixed(2)}</span>
                 </div>
@@ -942,18 +959,23 @@ export function PosTerminal() {
                   <span className="col-span-2 text-right">Amount</span>
                 </div>
                 <div className="divide-y divide-dashed">
-                  {lastReceiptItems.map((item, idx) => (
-                    <div key={idx} className="grid grid-cols-12 text-xs py-1.5 gap-1 items-start">
-                      <div className="col-span-5">
-                        <p className="font-semibold text-gray-900 leading-tight">{item.name}</p>
-                        <p className="text-[10px] text-gray-400 font-mono">{item.batchNo}</p>
+                  {lastReceiptItems.map((item, idx) => {
+                    const isLoose = item.saleUnit === "loose";
+                    const displayPrice = isLoose ? item.unitPrice / (item.stripSize || 1) : item.unitPrice;
+                    const displayQty = isLoose ? `${item.quantity} Tab` : `${item.quantity} Strip`;
+                    return (
+                      <div key={idx} className="grid grid-cols-12 text-xs py-1.5 gap-1 items-start">
+                        <div className="col-span-5">
+                          <p className="font-semibold text-gray-900 leading-tight">{item.name}</p>
+                          <p className="text-[10px] text-gray-400 font-mono">{item.batchNo}</p>
+                        </div>
+                        <span className="col-span-1 text-center font-medium text-gray-700">{displayQty}</span>
+                        <span className="col-span-2 text-right text-gray-700">₹{displayPrice.toFixed(2)}</span>
+                        <span className="col-span-2 text-right text-gray-500">{item.discountPct > 0 ? `${item.discountPct}%` : "—"}</span>
+                        <span className="col-span-2 text-right font-semibold text-gray-900">₹{item.lineTotal.toFixed(2)}</span>
                       </div>
-                      <span className="col-span-1 text-center font-medium text-gray-700">{item.quantity}</span>
-                      <span className="col-span-2 text-right text-gray-700">₹{item.unitPrice.toFixed(2)}</span>
-                      <span className="col-span-2 text-right text-gray-500">{item.discountPct > 0 ? `${item.discountPct}%` : "—"}</span>
-                      <span className="col-span-2 text-right font-semibold text-gray-900">₹{item.lineTotal.toFixed(2)}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 

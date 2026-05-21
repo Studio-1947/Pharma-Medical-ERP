@@ -45,6 +45,7 @@ export class InventoryRepository {
           requiresPrescription: schema.medicines.requiresPrescription,
           isControlled: schema.medicines.isControlled,
           scheduleClass: schema.medicines.scheduleClass,
+          stripSize: schema.medicines.stripSize,
           isActive: schema.medicines.isActive,
           createdAt: schema.medicines.createdAt,
         })

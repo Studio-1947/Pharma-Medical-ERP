@@ -113,7 +113,6 @@ describe("BillingService (Compliance)", () => {
       };
 
       mockDrizzle.db.mockResults([
-        [{ code: "BR1", state: "West Bengal" }], // Branch
         [{                                     // Medicine
           id: "med-h",
           name: "Restricted Med",
@@ -135,7 +134,6 @@ describe("BillingService (Compliance)", () => {
         };
   
         mockDrizzle.db.mockResults([
-            [{ code: "BR1", state: "West Bengal" }], // Branch
             [{                                     // Medicine
               id: "med-h",
               name: "Restricted Med",
@@ -194,7 +192,6 @@ describe("BillingService (Compliance)", () => {
       };
 
       mockDrizzle.db.mockResults([
-        [{ code: "BR1", state: "West Bengal" }], // Branch
         [{                                     // Medicine
           id: "m1",
           scheduleClass: "OTC",

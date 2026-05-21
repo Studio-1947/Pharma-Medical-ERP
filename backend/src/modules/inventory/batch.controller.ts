@@ -16,6 +16,7 @@ import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
 import {
   createBatchSchema,
+  updateBatchSchema,
   updateBatchStatusSchema,
   adjustBatchQuantitySchema,
   queryBatchSchema,
@@ -61,6 +62,13 @@ export class BatchController {
   @ApiOperation({ summary: "Receive a new batch (logs purchase movement)" })
   create(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
     return this.service.create(createBatchSchema.parse(body), user.sub);
+  }
+
+  @Patch(":id")
+  @Roles("admin", "inventory_manager")
+  @ApiOperation({ summary: "Update batch details (batch number, expiry, cost, MRP)" })
+  update(@Param("id") id: string, @Body() body: unknown) {
+    return this.service.update(id, updateBatchSchema.parse(body));
   }
 
   @Patch(":id/status")

@@ -8,6 +8,7 @@ import { StockMovementRepository } from "./stock-movement.repository";
 import { InventoryRepository } from "./inventory.repository";
 import type {
   CreateBatchDto,
+  UpdateBatchDto,
   UpdateBatchStatusDto,
   AdjustBatchQuantityDto,
   QueryBatchDto,
@@ -58,6 +59,13 @@ export class BatchService {
     });
 
     return { data: batch, message: "Batch created" };
+  }
+
+  async update(id: string, dto: UpdateBatchDto) {
+    const existing = await this.batchRepo.findBatchById(id);
+    if (!existing) throw new NotFoundException(`Batch ${id} not found`);
+    const batch = await this.batchRepo.updateBatch(id, dto);
+    return { data: batch, message: "Batch updated" };
   }
 
   async updateStatus(id: string, dto: UpdateBatchStatusDto, userId?: string) {

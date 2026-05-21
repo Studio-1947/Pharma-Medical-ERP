@@ -9,6 +9,7 @@ export const createMedicineSchema = z.object({
   manufacturer: z.string().max(255).optional(),
   hsnCode: z.string().max(20).optional(),
   unit: z.string().max(50).default("strip"),
+  stripSize: z.number().int().min(1).default(1),
   priceMrp: z.string().regex(/^\d+(\.\d{1,2})?$/, "Must be a valid decimal"),
   taxPercent: z.string().regex(/^\d+(\.\d{1,2})?$/).default("0"),
   reorderLevel: z.number().int().min(0).default(10),

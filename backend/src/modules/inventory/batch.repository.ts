@@ -1,9 +1,10 @@
 import { Injectable, UnprocessableEntityException } from "@nestjs/common";
-import { and, asc, desc, eq, gt, gte, isNull, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 import type {
   CreateBatchDto,
+  UpdateBatchDto,
   QueryBatchDto,
   AdjustBatchQuantityDto,
 } from "@pharmerp/types";
@@ -74,7 +75,30 @@ export class BatchRepository {
     });
   }
 
+  async checkBatchNoExists(medicineId: string, batchNo: string, excludeId?: string): Promise<boolean> {
+    const conditions: any[] = [
+      eq(schema.inventoryBatches.medicineId, medicineId),
+      eq(schema.inventoryBatches.batchNo, batchNo),
+    ];
+    if (excludeId) {
+      conditions.push(ne(schema.inventoryBatches.id, excludeId));
+    }
+    const [row] = await this.db
+      .select({ id: schema.inventoryBatches.id })
+      .from(schema.inventoryBatches)
+      .where(and(...conditions))
+      .limit(1);
+    return !!row;
+  }
+
   async createBatch(data: CreateBatchDto & { resolvedLocationId?: string }) {
+    const duplicate = await this.checkBatchNoExists(data.medicineId, data.batchNo);
+    if (duplicate) {
+      throw new UnprocessableEntityException(
+        `Batch number "${data.batchNo}" already exists for this medicine. Use a unique batch number.`,
+      );
+    }
+
     const [batch] = await this.db
       .insert(schema.inventoryBatches)
       .values({
@@ -90,6 +114,34 @@ export class BatchRepository {
       })
       .returning();
     return batch!;
+  }
+
+  async updateBatch(id: string, data: UpdateBatchDto) {
+    if (data.batchNo !== undefined) {
+      const duplicate = await this.checkBatchNoExists(
+        (await this.findBatchById(id))!.medicineId,
+        data.batchNo,
+        id,
+      );
+      if (duplicate) {
+        throw new UnprocessableEntityException(
+          `Batch number "${data.batchNo}" already exists for this medicine.`,
+        );
+      }
+    }
+
+    const [updated] = await this.db
+      .update(schema.inventoryBatches)
+      .set({
+        ...(data.batchNo !== undefined && { batchNo: data.batchNo }),
+        ...(data.expiryDate !== undefined && { expiryDate: data.expiryDate }),
+        ...(data.costPrice !== undefined && { costPrice: data.costPrice }),
+        ...(data.mrpAtEntry !== undefined && { mrpAtEntry: data.mrpAtEntry }),
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.inventoryBatches.id, id))
+      .returning();
+    return updated!;
   }
 
   /**

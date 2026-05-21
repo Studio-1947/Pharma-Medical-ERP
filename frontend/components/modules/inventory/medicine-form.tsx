@@ -85,7 +85,10 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
   const onSubmit = (data: CreateMedicineDto) => mutation.mutate(data);
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
+    <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col flex-1 min-h-0">
+
+      {/* ── Scrollable body ──────────────────────────────────────────── */}
+      <div className="overflow-y-auto flex-1 min-h-0">
 
       {/* ── Section 1: Basic Information ─────────────────────────────── */}
       <Section icon={<Pill size={14} />} title="Basic Information">
@@ -145,7 +148,7 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
 
       {/* ── Section 2: Pricing & Tax ──────────────────────────────────── */}
       <Section icon={<DollarSign size={14} />} title="Pricing &amp; Tax">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
           <Field label="MRP (INR)" required error={errors.priceMrp?.message}>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium pointer-events-none">₹</span>
@@ -174,6 +177,21 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
                 <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
+          </Field>
+
+          <Field
+            label="Tablets / Units per Pack"
+            hint="How many individual units are in one pack (e.g. 10 tablets per strip)"
+            error={errors.stripSize?.message}
+          >
+            <input
+              {...register("stripSize", { valueAsNumber: true })}
+              type="number"
+              min="1"
+              step="1"
+              placeholder="e.g. 10"
+              className={inputCls(!!errors.stripSize)}
+            />
           </Field>
         </div>
       </Section>
@@ -246,6 +264,7 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
 
       {/* ── Section 5: Additional ────────────────────────────────────── */}
       <Section icon={<FileText size={14} />} title="Additional Information" last>
+
         <div className="space-y-4">
           <Field label="Storage Conditions" error={errors.storageConditions?.message}>
             <input
@@ -266,8 +285,10 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
         </div>
       </Section>
 
+      </div>{/* end scrollable body */}
+
       {/* ── Footer ───────────────────────────────────────────────────── */}
-      <div className="sticky bottom-0 bg-white border-t border-slate-100 px-6 py-4 flex items-center justify-between gap-3">
+      <div className="shrink-0 bg-white border-t border-slate-100 px-6 py-4 flex items-center justify-between gap-3">
         {errors.root ? (
           <div className="flex items-center gap-2 text-red-600 text-sm">
             <AlertCircle size={14} className="shrink-0" />
