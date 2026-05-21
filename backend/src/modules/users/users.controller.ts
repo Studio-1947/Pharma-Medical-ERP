@@ -26,9 +26,13 @@ export class UsersController {
 
   @Get()
   @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN)
-  @ApiOperation({ summary: "List all users" })
-  getAllUsers(@Query("search") search?: string) {
-    return this.usersService.getAllUsers(search);
+  @ApiOperation({ summary: "List all users (paginated)" })
+  getAllUsers(
+    @Query("search") search?: string,
+    @Query("page") page?: string,
+    @Query("limit") limit?: string,
+  ) {
+    return this.usersService.getAllUsers(search, page ? Number(page) : 1, limit ? Number(limit) : 20);
   }
 
   @Get(":id")

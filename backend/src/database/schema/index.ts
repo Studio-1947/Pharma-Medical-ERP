@@ -6,3 +6,4 @@ export * from "./prescriptions";
 export * from "./procurement";
 export * from "./hr";
 export * from "./distribution";
+export * from "./notifications";

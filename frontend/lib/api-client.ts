@@ -190,4 +190,9 @@ export const queryKeys = {
     list: (params: object) => ["employees", "list", params] as const,
     detail: (id: string) => ["employees", id] as const,
   },
+  notifications: {
+    all: () => ["notifications"] as const,
+    list: (params: object) => ["notifications", "list", params] as const,
+    unreadCount: () => ["notifications", "unread-count"] as const,
+  },
 };

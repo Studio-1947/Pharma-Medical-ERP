@@ -1,17 +1,43 @@
 "use client";
 
+import Link from "next/link";
+import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/auth.store";
-import { LogOut, User } from "lucide-react";
+import { apiClient, queryKeys } from "@/lib/api-client";
+import { LogOut, User, Bell } from "lucide-react";
 
 export function Header() {
   const { user, logout } = useAuthStore();
+
+  const { data: countData } = useQuery<any>({
+    queryKey: queryKeys.notifications.unreadCount(),
+    queryFn: () => apiClient.get("/notifications/unread-count"),
+    refetchInterval: 60_000,
+    retry: false,
+  });
+
+  const unread: number = countData?.count ?? 0;
 
   return (
     <header className="h-16 border-b flex items-center justify-between px-6 bg-card shrink-0">
       <div />
       <div className="flex items-center gap-3">
+        {/* Notification bell */}
+        <Link
+          href={"/notifications" as any}
+          className="relative p-2 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          title="Notifications"
+        >
+          <Bell size={16} />
+          {unread > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center leading-none">
+              {unread > 99 ? "99+" : unread}
+            </span>
+          )}
+        </Link>
+
         <span className="text-sm text-muted-foreground capitalize">
-          {user?.role?.replace("_", " ") ?? ""}
+          {user?.role?.replace(/_/g, " ") ?? ""}
         </span>
         <div className="flex items-center gap-2 bg-muted rounded-full px-3 py-1.5">
           <User size={14} />

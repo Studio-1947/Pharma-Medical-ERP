@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { eq, desc, ilike, or } from "drizzle-orm";
+import { eq, desc, ilike, or, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 import { UpdateUserDto } from "@pharmerp/types";
@@ -21,34 +21,47 @@ export class UsersRepository {
     return this.drizzle.db;
   }
 
-  async findAll(search?: string) {
-    const query = this.db
-      .select({
-        id: schema.users.id,
-        email: schema.users.email,
-        firstName: schema.users.firstName,
-        lastName: schema.users.lastName,
-        role: schema.users.role,
-        branchId: schema.users.branchId,
-        isActive: schema.users.isActive,
-        lastLoginAt: schema.users.lastLoginAt,
-        createdAt: schema.users.createdAt,
-        updatedAt: schema.users.updatedAt,
-      })
-      .from(schema.users)
-      .orderBy(desc(schema.users.createdAt));
+  async findAll(search?: string, page = 1, limit = 20) {
+    const cols = {
+      id: schema.users.id,
+      email: schema.users.email,
+      firstName: schema.users.firstName,
+      lastName: schema.users.lastName,
+      role: schema.users.role,
+      branchId: schema.users.branchId,
+      isActive: schema.users.isActive,
+      lastLoginAt: schema.users.lastLoginAt,
+      createdAt: schema.users.createdAt,
+      updatedAt: schema.users.updatedAt,
+    };
 
-    if (search) {
-      return query.where(
-        or(
+    const where = search
+      ? or(
           ilike(schema.users.email, `%${search}%`),
           ilike(schema.users.firstName, `%${search}%`),
           ilike(schema.users.lastName, `%${search}%`),
-        ),
-      );
-    }
+        )
+      : undefined;
 
-    return query;
+    const [data, [countRow]] = await Promise.all([
+      this.db
+        .select(cols)
+        .from(schema.users)
+        .where(where)
+        .orderBy(desc(schema.users.createdAt))
+        .limit(limit)
+        .offset((page - 1) * limit),
+      this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.users)
+        .where(where),
+    ]);
+
+    const total = countRow?.count ?? 0;
+    return {
+      data,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
   }
 
   async findById(id: string) {

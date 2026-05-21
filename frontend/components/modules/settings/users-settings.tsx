@@ -217,10 +217,19 @@ export function UsersSettings() {
 
   const params = { search, page, limit: 20 };
 
-  const { data, isLoading } = useQuery<ApiListResponse>({
+  const { data: rawData, isLoading } = useQuery<any>({
     queryKey: [...queryKeys.users.all(), params],
-    queryFn: () => apiClient.get("/users", { params }) as Promise<ApiListResponse>,
+    queryFn: () => apiClient.get("/users", { params }),
   });
+
+  // Normalise response regardless of whether the interceptor unwraps one or two levels
+  const users: User[] = Array.isArray(rawData)
+    ? rawData
+    : Array.isArray(rawData?.data)
+      ? rawData.data
+      : [];
+  const meta = rawData?.meta ?? rawData?.data?.meta ?? null;
+  const data = users.length > 0 || meta ? { data: users, meta } : null;
 
   const deactivateMutation = useMutation({
     mutationFn: (id: string) => apiClient.patch(`/users/${id}/deactivate`, {}),
@@ -263,9 +272,15 @@ export function UsersSettings() {
         </button>
       </div>
 
-      {isLoading && <div className="text-center py-16 text-muted-foreground">Loading...</div>}
+      {isLoading && (
+        <div className="space-y-2 py-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="h-12 rounded-lg bg-slate-100 animate-pulse" />
+          ))}
+        </div>
+      )}
 
-      {data && (
+      {!isLoading && (
         <>
           <div className="overflow-x-auto rounded-xl border">
             <table className="w-full text-sm">
@@ -279,7 +294,7 @@ export function UsersSettings() {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {data.data.map((u) => (
+                {users.map((u) => (
                   <tr key={u.id} className="hover:bg-muted/50 transition-colors">
                     <td className="px-4 py-3">
                       <div className="font-medium">
@@ -365,7 +380,7 @@ export function UsersSettings() {
                     </td>
                   </tr>
                 ))}
-                {data.data.length === 0 && (
+                {users.length === 0 && (
                   <tr>
                     <td colSpan={5} className="text-center py-16 text-muted-foreground">
                       No users found.
@@ -378,7 +393,7 @@ export function UsersSettings() {
 
           <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
             <span>
-              {data.meta.total} total &bull; page {data.meta.page} of {data.meta.totalPages}
+              {meta?.total ?? users.length} total &bull; page {meta?.page ?? page} of {meta?.totalPages ?? 1}
             </span>
             <div className="flex gap-2">
               <button
@@ -389,7 +404,7 @@ export function UsersSettings() {
                 Prev
               </button>
               <button
-                disabled={page >= data.meta.totalPages}
+                disabled={page >= (meta?.totalPages ?? 1)}
                 onClick={() => setPage((p) => p + 1)}
                 className="px-3 py-1 border rounded-lg disabled:opacity-40 hover:bg-muted"
               >

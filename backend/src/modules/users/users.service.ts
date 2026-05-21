@@ -21,8 +21,8 @@ export interface InviteUserDto {
 export class UsersService {
   constructor(private readonly repo: UsersRepository) {}
 
-  async getAllUsers(search?: string) {
-    return this.repo.findAll(search);
+  async getAllUsers(search?: string, page = 1, limit = 20) {
+    return this.repo.findAll(search, page, limit);
   }
 
   async getUserById(id: string) {
@@ -40,7 +40,8 @@ export class UsersService {
       throw new BadRequestException(`Invalid role: ${dto.role}`);
     }
 
-    const passwordHash = await argon2.hash(dto.temporaryPassword, {
+    const rawPassword = (dto as any).password ?? dto.temporaryPassword;
+    const passwordHash = await argon2.hash(rawPassword, {
       type: argon2.argon2id,
       timeCost: 2,
       memoryCost: 65536,

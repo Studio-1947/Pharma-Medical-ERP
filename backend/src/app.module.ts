@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
-import { APP_FILTER, APP_INTERCEPTOR } from "@nestjs/core";
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
+import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { BullModule } from "@nestjs/bull";
 import { DrizzleModule } from "./database/drizzle.module";
 import { AuthModule } from "./modules/auth/auth.module";
@@ -14,6 +15,7 @@ import { HrModule } from "./modules/hr/hr.module";
 import { DistributionModule } from "./modules/distribution/distribution.module";
 import { ReportsModule } from "./modules/reports/reports.module";
 import { JobsModule } from "./modules/jobs/jobs.module";
+import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { S3Module } from "./common/s3/s3.module";
 import { GlobalExceptionFilter } from "./common/filters/global-exception.filter";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
@@ -21,6 +23,8 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: ".env" }),
+
+    ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
 
     // Redis / BullMQ
     BullModule.forRootAsync({
@@ -45,11 +49,13 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
     DistributionModule,
     ReportsModule,
     JobsModule,
+    NotificationsModule,
     S3Module,
   ],
   providers: [
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
+    { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
 export class AppModule {}
