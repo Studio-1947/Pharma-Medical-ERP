@@ -179,7 +179,7 @@ export function PosTerminal() {
   .text-green { color:#16a34a; }
 </style>
 </head><body>
-  <h1>MedERP Pharmacy</h1>
+  <h1>Radha Madhav Medical Hall</h1>
   <p class="subtitle">Tax Invoice / Bill of Supply</p>
   <hr class="divider-solid"/>
 
@@ -240,7 +240,7 @@ export function PosTerminal() {
   <table class="totals-table">${payRows}</table>
 
   <div class="footer">
-    <p><b>Thank you for choosing MedERP Pharmacy</b></p>
+    <p><b>Thank you for choosing Radha Madhav Medical Hall</b></p>
     <p>Goods once sold will not be taken back without a valid reason.</p>
     <p>For queries, please contact your pharmacist.</p>
   </div>
@@ -943,7 +943,7 @@ export function PosTerminal() {
 
               {/* Store header */}
               <div className="text-center space-y-0.5">
-                <h2 className="text-lg font-black tracking-tight text-gray-900 uppercase">MedERP Pharmacy</h2>
+                <h2 className="text-lg font-black tracking-tight text-gray-900 uppercase">Radha Madhav Medical Hall</h2>
                 <p className="text-xs text-gray-500">Tax Invoice / Bill of Supply</p>
               </div>
 
@@ -1050,7 +1050,7 @@ export function PosTerminal() {
 
               {/* Footer */}
               <div className="text-center pt-2">
-                <p className="text-[10px] text-gray-400">Thank you for choosing MedERP Pharmacy</p>
+                <p className="text-[10px] text-gray-400">Thank you for choosing Radha Madhav Medical Hall</p>
                 <p className="text-[10px] text-gray-300 mt-0.5">Goods once sold will not be taken back without valid reason</p>
               </div>
             </div>

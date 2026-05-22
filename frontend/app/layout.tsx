@@ -6,8 +6,8 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "PharmERP",
-  description: "Medical Pharmacy ERP System",
+  title: "Radha Madhav Medical Hall",
+  description: "Radha Madhav Medical Hall - Pharmacy Management System",
 };
 
 export default function RootLayout({

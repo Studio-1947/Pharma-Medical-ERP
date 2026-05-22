@@ -40,7 +40,7 @@ export default function LoginPage() {
             <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center font-bold text-lg">
               Rx
             </div>
-            <span className="text-2xl font-bold tracking-tight">PharmERP</span>
+            <span className="text-2xl font-bold tracking-tight">Radha Madhav Medical Hall</span>
           </div>
           <p className="text-emerald-200 text-sm">
             Pharmacy Management System
@@ -84,7 +84,7 @@ export default function LoginPage() {
               Rx
             </div>
             <span className="text-xl font-bold text-emerald-800 dark:text-emerald-400">
-              PharmERP
+              Radha Madhav Medical Hall
             </span>
           </div>
 
