@@ -66,7 +66,7 @@ function downloadSampleCsv() {
 function parseCsv(text: string): Record<string, string>[] {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
-  const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+  const headers = lines[0]!.split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
   return lines.slice(1).map((line) => {
     // Handle quoted fields with commas inside
     const vals: string[] = [];
@@ -158,7 +158,7 @@ export function BulkImportModal({ open, onClose }: Props) {
         setParseError("File is empty or has no data rows.");
         return;
       }
-      if (!("name" in parsed[0]) || !("sku" in parsed[0])) {
+      if (!("name" in parsed[0]!) || !("sku" in parsed[0]!)) {
         setParseError("Missing required columns. Download the sample template to see the correct format.");
         return;
       }

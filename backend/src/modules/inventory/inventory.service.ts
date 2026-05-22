@@ -45,6 +45,7 @@ export class InventoryService {
     for (let i = 0; i < rawRows.length; i++) {
       const raw = rawRows[i];
       const rowNum = i + 2; // 1-indexed + header row
+      if (!raw) continue;
       const sku = (raw.sku ?? "").trim();
 
       if (!sku) { errors.push({ row: rowNum, sku: "", reason: "SKU is required" }); continue; }
