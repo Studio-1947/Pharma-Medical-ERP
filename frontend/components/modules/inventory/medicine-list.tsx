@@ -2,12 +2,13 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Search, Barcode, Pill, Trash2 } from "lucide-react";
+import { Plus, Search, Barcode, Pill, Trash2, Upload } from "lucide-react";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { MedicineForm } from "./medicine-form";
+import { BulkImportModal } from "./bulk-import-modal";
 
 interface Medicine {
   id: string;
@@ -36,6 +37,7 @@ export function MedicineList() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Medicine | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -77,6 +79,13 @@ export function MedicineList() {
             className="w-full border rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
+        <button
+          onClick={() => setImportOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors text-slate-700"
+        >
+          <Upload size={16} />
+          Import CSV
+        </button>
         <button
           onClick={() => setCreateOpen(true)}
           className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
@@ -228,6 +237,9 @@ export function MedicineList() {
           </div>
         </>
       )}
+
+      {/* Bulk import modal */}
+      <BulkImportModal open={importOpen} onClose={() => setImportOpen(false)} />
 
       {/* Create modal */}
       <Modal

@@ -91,6 +91,14 @@ export class InventoryController {
       .send(png);
   }
 
+  @Post("bulk-import")
+  @Roles("admin", "inventory_manager")
+  @ApiOperation({ summary: "Bulk-import medicines from CSV rows — deduplicates by SKU" })
+  bulkImport(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
+    const { rows } = body as { rows: Record<string, string>[] };
+    return this.service.bulkImport(rows, user.sub);
+  }
+
   @Post()
   @Roles("admin", "inventory_manager")
   @ApiOperation({ summary: "Create a new medicine" })

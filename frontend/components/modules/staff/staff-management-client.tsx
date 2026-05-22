@@ -2,15 +2,18 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Search, Download, Shield, CheckCircle2, XCircle, Edit2, Trash2, X } from "lucide-react";
+import {
+  UserPlus, Search, Download, Shield, CheckCircle2, XCircle,
+  Edit2, Trash2, X, User, Briefcase, Loader2, AlertCircle, CalendarDays,
+} from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
 import { StaffForm } from "@/components/modules/staff/staff-form";
+import { StaffLeaveModal } from "@/components/modules/staff/staff-leave-modal";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { UserDto, UserRole } from "@pharmerp/types";
 
-// Role display config
 const ROLE_LABEL: Record<string, string> = {
   admin: "Admin",
   super_admin: "Super Admin",
@@ -38,7 +41,10 @@ const ROLE_OPTIONS = [
   ...Object.entries(ROLE_LABEL).map(([v, l]) => ({ value: v, label: l })),
 ];
 
-// CSV export helper
+const EDIT_ROLE_OPTIONS = Object.entries(ROLE_LABEL)
+  .filter(([v]) => v !== "super_admin")
+  .map(([v, l]) => ({ value: v, label: l }));
+
 function exportToCsv(users: UserDto[]) {
   const header = ["Name", "Email", "Role", "Status", "Joined"];
   const rows = users.map((u) => [
@@ -60,13 +66,17 @@ function exportToCsv(users: UserDto[]) {
 }
 
 export function StaffManagementClient() {
-  const { success: toastSuccess } = useToast();
+  const { success: toastSuccess, error: toastError } = useToast();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [confirmDeactivateId, setConfirmDeactivateId] = useState<string | null>(null);
   const [roleFilter, setRoleFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState<"" | "active" | "inactive">("");
   const [showFilters, setShowFilters] = useState(false);
+
+  const [editingUser, setEditingUser] = useState<UserDto | null>(null);
+  const [editForm, setEditForm] = useState({ firstName: "", lastName: "", role: "", isActive: true });
+  const [leaveUser, setLeaveUser] = useState<UserDto | null>(null);
 
   const queryClient = useQueryClient();
 
@@ -79,6 +89,19 @@ export function StaffManagementClient() {
     Array.isArray(rawUsers) ? rawUsers : (rawUsers as any)?.data ?? []
   ) as UserDto[];
 
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) =>
+      apiClient.patch(`/users/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.users.all() });
+      toastSuccess("Staff updated", "The account details have been saved.");
+      setEditingUser(null);
+    },
+    onError: (err: any) => {
+      toastError("Update failed", err?.response?.data?.message ?? "Could not save changes.");
+    },
+  });
+
   const deactivateMutation = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/users/${id}`),
     onSuccess: () => {
@@ -86,9 +109,22 @@ export function StaffManagementClient() {
       toastSuccess("Account deactivated", "The user has lost system access.");
       setConfirmDeactivateId(null);
     },
+    onError: () => {
+      toastError("Failed", "Could not deactivate this account.");
+      setConfirmDeactivateId(null);
+    },
   });
 
-  // Client-side filtering
+  function openEdit(user: UserDto) {
+    setEditingUser(user);
+    setEditForm({
+      firstName: user.firstName ?? "",
+      lastName: user.lastName ?? "",
+      role: user.role ?? "",
+      isActive: user.isActive ?? true,
+    });
+  }
+
   const filtered = users.filter((u) => {
     const name = `${u.firstName ?? ""} ${u.lastName ?? ""} ${u.email ?? ""}`.toLowerCase();
     if (search && !name.includes(search.toLowerCase())) return false;
@@ -105,9 +141,9 @@ export function StaffManagementClient() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Staff Management</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Staff Accounts</h1>
           <p className="text-muted-foreground mt-1 text-sm">
-            Manage staff accounts, roles, and access.
+            Manage system login accounts, roles, and access permissions.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -166,9 +202,7 @@ export function StaffManagementClient() {
               className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
             >
               {ROLE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
           </div>
@@ -233,11 +267,7 @@ export function StaffManagementClient() {
                       </div>
                     </td>
                     <td className="px-6 py-4">
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${
-                          ROLE_COLOR[user.role ?? ""] ?? "bg-slate-100 text-slate-600"
-                        }`}
-                      >
+                      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${ROLE_COLOR[user.role ?? ""] ?? "bg-slate-100 text-slate-600"}`}>
                         <Shield className="w-2.5 h-2.5" />
                         {ROLE_LABEL[user.role ?? ""] ?? user.role ?? "staff"}
                       </span>
@@ -254,17 +284,23 @@ export function StaffManagementClient() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-muted-foreground text-sm">
-                      {user.createdAt
-                        ? format(new Date(user.createdAt), "MMM d, yyyy")
-                        : "--"}
+                      {user.createdAt ? format(new Date(user.createdAt), "MMM d, yyyy") : "--"}
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex justify-end gap-1">
                         <button
-                          title="Edit (coming soon)"
-                          className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-primary"
+                          title="Edit"
+                          onClick={() => openEdit(user)}
+                          className="p-2 hover:bg-blue-50 rounded-lg transition-colors text-muted-foreground hover:text-blue-600"
                         >
                           <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          title="Leave management"
+                          onClick={() => setLeaveUser(user)}
+                          className="p-2 hover:bg-violet-50 rounded-lg transition-colors text-muted-foreground hover:text-violet-600"
+                        >
+                          <CalendarDays className="w-4 h-4" />
                         </button>
                         {confirmDeactivateId === user.id ? (
                           <span className="flex items-center gap-1">
@@ -308,9 +344,138 @@ export function StaffManagementClient() {
         )}
       </div>
 
+      {/* Leave management modal */}
+      {leaveUser && (
+        <StaffLeaveModal
+          userId={leaveUser.id}
+          userName={`${leaveUser.firstName ?? ""} ${leaveUser.lastName ?? ""}`.trim() || leaveUser.email}
+          open={!!leaveUser}
+          onClose={() => setLeaveUser(null)}
+        />
+      )}
+
       {/* Add staff modal */}
       <Modal title="Add New Staff Member" open={open} onClose={() => setOpen(false)} size="md">
         <StaffForm onSuccess={() => setOpen(false)} onCancel={() => setOpen(false)} />
+      </Modal>
+
+      {/* Edit staff modal */}
+      <Modal
+        title="Edit Staff Account"
+        open={!!editingUser}
+        onClose={() => setEditingUser(null)}
+        size="md"
+      >
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!editingUser) return;
+            updateMutation.mutate({ id: editingUser.id, data: editForm });
+          }}
+          className="space-y-4"
+        >
+          {/* Name row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                First Name
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  required
+                  value={editForm.firstName}
+                  onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
+                  className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-white transition-all"
+                  placeholder="John"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                Last Name
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <input
+                  type="text"
+                  required
+                  value={editForm.lastName}
+                  onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
+                  className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-white transition-all"
+                  placeholder="Doe"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Role + Status row */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                Role
+              </label>
+              <div className="relative">
+                <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
+                <select
+                  required
+                  value={editForm.role}
+                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+                  className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-white appearance-none transition-all"
+                >
+                  <option value="">Select role...</option>
+                  {EDIT_ROLE_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                Account Status
+              </label>
+              <select
+                value={editForm.isActive ? "active" : "inactive"}
+                onChange={(e) => setEditForm({ ...editForm, isActive: e.target.value === "active" })}
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-white transition-all"
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Read-only email hint */}
+          {editingUser?.email && (
+            <p className="text-xs text-slate-400 flex items-center gap-1.5">
+              <AlertCircle className="w-3 h-3" />
+              Email cannot be changed: <span className="font-mono">{editingUser.email}</span>
+            </p>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2.5 pt-2 border-t border-slate-100">
+            <button
+              type="button"
+              onClick={() => setEditingUser(null)}
+              className="flex-1 px-4 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={updateMutation.isPending}
+              className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-2 rounded-lg font-semibold text-sm hover:bg-blue-700 disabled:opacity-60 transition-colors shadow-sm"
+            >
+              {updateMutation.isPending ? (
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...</>
+              ) : (
+                "Save Changes"
+              )}
+            </button>
+          </div>
+        </form>
       </Modal>
     </div>
   );

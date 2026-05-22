@@ -167,6 +167,26 @@ export class InventoryRepository {
     return { data: this.extractRows(result) };
   }
 
+  /** Fetch existing SKUs from a candidate set — used for bulk-import dedup */
+  async findSkuSet(skus: string[]): Promise<Set<string>> {
+    if (skus.length === 0) return new Set();
+    const rows = await this.db
+      .select({ sku: schema.medicines.sku })
+      .from(schema.medicines)
+      .where(and(isNull(schema.medicines.deletedAt)));
+    const existing = new Set(rows.map((r) => r.sku));
+    return new Set(skus.filter((s) => existing.has(s)));
+  }
+
+  async bulkCreateMedicines(
+    rows: CreateMedicineDto[],
+    createdBy?: string,
+  ): Promise<number> {
+    if (rows.length === 0) return 0;
+    await this.db.insert(schema.medicines).values(rows as any[]);
+    return rows.length;
+  }
+
   async getLowStockMedicines() {
     const result = await this.db.execute(sql`
       SELECT m.id, m.name, m.sku, m.reorder_level,
