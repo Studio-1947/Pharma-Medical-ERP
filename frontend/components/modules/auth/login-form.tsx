@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -7,12 +8,14 @@ import { loginSchema, type LoginDto } from "@pharmerp/types";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import Link from "next/link";
+import { Eye, EyeOff, Mail, Lock, CheckCircle2, AlertCircle } from "lucide-react";
 
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isRegistered = searchParams.get("registered") === "true";
   const { setTokens, setUser } = useAuthStore();
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -38,7 +41,7 @@ export function LoginForm() {
       const errorData = err?.response?.data;
       setError("root", {
         message: errorData?.message ?? "Login failed. Check credentials.",
-        // @ts-ignore - passing extra fields for UI display
+        // @ts-ignore
         originalError: errorData?.originalError,
         stack: errorData?.stack,
       });
@@ -46,73 +49,88 @@ export function LoginForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
       {isRegistered && (
-        <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg text-sm mb-4 animate-in fade-in slide-in-from-top-1">
-          Registration successful! Please sign in with your credentials.
+        <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl text-sm">
+          <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+          <span>Account created successfully. Sign in to continue.</span>
         </div>
       )}
-      <div>
-        <label className="block text-sm font-medium mb-1">Email</label>
-        <input
-          type="email"
-          {...register("email")}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          placeholder="admin@pharmerp.com"
-        />
+
+      <div className="space-y-1.5">
+        <label className="block text-sm font-medium text-gray-700 dark:text-foreground">
+          Email address
+        </label>
+        <div className="relative">
+          <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type="email"
+            {...register("email")}
+            className="w-full border border-gray-200 dark:border-border bg-white dark:bg-background rounded-xl pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all placeholder:text-gray-400"
+            placeholder="you@example.com"
+            autoComplete="email"
+          />
+        </div>
         {errors.email && (
           <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>
         )}
       </div>
 
-      <div>
-        <label className="block text-sm font-medium mb-1">Password</label>
-        <input
-          type="password"
-          {...register("password")}
-          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          placeholder="Min 8 characters"
-        />
+      <div className="space-y-1.5">
+        <label className="block text-sm font-medium text-gray-700 dark:text-foreground">
+          Password
+        </label>
+        <div className="relative">
+          <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            type={showPassword ? "text" : "password"}
+            {...register("password")}
+            className="w-full border border-gray-200 dark:border-border bg-white dark:bg-background rounded-xl pl-9 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all placeholder:text-gray-400"
+            placeholder="Enter your password"
+            autoComplete="current-password"
+          />
+          <button
+            type="button"
+            onClick={() => setShowPassword((v) => !v)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+            tabIndex={-1}
+          >
+            {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+          </button>
+        </div>
         {errors.password && (
           <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>
         )}
       </div>
 
       {errors.root && (
-        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-2 rounded-lg text-sm space-y-2">
-          <p className="font-semibold">{errors.root.message}</p>
-          {(errors.root as any).originalError && (
-            <p className="text-xs opacity-80 bg-destructive/5 p-2 rounded border border-destructive/10 font-mono">
-              <strong>Error:</strong> {(errors.root as any).originalError}
-            </p>
-          )}
-          {(errors.root as any).stack && process.env.NODE_ENV === "development" && (
-            <details className="text-[10px] opacity-70">
-              <summary className="cursor-pointer hover:underline">View Stack Trace</summary>
-              <pre className="mt-2 p-2 bg-black/5 rounded overflow-x-auto whitespace-pre-wrap">
-                {(errors.root as any).stack}
-              </pre>
-            </details>
-          )}
+        <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
+          <AlertCircle size={16} className="mt-0.5 shrink-0" />
+          <div className="space-y-1">
+            <p className="font-medium">{errors.root.message}</p>
+            {(errors.root as any).originalError && (
+              <p className="text-xs opacity-80 font-mono">
+                {(errors.root as any).originalError}
+              </p>
+            )}
+          </div>
         </div>
       )}
 
       <button
         type="submit"
         disabled={isSubmitting}
-        className="w-full bg-primary text-primary-foreground py-2 rounded-lg font-medium text-sm hover:opacity-90 disabled:opacity-60 transition-opacity"
+        className="w-full bg-emerald-700 hover:bg-emerald-800 text-white py-2.5 rounded-xl font-semibold text-sm disabled:opacity-60 transition-colors mt-2"
       >
         {isSubmitting ? "Signing in..." : "Sign in"}
       </button>
 
-      <div className="text-center mt-4">
-        <p className="text-sm text-muted-foreground">
-          Don't have an account?{" "}
-          <Link href="/signup" className="text-primary hover:underline font-medium">
-            Sign up
-          </Link>
-        </p>
-      </div>
+      <p className="text-center text-sm text-gray-500 dark:text-muted-foreground">
+        Don't have an account?{" "}
+        <Link href="/signup" className="text-emerald-700 dark:text-emerald-400 hover:underline font-semibold">
+          Create one
+        </Link>
+      </p>
     </form>
   );
 }
