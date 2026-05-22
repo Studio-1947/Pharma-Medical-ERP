@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -233,7 +233,7 @@ export function EmployeesView() {
                       <div className="flex items-center justify-end gap-1">
                         <button
                           onClick={() => openEdit(emp)}
-                          className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors rounded-lg"
+                          className="p-2 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors rounded-lg"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
@@ -375,7 +375,7 @@ export function EmployeesView() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-sm"
                 >
                   {createMutation.isPending || updateMutation.isPending ? "Saving..." : editingEmp ? "Update" : "Create"}
                 </button>

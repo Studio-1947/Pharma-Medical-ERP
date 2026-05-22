@@ -115,7 +115,7 @@ export function StaffList() {
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-1.5">
-                    <Shield className="w-3.5 h-3.5 text-blue-500" />
+                    <Shield className="w-3.5 h-3.5 text-emerald-500" />
                     <span className="capitalize">{(user.role ?? "staff").toString().replace('_', ' ')}</span>
                   </div>
                 </td>

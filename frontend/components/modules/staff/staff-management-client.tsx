@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -26,11 +26,11 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 const ROLE_COLOR: Record<string, string> = {
-  admin: "bg-purple-100 text-purple-700",
-  super_admin: "bg-purple-100 text-purple-700",
+  admin: "bg-teal-100 text-teal-700",
+  super_admin: "bg-teal-100 text-teal-700",
   pharmacist: "bg-green-100 text-green-700",
   cashier: "bg-amber-100 text-amber-700",
-  inventory_manager: "bg-blue-100 text-blue-700",
+  inventory_manager: "bg-emerald-100 text-emerald-700",
   distribution_staff: "bg-cyan-100 text-cyan-700",
   hr_manager: "bg-rose-100 text-rose-700",
   reports_analyst: "bg-slate-100 text-slate-700",
@@ -291,7 +291,7 @@ export function StaffManagementClient() {
                         <button
                           title="Edit"
                           onClick={() => openEdit(user)}
-                          className="p-2 hover:bg-blue-50 rounded-lg transition-colors text-muted-foreground hover:text-blue-600"
+                          className="p-2 hover:bg-emerald-50 rounded-lg transition-colors text-muted-foreground hover:text-emerald-600"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
@@ -387,7 +387,7 @@ export function StaffManagementClient() {
                   required
                   value={editForm.firstName}
                   onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })}
-                  className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-white transition-all"
+                  className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 bg-white transition-all"
                   placeholder="John"
                 />
               </div>
@@ -403,7 +403,7 @@ export function StaffManagementClient() {
                   required
                   value={editForm.lastName}
                   onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })}
-                  className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-white transition-all"
+                  className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 bg-white transition-all"
                   placeholder="Doe"
                 />
               </div>
@@ -422,7 +422,7 @@ export function StaffManagementClient() {
                   required
                   value={editForm.role}
                   onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
-                  className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-white appearance-none transition-all"
+                  className="w-full border border-slate-200 rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 bg-white appearance-none transition-all"
                 >
                   <option value="">Select role...</option>
                   {EDIT_ROLE_OPTIONS.map((o) => (
@@ -438,7 +438,7 @@ export function StaffManagementClient() {
               <select
                 value={editForm.isActive ? "active" : "inactive"}
                 onChange={(e) => setEditForm({ ...editForm, isActive: e.target.value === "active" })}
-                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-white transition-all"
+                className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 bg-white transition-all"
               >
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
@@ -466,7 +466,7 @@ export function StaffManagementClient() {
             <button
               type="submit"
               disabled={updateMutation.isPending}
-              className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-2 rounded-lg font-semibold text-sm hover:bg-blue-700 disabled:opacity-60 transition-colors shadow-sm"
+              className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white py-2 rounded-lg font-semibold text-sm hover:bg-emerald-700 disabled:opacity-60 transition-colors shadow-sm"
             >
               {updateMutation.isPending ? (
                 <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Saving...</>

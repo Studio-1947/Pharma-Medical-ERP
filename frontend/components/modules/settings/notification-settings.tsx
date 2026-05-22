@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -35,7 +35,7 @@ const DEFAULT_SETTINGS: NotifToggle[] = [
     id: "prescription_pending",
     label: "Pending Prescription",
     description: "Notify pharmacists of unverified prescriptions",
-    icon: <Bell size={16} className="text-blue-500" />,
+    icon: <Bell size={16} className="text-emerald-500" />,
     email: false,
     sms: false,
   },
@@ -56,8 +56,8 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
       role="switch"
       aria-checked={checked}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${
-        checked ? "bg-blue-600" : "bg-slate-200"
+      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1 ${
+        checked ? "bg-emerald-600" : "bg-slate-200"
       }`}
     >
       <span
@@ -155,7 +155,7 @@ export function NotificationSettings() {
         <button
           onClick={handleSave}
           disabled={mutation.isPending}
-          className="px-5 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+          className="px-5 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
         >
           {mutation.isPending ? "Saving..." : "Save Preferences"}
         </button>

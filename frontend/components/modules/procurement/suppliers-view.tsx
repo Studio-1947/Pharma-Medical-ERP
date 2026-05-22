@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -176,12 +176,12 @@ export function SuppliersView() {
           {suppliers.map((sup) => (
             <div
               key={sup.id}
-              className="bg-card border hover:shadow-md hover:border-blue-200 transition-all duration-200 p-5 rounded-xl flex flex-col justify-between h-full bg-white backdrop-blur-md bg-opacity-70"
+              className="bg-card border hover:shadow-md hover:border-emerald-200 transition-all duration-200 p-5 rounded-xl flex flex-col justify-between h-full bg-white backdrop-blur-md bg-opacity-70"
             >
               <div className="space-y-3">
                 <div className="flex justify-between items-start">
                   <div>
-                    <span className="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-100">
+                    <span className="text-xs font-mono bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full border border-emerald-100">
                       {sup.code}
                     </span>
                     <h3 className="text-base font-bold text-slate-800 mt-2">{sup.name}</h3>
@@ -220,7 +220,7 @@ export function SuppliersView() {
               <div className="flex items-center justify-end gap-1 pt-4 border-t mt-4">
                 <button
                   onClick={() => openEdit(sup)}
-                  className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors rounded-lg"
+                  className="p-2 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors rounded-lg"
                 >
                   <Edit2 className="w-4 h-4" />
                 </button>
@@ -272,7 +272,7 @@ export function SuppliersView() {
                     required
                     value={form.name}
                     onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   />
                 </div>
                 <div className="space-y-1">
@@ -283,7 +283,7 @@ export function SuppliersView() {
                     placeholder="SUP-001"
                     value={form.code}
                     onChange={(e) => setForm({ ...form, code: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/30 font-mono"
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30 font-mono"
                   />
                 </div>
               </div>
@@ -296,7 +296,7 @@ export function SuppliersView() {
                     required
                     value={form.phone}
                     onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   />
                 </div>
                 <div className="space-y-1">
@@ -305,7 +305,7 @@ export function SuppliersView() {
                     type="email"
                     value={form.email}
                     onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   />
                 </div>
               </div>
@@ -317,7 +317,7 @@ export function SuppliersView() {
                     type="text"
                     value={form.contactPerson}
                     onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   />
                 </div>
                 <div className="space-y-1">
@@ -325,7 +325,7 @@ export function SuppliersView() {
                   <select
                     value={form.rating}
                     onChange={(e) => setForm({ ...form, rating: Number(e.target.value) })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   >
                     {[1, 2, 3, 4, 5].map((r) => (
                       <option key={r} value={r}>
@@ -343,7 +343,7 @@ export function SuppliersView() {
                     type="text"
                     value={form.gstNo}
                     onChange={(e) => setForm({ ...form, gstNo: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   />
                 </div>
                 <div className="space-y-1">
@@ -352,7 +352,7 @@ export function SuppliersView() {
                     type="text"
                     value={form.panNo}
                     onChange={(e) => setForm({ ...form, panNo: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   />
                 </div>
               </div>
@@ -362,7 +362,7 @@ export function SuppliersView() {
                 <textarea
                   value={form.address}
                   onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   rows={2}
                 />
               </div>
@@ -377,7 +377,7 @@ export function SuppliersView() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-sm"
                 >
                   {createMutation.isPending || updateMutation.isPending ? "Saving..." : editingSupplier ? "Update" : "Create"}
                 </button>

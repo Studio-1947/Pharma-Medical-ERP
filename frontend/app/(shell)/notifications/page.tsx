@@ -31,9 +31,9 @@ const TYPE_META: Record<
   low_stock: { icon: <Package size={16} />, color: "text-amber-600 bg-amber-50" },
   near_expiry: { icon: <Clock size={16} />, color: "text-orange-600 bg-orange-50" },
   expired: { icon: <AlertTriangle size={16} />, color: "text-red-600 bg-red-50" },
-  reorder: { icon: <Package size={16} />, color: "text-blue-600 bg-blue-50" },
+  reorder: { icon: <Package size={16} />, color: "text-emerald-600 bg-emerald-50" },
   invoice: { icon: <FileText size={16} />, color: "text-green-600 bg-green-50" },
-  prescription: { icon: <FileText size={16} />, color: "text-purple-600 bg-purple-50" },
+  prescription: { icon: <FileText size={16} />, color: "text-teal-600 bg-teal-50" },
   system: { icon: <Bell size={16} />, color: "text-slate-600 bg-slate-50" },
 };
 
@@ -84,7 +84,7 @@ export default function NotificationsPage() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-800 flex items-center gap-2">
-            <Bell className="w-6 h-6 text-blue-600" />
+            <Bell className="w-6 h-6 text-emerald-600" />
             Notifications
           </h1>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -112,7 +112,7 @@ export default function NotificationsPage() {
             onClick={() => { setUnreadOnly(opt.value); setPage(1); }}
             className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${
               unreadOnly === opt.value
-                ? "bg-primary text-primary-foreground"
+                ? "bg-emerald-600 text-white"
                 : "bg-muted text-muted-foreground hover:bg-muted/80"
             }`}
           >
@@ -147,7 +147,7 @@ export default function NotificationsPage() {
               <div
                 key={n.id}
                 className={`flex items-start gap-4 p-4 transition-colors ${
-                  n.isRead ? "bg-white" : "bg-blue-50/40"
+                  n.isRead ? "bg-white" : "bg-emerald-50/40"
                 }`}
               >
                 <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${meta.color}`}>
@@ -168,7 +168,7 @@ export default function NotificationsPage() {
                   <button
                     onClick={() => markReadMutation.mutate(n.id)}
                     title="Mark as read"
-                    className="shrink-0 p-1.5 text-blue-500 hover:bg-blue-100 rounded-lg transition-colors"
+                    className="shrink-0 p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition-colors"
                   >
                     <Check size={14} />
                   </button>

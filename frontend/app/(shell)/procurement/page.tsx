@@ -12,7 +12,7 @@ export default function ProcurementPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight text-slate-800 flex items-center gap-2">
-          <ShoppingCart className="w-6 h-6 text-blue-600" />
+          <ShoppingCart className="w-6 h-6 text-emerald-600" />
           Procurement Management
         </h1>
         <p className="text-muted-foreground mt-1 text-sm">
@@ -25,7 +25,7 @@ export default function ProcurementPage() {
           onClick={() => setActiveTab("suppliers")}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-t-xl font-bold text-sm transition-all border border-b-0 ${
             activeTab === "suppliers"
-              ? "bg-white text-blue-600 border-slate-200"
+              ? "bg-white text-emerald-600 border-slate-200"
               : "text-slate-500 hover:text-slate-800 hover:bg-slate-50 border-transparent"
           }`}
         >
@@ -35,7 +35,7 @@ export default function ProcurementPage() {
           onClick={() => setActiveTab("orders")}
           className={`flex items-center gap-2 px-5 py-2.5 rounded-t-xl font-bold text-sm transition-all border border-b-0 ${
             activeTab === "orders"
-              ? "bg-white text-blue-600 border-slate-200"
+              ? "bg-white text-emerald-600 border-slate-200"
               : "text-slate-500 hover:text-slate-800 hover:bg-slate-50 border-transparent"
           }`}
         >

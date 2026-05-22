@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -266,7 +266,7 @@ export function TransfersView() {
                         className="hover:bg-muted/50 transition-colors cursor-pointer"
                         onClick={() => setExpanded(isExpanded ? null : t.id)}
                       >
-                        <td className="px-4 py-3 font-mono text-xs font-semibold text-blue-600">
+                        <td className="px-4 py-3 font-mono text-xs font-semibold text-emerald-600">
                           {t.transferNo}
                         </td>
                         <td className="px-4 py-3 text-sm">{t.fromWarehouseName ?? t.fromWarehouseId}</td>
@@ -304,7 +304,7 @@ export function TransfersView() {
                             {t.status === "in_transit" && (
                               <button
                                 onClick={() => setDeliverTarget(t)}
-                                className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                                className="flex items-center gap-1 text-xs text-emerald-600 hover:underline"
                               >
                                 <PackageCheck size={12} />
                                 Receive

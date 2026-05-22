@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -203,16 +203,16 @@ export function BulkImportModal({ open, onClose }: Props) {
       <div className="space-y-5">
 
         {/* Sample download banner */}
-        <div className="flex items-center justify-between bg-blue-50 border border-blue-100 rounded-xl px-4 py-3">
+        <div className="flex items-center justify-between bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3">
           <div>
-            <p className="text-sm font-semibold text-blue-800">Start with the sample template</p>
-            <p className="text-xs text-blue-600 mt-0.5">
+            <p className="text-sm font-semibold text-emerald-800">Start with the sample template</p>
+            <p className="text-xs text-emerald-600 mt-0.5">
               Fill in the CSV and upload it below. Required columns: <span className="font-mono font-bold">name, sku, price_mrp</span>
             </p>
           </div>
           <button
             onClick={downloadSampleCsv}
-            className="flex items-center gap-2 px-3 py-2 bg-white border border-blue-200 text-blue-700 rounded-lg text-sm font-semibold hover:bg-blue-50 transition-colors shadow-sm shrink-0"
+            className="flex items-center gap-2 px-3 py-2 bg-white border border-emerald-200 text-emerald-700 rounded-lg text-sm font-semibold hover:bg-emerald-50 transition-colors shadow-sm shrink-0"
           >
             <Download className="w-3.5 h-3.5" />
             Download Template
@@ -229,8 +229,8 @@ export function BulkImportModal({ open, onClose }: Props) {
             onClick={() => fileRef.current?.click()}
             className={`flex flex-col items-center justify-center gap-3 border-2 border-dashed rounded-xl py-10 cursor-pointer transition-colors ${
               isDragging
-                ? "border-blue-400 bg-blue-50"
-                : "border-slate-200 hover:border-blue-300 hover:bg-slate-50"
+                ? "border-emerald-400 bg-emerald-50"
+                : "border-slate-200 hover:border-emerald-300 hover:bg-slate-50"
             }`}
           >
             <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center">
@@ -238,7 +238,7 @@ export function BulkImportModal({ open, onClose }: Props) {
             </div>
             <div className="text-center">
               <p className="text-sm font-semibold text-slate-700">
-                Drop your CSV file here, or <span className="text-blue-600 underline">browse</span>
+                Drop your CSV file here, or <span className="text-emerald-600 underline">browse</span>
               </p>
               <p className="text-xs text-slate-400 mt-1">.csv files only</p>
             </div>
@@ -328,7 +328,7 @@ export function BulkImportModal({ open, onClose }: Props) {
               <button
                 onClick={() => importMutation.mutate(rows)}
                 disabled={importMutation.isPending}
-                className="flex items-center gap-2 px-5 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 transition-colors shadow-sm"
+                className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 transition-colors shadow-sm"
               >
                 {importMutation.isPending ? (
                   <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Importing...</>

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -229,14 +229,14 @@ export function BranchSettings() {
         <div key={branch.id} className="rounded-xl border bg-white p-5 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+              <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
                 <Building2 size={18} />
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="font-semibold text-slate-800">{branch.name}</h3>
                   {branch.isHeadOffice && (
-                    <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-semibold rounded">
+                    <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-semibold rounded">
                       HQ
                     </span>
                   )}

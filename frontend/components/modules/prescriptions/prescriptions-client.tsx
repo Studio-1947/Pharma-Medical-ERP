@@ -64,13 +64,13 @@ function statusBadge(status: string) {
       );
     case "partially_dispensed":
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">
           Partially Dispensed
         </span>
       );
     case "fully_dispensed":
       return (
-        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
+        <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-xs font-medium">
           Fully Dispensed
         </span>
       );

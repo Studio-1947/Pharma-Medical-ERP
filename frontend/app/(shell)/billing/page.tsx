@@ -400,7 +400,7 @@ export default function BillingPage() {
   }
 
   const statusColor: Record<string, string> = {
-    confirmed: "bg-blue-100 text-blue-700",
+    confirmed: "bg-emerald-100 text-emerald-700",
     paid: "bg-green-100 text-green-700",
     partially_paid: "bg-amber-100 text-amber-700",
     cancelled: "bg-red-100 text-red-700",
@@ -414,7 +414,7 @@ export default function BillingPage() {
         <h2 className="text-2xl font-semibold">Billing</h2>
         <Link
           href="/billing/pos"
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90"
+          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg text-sm font-medium hover:from-emerald-700 hover:to-teal-700 transition-all"
         >
           <ShoppingCart size={16} /> Open POS
         </Link>

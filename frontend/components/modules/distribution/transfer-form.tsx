@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { useForm, useFieldArray } from "react-hook-form";
@@ -76,7 +76,7 @@ function WarehouseSelect({
       onChange={(e) => onChange(e.target.value)}
       className={[
         "w-full rounded-lg border px-3 py-2 text-sm bg-white",
-        "focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400",
+        "focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400",
         error ? "border-red-300 bg-red-50/30" : "border-slate-200",
       ].join(" ")}
     >
@@ -143,7 +143,7 @@ function MedicineCombobox({
           placeholder="Search medicine name or SKU..."
           className={[
             "w-full rounded-lg border pl-8 pr-3 py-2 text-sm",
-            "focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400",
+            "focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400",
             error ? "border-red-300 bg-red-50/30" : "border-slate-200 bg-white",
           ].join(" ")}
         />
@@ -154,7 +154,7 @@ function MedicineCombobox({
             <button
               key={m.id}
               type="button"
-              className="w-full text-left px-3 py-2 text-sm hover:bg-blue-50 flex items-center justify-between gap-2"
+              className="w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 flex items-center justify-between gap-2"
               onClick={() => {
                 onSelect(m.id, m.name);
                 setQuery(m.name);
@@ -206,7 +206,7 @@ function BatchSelect({
       disabled={!medicineId || isLoading}
       className={[
         "w-full rounded-lg border px-3 py-2 text-sm bg-white",
-        "focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400",
+        "focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400",
         "disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed",
         error ? "border-red-300 bg-red-50/30" : "border-slate-200",
       ].join(" ")}
@@ -325,7 +325,7 @@ export function TransferForm({ onSuccess, onCancel }: Props) {
             {...control.register("notes")}
             rows={2}
             placeholder="Optional transfer notes..."
-            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 resize-none"
+            className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400 resize-none"
           />
         </div>
       </div>
@@ -341,7 +341,7 @@ export function TransferForm({ onSuccess, onCancel }: Props) {
             onClick={() =>
               append({ medicineId: "", medicineName: "", batchId: "", batchNo: "", requestedQty: 1 })
             }
-            className="flex items-center gap-1 text-xs text-blue-600 hover:underline"
+            className="flex items-center gap-1 text-xs text-emerald-600 hover:underline"
           >
             <Plus size={12} /> Add Item
           </button>
@@ -405,7 +405,7 @@ export function TransferForm({ onSuccess, onCancel }: Props) {
                     type="number"
                     min="1"
                     placeholder="Qty"
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-blue-400 bg-white"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400 bg-white"
                   />
                 </div>
               </div>
@@ -438,7 +438,7 @@ export function TransferForm({ onSuccess, onCancel }: Props) {
           <button
             type="submit"
             disabled={isSubmitting}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+            className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             {isSubmitting ? (
               <>

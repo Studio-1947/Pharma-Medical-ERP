@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { Lock, Shield, Key, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
@@ -11,7 +11,7 @@ const inputCls = (hasError = false) =>
     "focus:outline-none focus:ring-2 focus:ring-offset-0 transition-shadow",
     hasError
       ? "border-red-300 focus:ring-red-200 bg-red-50/30"
-      : "border-slate-200 focus:ring-blue-100 focus:border-blue-400 bg-white hover:border-slate-300",
+      : "border-slate-200 focus:ring-emerald-100 focus:border-emerald-400 bg-white hover:border-slate-300",
   ].join(" ");
 
 function ChangePasswordForm() {
@@ -108,7 +108,7 @@ function ChangePasswordForm() {
         <button
           type="submit"
           disabled={mutation.isPending}
-          className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+          className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
         >
           {mutation.isPending ? (
             <>
@@ -177,7 +177,7 @@ export function SecuritySettings() {
       {/* Change password */}
       <div className="rounded-xl border bg-white p-5">
         <h3 className="text-sm font-semibold text-slate-800 mb-4 flex items-center gap-2">
-          <Key size={16} className="text-blue-600" />
+          <Key size={16} className="text-emerald-600" />
           Change Password
         </h3>
         <ChangePasswordForm />

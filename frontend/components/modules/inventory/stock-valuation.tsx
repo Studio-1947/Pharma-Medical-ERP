@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -26,7 +26,7 @@ function fmt(n: number) {
 const SCHEDULE_COLORS: Record<string, string> = {
   SCHEDULE_H: "bg-orange-100 text-orange-700",
   SCHEDULE_H1: "bg-red-100 text-red-700",
-  SCHEDULE_X: "bg-purple-100 text-purple-700",
+  SCHEDULE_X: "bg-teal-100 text-teal-700",
   OTC: "bg-green-100 text-green-700",
 };
 
@@ -58,7 +58,7 @@ export function StockValuation() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="rounded-xl border bg-white p-4 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
             <IndianRupee size={16} />
           </div>
           <div>
@@ -85,7 +85,7 @@ export function StockValuation() {
           </div>
         </div>
         <div className="rounded-xl border bg-white p-4 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600 shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-teal-50 flex items-center justify-center text-teal-600 shrink-0">
             <Package size={16} />
           </div>
           <div>
@@ -166,7 +166,7 @@ export function StockValuation() {
                     <td className="px-4 py-3 text-right font-medium">
                       {fmt(Number(r.costValue))}
                     </td>
-                    <td className="px-4 py-3 text-right font-medium text-blue-600">
+                    <td className="px-4 py-3 text-right font-medium text-emerald-600">
                       {fmt(Number(r.mrpValue))}
                     </td>
                     <td className="px-4 py-3 text-right">

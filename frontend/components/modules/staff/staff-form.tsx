@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -62,7 +62,7 @@ export function StaffForm({ onSuccess, onCancel }: StaffFormProps) {
             <input
               type="text"
               {...register("firstName")}
-              className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${
+              className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all ${
                 errors.firstName ? "border-red-300 bg-red-50" : "border-slate-200 bg-white"
               }`}
               placeholder="John"
@@ -84,7 +84,7 @@ export function StaffForm({ onSuccess, onCancel }: StaffFormProps) {
             <input
               type="text"
               {...register("lastName")}
-              className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${
+              className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all ${
                 errors.lastName ? "border-red-300 bg-red-50" : "border-slate-200 bg-white"
               }`}
               placeholder="Doe"
@@ -108,7 +108,7 @@ export function StaffForm({ onSuccess, onCancel }: StaffFormProps) {
           <input
             type="email"
             {...register("email")}
-            className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${
+            className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all ${
               errors.email ? "border-red-300 bg-red-50" : "border-slate-200 bg-white"
             }`}
             placeholder="john.doe@pharmacy.com"
@@ -132,7 +132,7 @@ export function StaffForm({ onSuccess, onCancel }: StaffFormProps) {
             <input
               type="password"
               {...register("password")}
-              className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition-all ${
+              className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all ${
                 errors.password ? "border-red-300 bg-red-50" : "border-slate-200 bg-white"
               }`}
               placeholder="Min. 8 characters"
@@ -153,7 +153,7 @@ export function StaffForm({ onSuccess, onCancel }: StaffFormProps) {
             <Briefcase className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400 pointer-events-none" />
             <select
               {...register("role")}
-              className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 bg-white transition-all appearance-none ${
+              className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 bg-white transition-all appearance-none ${
                 errors.role ? "border-red-300 bg-red-50" : "border-slate-200"
               }`}
             >
@@ -200,7 +200,7 @@ export function StaffForm({ onSuccess, onCancel }: StaffFormProps) {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="flex-1 flex items-center justify-center gap-2 bg-blue-600 text-white py-2 rounded-lg font-semibold text-sm hover:bg-blue-700 disabled:opacity-60 transition-colors shadow-sm"
+          className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 text-white py-2 rounded-lg font-semibold text-sm hover:bg-emerald-700 disabled:opacity-60 transition-colors shadow-sm"
         >
           {isSubmitting ? (
             <>

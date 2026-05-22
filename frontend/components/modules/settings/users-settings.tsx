@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -42,8 +42,8 @@ const ROLE_OPTIONS = [
 ];
 
 const ROLE_COLORS: Record<string, string> = {
-  SUPER_ADMIN: "bg-purple-100 text-purple-700",
-  ADMIN: "bg-blue-100 text-blue-700",
+  SUPER_ADMIN: "bg-teal-100 text-teal-700",
+  ADMIN: "bg-emerald-100 text-emerald-700",
   PHARMACIST: "bg-green-100 text-green-700",
   CASHIER: "bg-amber-100 text-amber-700",
   INVENTORY_MANAGER: "bg-teal-100 text-teal-700",
@@ -58,7 +58,7 @@ const inputCls = (hasError = false) =>
     "focus:outline-none focus:ring-2 focus:ring-offset-0 transition-shadow",
     hasError
       ? "border-red-300 focus:ring-red-200 bg-red-50/30"
-      : "border-slate-200 focus:ring-blue-100 focus:border-blue-400 bg-white hover:border-slate-300",
+      : "border-slate-200 focus:ring-emerald-100 focus:border-emerald-400 bg-white hover:border-slate-300",
   ].join(" ");
 
 interface InviteForm {
@@ -188,7 +188,7 @@ function InviteUserModal({
           <button
             type="submit"
             disabled={mutation.isPending}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50"
           >
             {mutation.isPending ? (
               <>

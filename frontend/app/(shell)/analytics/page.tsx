@@ -33,7 +33,7 @@ const PERIOD_OPTIONS = [
   { value: "90d", label: "Last 90 days" },
 ];
 
-const PIE_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+const PIE_COLORS = ["#10b981", "#14b8a6", "#f59e0b", "#ef4444", "#6366f1"];
 
 function KpiCard({
   label,
@@ -118,7 +118,7 @@ export default function AnalyticsPage() {
       <div className="flex items-start justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-800 flex items-center gap-2">
-            <BarChart2 className="w-6 h-6 text-blue-600" />
+            <BarChart2 className="w-6 h-6 text-emerald-600" />
             Analytics & Reports
           </h1>
           <p className="text-muted-foreground mt-1 text-sm">
@@ -129,7 +129,7 @@ export default function AnalyticsPage() {
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
           >
             {PERIOD_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -154,7 +154,7 @@ export default function AnalyticsPage() {
           value={fmt(totalRevenue)}
           sub={`Last ${days} days`}
           icon={<IndianRupee size={24} />}
-          color="bg-blue-50 text-blue-700"
+          color="bg-emerald-50 text-emerald-700"
         />
         <KpiCard
           label="Total Invoices"
@@ -174,7 +174,7 @@ export default function AnalyticsPage() {
           value={topRows[0]?.name ?? "--"}
           sub={topRows[0] ? fmt(topRows[0].revenue) + " revenue" : undefined}
           icon={<Package size={24} />}
-          color="bg-purple-50 text-purple-700"
+          color="bg-teal-50 text-teal-700"
         />
       </div>
 
@@ -220,7 +220,7 @@ export default function AnalyticsPage() {
                 <Line
                   type="monotone"
                   dataKey="revenue"
-                  stroke="#3b82f6"
+                  stroke="#10b981"
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 4 }}
@@ -292,7 +292,7 @@ export default function AnalyticsPage() {
                   width={110}
                 />
                 <Tooltip formatter={(v: number) => [fmt(v), "Revenue"]} />
-                <Bar dataKey="revenue" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="revenue" fill="#10b981" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}

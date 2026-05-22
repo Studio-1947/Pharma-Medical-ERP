@@ -42,14 +42,14 @@ function reducer(state: Toast[], action: Action): Toast[] {
 const ICONS: Record<ToastVariant, ReactNode> = {
   success: <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />,
   error: <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />,
-  info: <Info className="w-4 h-4 text-blue-500 shrink-0" />,
+  info: <Info className="w-4 h-4 text-emerald-500 shrink-0" />,
   warning: <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />,
 };
 
 const BORDER: Record<ToastVariant, string> = {
   success: "border-green-200",
   error: "border-red-200",
-  info: "border-blue-200",
+  info: "border-emerald-200",
   warning: "border-amber-200 bg-amber-50",
 };
 

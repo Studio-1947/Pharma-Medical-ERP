@@ -45,7 +45,7 @@ export function NavigationProgress() {
   return (
     <div className="fixed top-0 left-0 right-0 z-[9999] h-[3px] bg-transparent pointer-events-none">
       <div
-        className="h-full bg-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.6)] transition-all"
+        className="h-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] transition-all"
         style={{
           width: `${width}%`,
           transitionDuration: width === 100 ? "200ms" : width === 0 ? "0ms" : "400ms",

@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
@@ -148,13 +148,13 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-gray-700">Medicine *</label>
             {selectedMedicine ? (
-              <div className="flex items-center justify-between border rounded-lg px-3 py-2 bg-blue-50 border-blue-200">
+              <div className="flex items-center justify-between border rounded-lg px-3 py-2 bg-emerald-50 border-emerald-200">
                 <div>
-                  <span className="text-sm font-medium text-blue-900">{selectedMedicine.name}</span>
-                  <span className="text-xs text-blue-600 ml-2">{selectedMedicine.sku}</span>
+                  <span className="text-sm font-medium text-slate-900">{selectedMedicine.name}</span>
+                  <span className="text-xs text-emerald-600 ml-2">{selectedMedicine.sku}</span>
                 </div>
                 <button type="button" onClick={() => { setSelectedMedicine(null); setMedicineSearch(""); form.mrpAtEntry = ""; }}
-                  className="text-blue-400 hover:text-blue-700">
+                  className="text-emerald-400 hover:text-emerald-700">
                   <X size={14} />
                 </button>
               </div>

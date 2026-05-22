@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -145,7 +145,7 @@ function GrnModal({
               {lines.map((line, idx) => (
                 <tr key={idx} className="py-1">
                   <td className="py-2 pr-3">
-                    <span className="font-mono text-xs text-blue-600">
+                    <span className="font-mono text-xs text-emerald-600">
                       {(poDetail?.items[idx] as any)?.medicine?.name ?? (poDetail?.items[idx] as any)?.medicineId ?? line.poItemId}
                     </span>
                     <div className="text-[10px] text-muted-foreground">
@@ -158,7 +158,7 @@ function GrnModal({
                       value={line.batchNo}
                       onChange={(e) => updateLine(idx, "batchNo", e.target.value)}
                       placeholder="e.g. BTC-2024-001"
-                      className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
                     />
                   </td>
                   <td className="py-2 pr-3">
@@ -167,7 +167,7 @@ function GrnModal({
                       type="date"
                       value={line.expiryDate}
                       onChange={(e) => updateLine(idx, "expiryDate", e.target.value)}
-                      className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                      className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"
                     />
                   </td>
                   <td className="py-2 pr-3">
@@ -177,7 +177,7 @@ function GrnModal({
                       min="1"
                       value={line.receivedQty}
                       onChange={(e) => updateLine(idx, "receivedQty", Number(e.target.value))}
-                      className="w-20 border rounded px-2 py-1 text-xs text-right font-mono focus:outline-none focus:ring-1 focus:ring-blue-400 ml-auto block"
+                      className="w-20 border rounded px-2 py-1 text-xs text-right font-mono focus:outline-none focus:ring-1 focus:ring-emerald-400 ml-auto block"
                     />
                   </td>
                   <td className="py-2">
@@ -185,7 +185,7 @@ function GrnModal({
                       type="text"
                       value={line.unitCost}
                       onChange={(e) => updateLine(idx, "unitCost", e.target.value)}
-                      className="w-24 border rounded px-2 py-1 text-xs text-right font-mono focus:outline-none focus:ring-1 focus:ring-blue-400 ml-auto block"
+                      className="w-24 border rounded px-2 py-1 text-xs text-right font-mono focus:outline-none focus:ring-1 focus:ring-emerald-400 ml-auto block"
                     />
                   </td>
                 </tr>
@@ -498,7 +498,7 @@ export function PurchaseOrdersView() {
                             : po.status === "approved"
                             ? "bg-emerald-100 text-emerald-700"
                             : po.status === "sent"
-                            ? "bg-blue-100 text-blue-700"
+                            ? "bg-emerald-100 text-emerald-700"
                             : "bg-red-100 text-red-700"
                         }`}
                       >
@@ -539,7 +539,7 @@ export function PurchaseOrdersView() {
                         {po.status === "approved" && (
                           <button
                             onClick={() => sendMutation.mutate(po.id)}
-                            className="px-2 py-1 hover:bg-blue-50 rounded-lg text-blue-600 transition-colors font-medium text-xs flex items-center gap-1"
+                            className="px-2 py-1 hover:bg-emerald-50 rounded-lg text-emerald-600 transition-colors font-medium text-xs flex items-center gap-1"
                           >
                             <Send className="w-3.5 h-3.5" /> Send
                           </button>
@@ -613,7 +613,7 @@ export function PurchaseOrdersView() {
                     required
                     value={form.supplierId}
                     onChange={(e) => setForm({ ...form, supplierId: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   >
                     {suppliers.map((s: any) => (
                       <option key={s.id} value={s.id}>
@@ -628,7 +628,7 @@ export function PurchaseOrdersView() {
                     required
                     value={form.warehouseId}
                     onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   >
                     {warehouses.map((w: any) => (
                       <option key={w.id} value={w.id}>
@@ -646,7 +646,7 @@ export function PurchaseOrdersView() {
                     type="date"
                     value={form.expectedDelivery}
                     onChange={(e) => setForm({ ...form, expectedDelivery: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   />
                 </div>
                 <div className="space-y-1">
@@ -655,7 +655,7 @@ export function PurchaseOrdersView() {
                     type="text"
                     value={form.notes}
                     onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   />
                 </div>
               </div>
@@ -666,7 +666,7 @@ export function PurchaseOrdersView() {
                   <button
                     type="button"
                     onClick={handleAddItem}
-                    className="text-xs font-bold text-blue-600 hover:underline"
+                    className="text-xs font-bold text-emerald-600 hover:underline"
                   >
                     + Add Item
                   </button>
@@ -746,7 +746,7 @@ export function PurchaseOrdersView() {
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-sm"
                 >
                   {(createPOMutation.isPending || updatePOMutation.isPending) ? "Saving..." : editingPO ? "Save Changes" : "Save Draft"}
                 </button>

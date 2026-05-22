@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,7 +27,7 @@ const SCHEDULE_OPTIONS = [
   { value: "G",  label: "Schedule G",           color: "text-amber-700 bg-amber-50" },
   { value: "H",  label: "Schedule H",           color: "text-orange-700 bg-orange-50" },
   { value: "H1", label: "Schedule H1",          color: "text-red-700 bg-red-50" },
-  { value: "X",  label: "Schedule X (Narcotic)","color": "text-purple-700 bg-purple-50" },
+  { value: "X",  label: "Schedule X (Narcotic)","color": "text-teal-700 bg-teal-50" },
 ] as const;
 
 const UNIT_OPTIONS = [
@@ -313,7 +313,7 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
           <button
             type="submit"
             disabled={isSubmitting || (!isDirty && isEdit)}
-            className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+            className="flex items-center gap-2 px-5 py-2 text-sm font-semibold bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
           >
             {isSubmitting ? (
               <>
@@ -414,7 +414,7 @@ const CheckboxField = forwardRef<
           {...rest}
           className="sr-only peer"
         />
-        <div className="w-4 h-4 border-2 border-slate-300 rounded peer-checked:border-blue-600 peer-checked:bg-blue-600 transition-colors group-hover:border-slate-400 flex items-center justify-center">
+        <div className="w-4 h-4 border-2 border-slate-300 rounded peer-checked:border-emerald-600 peer-checked:bg-emerald-600 transition-colors group-hover:border-slate-400 flex items-center justify-center">
           <svg
             className="w-2.5 h-2.5 text-white opacity-0 peer-checked:opacity-100 transition-opacity"
             viewBox="0 0 10 8"
@@ -442,7 +442,7 @@ const inputCls = (hasError = false) =>
     "focus:outline-none focus:ring-2 focus:ring-offset-0 transition-shadow",
     hasError
       ? "border-red-300 focus:ring-red-200 bg-red-50/30"
-      : "border-slate-200 focus:ring-blue-100 focus:border-blue-400 bg-white hover:border-slate-300",
+      : "border-slate-200 focus:ring-emerald-100 focus:border-emerald-400 bg-white hover:border-slate-300",
   ].join(" ");
 
 const selectCls = (hasError = false) =>
@@ -453,5 +453,5 @@ const selectCls = (hasError = false) =>
     "bg-no-repeat bg-[right_0.5rem_center] bg-[length:1.25em_1.25em] pr-9",
     hasError
       ? "border-red-300 focus:ring-red-200 bg-red-50/30"
-      : "border-slate-200 focus:ring-blue-100 focus:border-blue-400 bg-white hover:border-slate-300",
+      : "border-slate-200 focus:ring-emerald-100 focus:border-emerald-400 bg-white hover:border-slate-300",
   ].join(" ");

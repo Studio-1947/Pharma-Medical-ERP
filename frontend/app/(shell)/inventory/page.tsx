@@ -26,7 +26,7 @@ export default function InventoryPage() {
             onClick={() => setActive(t)}
             className={`px-5 py-2.5 text-sm font-medium border-b-2 transition-colors ${
               active === t
-                ? "border-primary text-primary"
+                ? "border-emerald-600 text-emerald-600"
                 : "border-transparent text-muted-foreground hover:text-foreground"
             }`}
           >

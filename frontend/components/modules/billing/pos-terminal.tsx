@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -470,10 +470,10 @@ export function PosTerminal() {
           {/* Patient selector */}
           <div className="relative">
             {selectedPatient ? (
-              <div className="flex items-center justify-between border rounded-xl px-4 py-2.5 bg-blue-50 border-blue-200">
+              <div className="flex items-center justify-between border rounded-xl px-4 py-2.5 bg-emerald-50 border-emerald-200">
                 <div>
-                  <p className="text-sm font-semibold text-blue-900">{selectedPatient.name}</p>
-                  <p className="text-xs text-blue-600">
+                  <p className="text-sm font-semibold text-slate-900">{selectedPatient.name}</p>
+                  <p className="text-xs text-emerald-600">
                     {selectedPatient.phone}
                     {selectedPatient.loyaltyPoints != null && (
                       <span className="ml-2 bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded font-bold">
@@ -502,7 +502,7 @@ export function PosTerminal() {
                   )}
                   <button
                     onClick={() => { setPatient(null); setLoyaltyPointsToRedeem(0); setPatientSearch(""); }}
-                    className="text-blue-400 hover:text-blue-700"
+                    className="text-emerald-400 hover:text-emerald-700"
                   >
                     <X size={14} />
                   </button>
@@ -559,7 +559,7 @@ export function PosTerminal() {
                           setPatientFormError("");
                           setIsPatientModalOpen(true);
                         }}
-                        className="w-full text-left px-4 py-3 hover:bg-blue-50 text-sm text-blue-600 font-medium flex items-center gap-2 bg-slate-50/50"
+                        className="w-full text-left px-4 py-3 hover:bg-emerald-50 text-sm text-emerald-600 font-medium flex items-center gap-2 bg-slate-50/50"
                       >
                         <Plus size={14} />
                         <span>Register "{patientSearch}" as a new patient</span>

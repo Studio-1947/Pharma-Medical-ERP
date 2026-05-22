@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -199,7 +199,7 @@ export function StaffLeaveModal({ userId, userName, open, onClose }: Props) {
             <div className="ml-auto">
               <button
                 onClick={() => setShowForm((v) => !v)}
-                className="inline-flex items-center gap-2 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-semibold hover:bg-blue-700 transition-colors shadow-sm"
+                className="inline-flex items-center gap-2 bg-emerald-600 text-white px-3 py-2 rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-sm"
               >
                 <Plus className="w-3.5 h-3.5" />
                 Apply Leave
@@ -212,9 +212,9 @@ export function StaffLeaveModal({ userId, userName, open, onClose }: Props) {
           {showForm && (
             <form
               onSubmit={handleSubmit}
-              className="border border-blue-100 bg-blue-50/40 rounded-xl p-4 space-y-3"
+              className="border border-emerald-100 bg-emerald-50/40 rounded-xl p-4 space-y-3"
             >
-              <p className="text-xs font-bold text-blue-700 uppercase tracking-wide">New Leave Request</p>
+              <p className="text-xs font-bold text-emerald-700 uppercase tracking-wide">New Leave Request</p>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -222,7 +222,7 @@ export function StaffLeaveModal({ userId, userName, open, onClose }: Props) {
                   <select
                     value={form.leaveType}
                     onChange={(e) => setForm({ ...form, leaveType: e.target.value })}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   >
                     <option value="sick">Sick Leave</option>
                     <option value="casual">Casual Leave</option>
@@ -250,7 +250,7 @@ export function StaffLeaveModal({ userId, userName, open, onClose }: Props) {
                     required
                     value={form.startDate}
                     onChange={(e) => handleDateChange("startDate", e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   />
                 </div>
                 <div className="space-y-1.5">
@@ -261,7 +261,7 @@ export function StaffLeaveModal({ userId, userName, open, onClose }: Props) {
                     value={form.endDate}
                     min={form.startDate}
                     onChange={(e) => handleDateChange("endDate", e.target.value)}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   />
                 </div>
               </div>
@@ -274,7 +274,7 @@ export function StaffLeaveModal({ userId, userName, open, onClose }: Props) {
                   value={form.reason}
                   onChange={(e) => setForm({ ...form, reason: e.target.value })}
                   placeholder="Brief description of the reason for leave..."
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/30 resize-none"
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 resize-none"
                 />
               </div>
 
@@ -289,7 +289,7 @@ export function StaffLeaveModal({ userId, userName, open, onClose }: Props) {
                 <button
                   type="submit"
                   disabled={createMutation.isPending}
-                  className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white rounded-lg text-sm font-semibold hover:bg-blue-700 disabled:opacity-60 transition-colors shadow-sm"
+                  className="flex items-center gap-2 px-4 py-1.5 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 disabled:opacity-60 transition-colors shadow-sm"
                 >
                   {createMutation.isPending ? (
                     <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Submitting...</>

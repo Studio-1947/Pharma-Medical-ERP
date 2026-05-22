@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -28,8 +28,8 @@ const PIE_COLORS = ["#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ef4444", "#06b
 const PO_STATUS_STYLE: Record<string, string> = {
   draft: "bg-slate-100 text-slate-600",
   pending_approval: "bg-yellow-100 text-yellow-700",
-  approved: "bg-blue-100 text-blue-700",
-  sent: "bg-purple-100 text-purple-700",
+  approved: "bg-emerald-100 text-emerald-700",
+  sent: "bg-teal-100 text-teal-700",
   received: "bg-green-100 text-green-700",
   partial: "bg-orange-100 text-orange-700",
   cancelled: "bg-red-100 text-red-700",
@@ -112,7 +112,7 @@ function SalesTab() {
       {/* KPI cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="rounded-xl border bg-white p-4 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
             <IndianRupee size={16} />
           </div>
           <div>
@@ -202,7 +202,7 @@ function SalesTab() {
                       <td className="py-2 text-right font-mono text-xs">
                         {r.qty.toLocaleString("en-IN")}
                       </td>
-                      <td className="py-2 text-right font-medium text-blue-600">{fmt(r.revenue)}</td>
+                      <td className="py-2 text-right font-medium text-emerald-600">{fmt(r.revenue)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -306,7 +306,7 @@ function PurchaseTab() {
       {/* KPI cards */}
       <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
         <div className="rounded-xl border bg-white p-4 flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 shrink-0">
+          <div className="w-9 h-9 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
             <ShoppingCart size={16} />
           </div>
           <div>
@@ -443,7 +443,7 @@ function ComplianceTab() {
       {/* GSTR-1 */}
       <div className="rounded-xl border bg-white p-6 flex flex-col gap-4">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
+          <div className="p-3 bg-emerald-50 text-emerald-600 rounded-lg">
             <FileText className="w-5 h-5" />
           </div>
           <div>
