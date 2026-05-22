@@ -53,7 +53,7 @@ export class ReportsService {
     }));
   }
 
-  async getSalesTrend(days: number, branchId?: string) {
+  async getSalesTrend(days: number, branchId?: string, groupBy: "day" | "week" | "month" = "day") {
     const since = new Date();
     since.setDate(since.getDate() - days);
     since.setHours(0, 0, 0, 0);
@@ -64,16 +64,23 @@ export class ReportsService {
     ];
     if (branchId) conditions.push(eq(schema.salesInvoices.branchId, branchId));
 
+    const bucketExpr =
+      groupBy === "month"
+        ? sql<string>`TO_CHAR(${schema.salesInvoices.createdAt}, 'YYYY-MM')`
+        : groupBy === "week"
+          ? sql<string>`TO_CHAR(DATE_TRUNC('week', ${schema.salesInvoices.createdAt}), 'YYYY-MM-DD')`
+          : sql<string>`DATE(${schema.salesInvoices.createdAt})`;
+
     const rows = await this.db
       .select({
-        date: sql<string>`DATE(${schema.salesInvoices.createdAt})`,
+        date: bucketExpr,
         revenue: sql<number>`COALESCE(SUM(CAST(${schema.salesInvoices.totalAmount} AS FLOAT)), 0)`,
         invoices: sql<number>`COUNT(${schema.salesInvoices.id})`,
       })
       .from(schema.salesInvoices)
       .where(and(...conditions))
-      .groupBy(sql`DATE(${schema.salesInvoices.createdAt})`)
-      .orderBy(sql`DATE(${schema.salesInvoices.createdAt})`);
+      .groupBy(bucketExpr)
+      .orderBy(bucketExpr);
 
     return { rows };
   }

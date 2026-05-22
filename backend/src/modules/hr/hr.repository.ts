@@ -229,6 +229,12 @@ export class HrRepository {
     });
   }
 
+  async deleteLeaveRequest(id: string) {
+    await this.db
+      .delete(schema.leaveRequests)
+      .where(eq(schema.leaveRequests.id, id));
+  }
+
   async reviewLeave(id: string, dto: ReviewLeaveDto, reviewedBy: string) {
     const [updated] = await this.db
       .update(schema.leaveRequests)

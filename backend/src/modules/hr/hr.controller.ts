@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { HrService } from "./hr.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -123,5 +123,13 @@ export class HrController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.service.reviewLeave(id, reviewLeaveSchema.parse(body), user.sub);
+  }
+
+  @Delete("leaves/:id")
+  @Roles("admin", "hr_manager")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Soft-delete a leave request" })
+  deleteLeaveRequest(@Param("id") id: string) {
+    return this.service.deleteLeaveRequest(id);
   }
 }

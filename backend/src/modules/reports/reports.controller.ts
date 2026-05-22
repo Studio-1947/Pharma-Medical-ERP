@@ -16,12 +16,13 @@ export class ReportsController {
 
   @Get("sales")
   @Roles("admin", "pharmacist", "reports_analyst")
-  @ApiOperation({ summary: "Daily sales trend for the last N days" })
+  @ApiOperation({ summary: "Sales trend for the last N days, grouped by day/week/month" })
   getSalesTrend(
     @Query("days") days = "30",
     @Query("branchId") branchId?: string,
+    @Query("groupBy") groupBy: "day" | "week" | "month" = "day",
   ) {
-    return this.service.getSalesTrend(parseInt(days), branchId);
+    return this.service.getSalesTrend(parseInt(days), branchId, groupBy);
   }
 
   @Get("summary")

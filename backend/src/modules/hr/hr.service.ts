@@ -85,6 +85,13 @@ export class HrService {
     return { data: leaves };
   }
 
+  async deleteLeaveRequest(id: string) {
+    const leave = await this.repo.findLeaveById(id);
+    if (!leave) throw new NotFoundException(`Leave request ${id} not found`);
+    await this.repo.deleteLeaveRequest(id);
+    return { message: "Leave request deleted" };
+  }
+
   async reviewLeave(id: string, dto: ReviewLeaveDto, reviewedBy: string) {
     const leave = await this.repo.findLeaveById(id);
     if (!leave) throw new NotFoundException(`Leave request ${id} not found`);
