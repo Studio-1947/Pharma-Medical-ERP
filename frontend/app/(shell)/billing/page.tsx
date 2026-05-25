@@ -2,8 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import Link from "next/link";
 import { apiClient, queryKeys } from "@/lib/api-client";
+import { useNavigation } from "@/lib/navigation-context";
 import { ShoppingCart, XCircle, RotateCcw, AlertCircle, Download, Search, BarChart2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 
@@ -370,6 +370,7 @@ function EodSummary() {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function BillingPage() {
+  const { navigate } = useNavigation();
   const [page, setPage] = useState(1);
   const [voidTarget, setVoidTarget] = useState<any | null>(null);
   const [returnTarget, setReturnTarget] = useState<any | null>(null);
@@ -412,12 +413,12 @@ export default function BillingPage() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-semibold">Billing</h2>
-        <Link
-          href="/billing/pos"
+        <button
+          onClick={() => navigate("/billing/pos")}
           className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg text-sm font-medium hover:from-emerald-700 hover:to-teal-700 transition-all"
         >
           <ShoppingCart size={16} /> Open POS
-        </Link>
+        </button>
       </div>
 
       {/* Filters */}

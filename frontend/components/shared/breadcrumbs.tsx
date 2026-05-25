@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight, Home } from "lucide-react";
+import { useNavigation } from "@/lib/navigation-context";
 
 const SEGMENT_LABELS: Record<string, string> = {
   dashboard:     "Dashboard",
@@ -29,6 +29,7 @@ function labelFor(segment: string): string {
 
 export function Breadcrumbs() {
   const pathname = usePathname();
+  const { navigate } = useNavigation();
 
   // Strip leading slash, split into segments, filter empty strings
   const segments = pathname.replace(/^\//, "").split("/").filter(Boolean);
@@ -45,13 +46,13 @@ export function Breadcrumbs() {
 
   return (
     <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-sm">
-      <Link
-        href="/dashboard"
+      <button
+        onClick={() => navigate("/dashboard")}
         className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
         aria-label="Home"
       >
         <Home size={14} />
-      </Link>
+      </button>
 
       {crumbs.map((crumb) => (
         <span key={crumb.href} className="flex items-center gap-1 min-w-0">
@@ -61,12 +62,12 @@ export function Breadcrumbs() {
               {crumb.label}
             </span>
           ) : (
-            <Link
-              href={crumb.href as any}
+            <button
+              onClick={() => navigate(crumb.href)}
               className="text-muted-foreground hover:text-foreground transition-colors truncate"
             >
               {crumb.label}
-            </Link>
+            </button>
           )}
         </span>
       ))}

@@ -10,7 +10,7 @@ import {
   ArrowRight,
   TrendingUp,
 } from "lucide-react";
-import Link from "next/link";
+import { useNavigation } from "@/lib/navigation-context";
 import {
   AreaChart,
   Area,
@@ -90,10 +90,11 @@ function AlertRow({
   href: string;
   urgent?: boolean;
 }) {
+  const { navigate } = useNavigation();
   return (
-    <Link
-      href={href as any}
-      className="flex items-center justify-between py-2.5 px-2 hover:bg-emerald-50 rounded-lg transition-colors group"
+    <button
+      onClick={() => navigate(href)}
+      className="flex items-center justify-between w-full py-2.5 px-2 hover:bg-emerald-50 rounded-lg transition-colors group"
     >
       <span className={`text-sm ${urgent ? "text-red-600 font-medium" : "text-slate-600"}`}>
         {label}
@@ -113,7 +114,7 @@ function AlertRow({
           className="text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity"
         />
       </div>
-    </Link>
+    </button>
   );
 }
 
@@ -134,6 +135,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function DashboardPage() {
+  const { navigate } = useNavigation();
   const today = new Date().toISOString().split("T")[0];
 
   const { data: eodRaw } = useQuery<any>({
@@ -187,13 +189,13 @@ export default function DashboardPage() {
           </h1>
           <p className="text-sm text-slate-400 mt-0.5">{dateLabel}</p>
         </div>
-        <Link
-          href={"/billing/pos" as any}
+        <button
+          onClick={() => navigate("/billing/pos")}
           className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold rounded-xl shadow-sm hover:from-emerald-700 hover:to-teal-700 transition-all"
         >
           <Receipt size={14} />
           Open POS
-        </Link>
+        </button>
       </div>
 
       {/* KPI cards */}
@@ -237,12 +239,12 @@ export default function DashboardPage() {
               <h2 className="text-sm font-bold text-slate-800">Revenue Trend</h2>
               <p className="text-xs text-slate-400 mt-0.5">Last 14 days</p>
             </div>
-            <Link
-              href={"/analytics" as any}
+            <button
+              onClick={() => navigate("/analytics")}
               className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
             >
               Full analytics <ArrowRight size={12} />
-            </Link>
+            </button>
           </div>
 
           {trendRows.length === 0 ? (
@@ -330,20 +332,20 @@ export default function DashboardPage() {
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-3">
               Quick Actions
             </p>
-            <Link
-              href={"/billing/pos" as any}
+            <button
+              onClick={() => navigate("/billing/pos")}
               className="flex items-center gap-2 w-full px-3.5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold rounded-xl hover:from-emerald-700 hover:to-teal-700 transition-all shadow-sm"
             >
               <Receipt size={14} />
               Open POS Terminal
-            </Link>
-            <Link
-              href={"/procurement" as any}
+            </button>
+            <button
+              onClick={() => navigate("/procurement")}
               className="flex items-center gap-2 w-full px-3.5 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 hover:border-emerald-200 hover:text-emerald-700 transition-all"
             >
               <Package size={14} />
               Create Purchase Order
-            </Link>
+            </button>
           </div>
         </div>
       </div>

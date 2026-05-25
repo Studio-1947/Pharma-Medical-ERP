@@ -1,16 +1,17 @@
 "use client";
 
-import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth.store";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { LogOut, Bell } from "lucide-react";
 import { Breadcrumbs } from "@/components/shared/breadcrumbs";
+import { useNavigation } from "@/lib/navigation-context";
 
 export function Header() {
   const { user, logout, accessToken } = useAuthStore();
   const router = useRouter();
+  const { navigate } = useNavigation();
 
   const { data: countData } = useQuery<any>({
     queryKey: queryKeys.notifications.unreadCount(),
@@ -48,8 +49,8 @@ export function Header() {
 
       <div className="flex items-center gap-2">
         {/* Notifications */}
-        <Link
-          href={"/notifications" as any}
+        <button
+          onClick={() => navigate("/notifications")}
           className="relative p-2 rounded-lg hover:bg-slate-50 text-slate-400 hover:text-slate-700 transition-colors"
           title="Notifications"
         >
@@ -59,7 +60,7 @@ export function Header() {
               {unread > 99 ? "99+" : unread}
             </span>
           )}
-        </Link>
+        </button>
 
         {/* Divider */}
         <div className="w-px h-6 bg-slate-100 mx-1" />
