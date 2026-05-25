@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule, ConfigService } from "@nestjs/config";
+import { z } from "zod";
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { BullModule } from "@nestjs/bull";
@@ -23,7 +24,30 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, envFilePath: ".env" }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: ".env",
+      validate: (config: Record<string, unknown>) => {
+        const schema = z.object({
+          DATABASE_URL: z.string().url(),
+          REDIS_URL: z.string().url().optional(),
+          JWT_PRIVATE_KEY: z.string().min(1),
+          JWT_PUBLIC_KEY: z.string().min(1),
+          JWT_EXPIRES_IN: z.string().default("8h"),
+          REFRESH_TOKEN_EXPIRES_IN: z.string().default("7d"),
+          PORT: z.coerce.number().default(4000),
+          NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+          CORS_ORIGIN: z.string().default("http://localhost:3000"),
+          S3_ENDPOINT: z.string().optional(),
+          S3_BUCKET: z.string().optional(),
+          S3_ACCESS_KEY: z.string().optional(),
+          S3_SECRET_KEY: z.string().optional(),
+          CLICKHOUSE_URL: z.string().optional(),
+          CLICKHOUSE_DB: z.string().optional(),
+        });
+        return schema.parse(config);
+      },
+    }),
 
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
 

@@ -13,7 +13,8 @@
       "Bash(pnpm --filter backend typecheck)",
       "Bash(pnpm store *)",
       "Bash(pnpm install *)",
-      "Bash(pnpm dev *)"
+      "Bash(pnpm dev *)",
+      "Bash(npx tsc *)"
     ]
   }
 }

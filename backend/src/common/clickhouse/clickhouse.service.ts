@@ -62,29 +62,38 @@ export class ClickHouseService implements OnModuleInit {
   async insertSaleEvents(events: SaleEventDto[]): Promise<void> {
     if (!this.available || events.length === 0) return;
 
-    try {
-      await this.client.insert({
-        table: "sale_events",
-        values: events.map((e) => ({
-          invoice_id: e.invoiceId,
-          invoice_no: e.invoiceNo,
-          medicine_id: e.medicineId,
-          medicine_name: e.medicineName,
-          batch_id: e.batchId,
-          quantity: e.quantity,
-          unit_price: e.unitPrice,
-          line_total: e.lineTotal,
-          tax_amount: e.taxAmount,
-          payment_mode: e.paymentMode,
-          branch_id: e.branchId,
-          staff_id: e.staffId,
-          patient_id: e.patientId ?? "",
-          created_at: e.createdAt,
-        })),
-        format: "JSONEachRow",
-      });
-    } catch (err) {
-      this.logger.error(`ClickHouse insert failed: ${(err as Error).message}`);
+    const rows = events.map((e) => ({
+      invoice_id: e.invoiceId,
+      invoice_no: e.invoiceNo,
+      medicine_id: e.medicineId,
+      medicine_name: e.medicineName,
+      batch_id: e.batchId,
+      quantity: e.quantity,
+      unit_price: e.unitPrice,
+      line_total: e.lineTotal,
+      tax_amount: e.taxAmount,
+      payment_mode: e.paymentMode,
+      branch_id: e.branchId,
+      staff_id: e.staffId,
+      patient_id: e.patientId ?? "",
+      created_at: e.createdAt,
+    }));
+
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        await this.client.insert({ table: "sale_events", values: rows, format: "JSONEachRow" });
+        return;
+      } catch (err) {
+        const message = (err as Error).message;
+        if (attempt < maxAttempts) {
+          const delay = 500 * 2 ** (attempt - 1); // 500ms, 1000ms
+          this.logger.warn(`ClickHouse insert attempt ${attempt} failed, retrying in ${delay}ms: ${message}`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        } else {
+          this.logger.error(`ClickHouse insert failed after ${maxAttempts} attempts: ${message}`);
+        }
+      }
     }
   }
 

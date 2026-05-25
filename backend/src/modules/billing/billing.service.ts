@@ -5,7 +5,7 @@ import { DrizzleService } from "../../database/drizzle.service";
 import { InjectQueue } from "@nestjs/bull";
 import { Queue } from "bull";
 import { BillingRepository } from "./billing.repository";
-import { TaxService } from "./tax.service";
+import { TaxService, TaxBreakdown } from "./tax.service";
 import { BatchRepository } from "../inventory/batch.repository";
 import { StockMovementRepository } from "../inventory/stock-movement.repository";
 import { PatientsRepository } from "../patients/patients.repository";
@@ -14,11 +14,45 @@ import { ClickHouseService } from "../../common/clickhouse/clickhouse.service";
 import * as schema from "../../database/schema";
 import type {
   CreateInvoiceDto,
+  InvoiceItemDto,
   QueryInvoiceDto,
   VoidInvoiceDto,
   ReturnInvoiceDto,
   SaleEventDto,
 } from "@pharmerp/types";
+
+interface MedicineSnapshot {
+  id: string;
+  name: string;
+  scheduleClass: string | null;
+  requiresPrescription: boolean;
+  taxPercent: string;
+  stripSize: number | null;
+  isActive: boolean;
+}
+
+interface BatchAllocation {
+  batchId: string;
+  batchNo: string;
+  expiryDate: string;
+  allocate: number;
+  mrpAtEntry: string;
+}
+
+interface RawAllocation {
+  item: InvoiceItemDto;
+  med: MedicineSnapshot;
+  allocation: BatchAllocation;
+}
+
+interface AllocationLine extends BatchAllocation {
+  item: InvoiceItemDto;
+  med: MedicineSnapshot;
+  lineTotal: number;
+  taxAmount: number;
+  breakdown: TaxBreakdown;
+  taxableAmount: number;
+}
 
 @Injectable()
 export class BillingService {
@@ -47,7 +81,7 @@ export class BillingService {
    * Includes Schedule H gate, FEFO selection, server-side price enforcement,
    * GST split, and split payments.
    */
-  async create(dto: CreateInvoiceDto, staffId: string) {
+  async create(dto: CreateInvoiceDto, staffId: string, branchId?: string) {
     const result = await this.drizzle.db.transaction(async (tx) => {
       const interState = false;
 
@@ -141,7 +175,7 @@ export class BillingService {
       }
 
       // 2. FEFO Batch Selection
-      const allAllocations: any[] = [];
+      const allAllocations: RawAllocation[] = [];
       for (const item of dto.items) {
         const med = medicines.find(m => m.id === item.medicineId)!;
         const batchAllocations = await this.batchRepo.selectBatchesForDispense(
@@ -155,7 +189,7 @@ export class BillingService {
       }
 
       // 3. Compute Totals & Validate Payment Sum
-      const lines = allAllocations.map(({ item, med, allocation }) => {
+      const lines: AllocationLine[] = allAllocations.map(({ item, med, allocation }) => {
         const unitMrp = parseFloat(allocation.mrpAtEntry) / (med.stripSize || 1);
         const { lineTotal, taxAmount, breakdown } = this.taxService.calculateLineTax(
           unitMrp,
@@ -164,14 +198,14 @@ export class BillingService {
           parseFloat(med.taxPercent),
           interState,
         );
-        return { 
-          ...allocation, 
-          item, 
-          med, 
-          lineTotal, 
-          taxAmount, 
-          breakdown, 
-          taxableAmount: breakdown.taxableAmount 
+        return {
+          ...allocation,
+          item,
+          med,
+          lineTotal,
+          taxAmount,
+          breakdown,
+          taxableAmount: breakdown.taxableAmount
         };
       });
 
@@ -282,6 +316,7 @@ export class BillingService {
         invoiceNo,
         patientId: dto.patientId,
         staffId,
+        branchId,
         prescriptionId: dto.prescriptionId,
         subtotal: subtotal.toFixed(2),
         discountAmount: discountAmount.toFixed(2),
@@ -341,13 +376,13 @@ export class BillingService {
         removeOnComplete: true,
       });
 
-      return { invoice, items: insertedItems, _lines: lines };
+      return { invoice, items: insertedItems, _lines: lines as AllocationLine[] };
     });
 
     // 8. Emit sale events to ClickHouse — fire-and-forget, never blocks the response
     const paymentMode = dto.payments.length > 1 ? "mixed" : dto.payments[0]!.mode;
     const now = new Date().toISOString();
-    const saleEvents: SaleEventDto[] = (result._lines as typeof result._lines ?? []).map((line: any) => ({
+    const saleEvents: SaleEventDto[] = result._lines.map((line: AllocationLine) => ({
       invoiceId: result.invoice.id,
       invoiceNo: result.invoice.invoiceNo,
       medicineId: line.item.medicineId,
@@ -358,7 +393,7 @@ export class BillingService {
       lineTotal: parseFloat(line.lineTotal.toFixed(2)),
       taxAmount: parseFloat(line.taxAmount.toFixed(2)),
       paymentMode: paymentMode as SaleEventDto["paymentMode"],
-      branchId: dto.patientId ?? "unknown", // branchId not on DTO yet; use staffId context
+      branchId: branchId ?? "unknown",
       staffId,
       patientId: dto.patientId,
       createdAt: now,
@@ -554,13 +589,12 @@ export class BillingService {
     const inv = await this.repo.findById(invoiceId);
     if (!inv) throw new NotFoundException(`Invoice ${invoiceId} not found`);
 
-    if (!(inv as any).pdfUrl) {
-      // PDF not yet generated — enqueue and inform caller
+    if (!inv.pdfUrl) {
       await this.pdfQueue.add({ invoiceId }, { attempts: 3, backoff: 5000 });
       return { ready: false, message: "PDF generation queued. Retry in a few seconds." };
     }
 
-    const url = await this.s3.getPresignedUrl((inv as any).pdfUrl, 300);
+    const url = await this.s3.getPresignedUrl(inv.pdfUrl, 300);
     return { ready: true, url };
   }
 }
