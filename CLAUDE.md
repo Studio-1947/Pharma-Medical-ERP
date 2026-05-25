@@ -5,6 +5,15 @@ No sycophantic openers or closing fluff.
 No emojis or em-dashes.
 Do not guess APIs, versions, flags, commit SHAs, or package names. Verify by reading code or docs before asserting.
 
+## DEPENDENCY INTEGRITY RULES (apply before every build attempt)
+
+- If any build or dev command fails with `MODULE_NOT_FOUND`, run `pnpm fix-deps` (root) before investigating further. This is almost always a corrupted pnpm store, not a code bug.
+- Never investigate a MODULE_NOT_FOUND error by editing source files. Fix the store first.
+- After resuming work in a new session, if `pnpm build` or `pnpm dev` fails immediately, run `pnpm fix-deps` first.
+- `pnpm fix-deps` = `pnpm store verify` then `pnpm install --force`. Both steps are required: verify cleans corrupted store entries, --force re-extracts them.
+- The frontend `prebuild` script auto-heals silently on every `pnpm build` run. If it runs `pnpm install --force` unexpectedly, it means the store was corrupted again -- check disk health.
+- Do not run `pnpm install` without `--force` to fix MODULE_NOT_FOUND -- it will reuse the corrupted store entry and fail again.
+
 # MedERP — Pharmacy ERP System: Claude Code Implementation Guide
 
 > **How to use this file with Claude Code:**

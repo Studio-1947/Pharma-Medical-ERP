@@ -951,6 +951,39 @@ docker build -t pharmerp-web .
 
 ---
 
+## 16. Troubleshooting
+
+### `MODULE_NOT_FOUND` on `pnpm dev` or `pnpm build`
+
+**Symptom:** Either server fails to start with errors like:
+
+```
+Error: Cannot find module '../client/router'   # Next.js frontend
+Error: Cannot find module 'semver'             # fastify / backend
+```
+
+**Cause:** The pnpm content-addressable store has corrupted (mutated) package files. This can happen after an antivirus scan, a crashed install, a disk error, or another package manager writing into `~/.pnpm-store`. The packages appear installed but their file contents no longer match what pnpm extracted.
+
+**Fix:**
+
+```bash
+# Diagnose — lists every mutated store entry
+pnpm store status
+
+# Fix — re-extracts all packages from the store (or re-downloads if the store entry is gone)
+pnpm install --force
+```
+
+The root `fix-deps` script runs both steps:
+
+```bash
+pnpm fix-deps
+```
+
+**Never edit source files to work around a `MODULE_NOT_FOUND` error** — the module is missing from the store, not from the code. `pnpm install --force` is always the correct first step.
+
+---
+
 ## Roadmap
 
 | Phase | Status | Description |

@@ -90,6 +90,26 @@ export class ReportsController {
     return res.send({ data });
   }
 
+  @Get("abc-analysis")
+  @Roles("admin", "reports_analyst")
+  @ApiOperation({ summary: "ABC product analysis (A=top 70% revenue, B=next 20%, C=bottom 10%) — powered by ClickHouse" })
+  getAbcAnalysis(
+    @Query("branchId") branchId: string,
+    @Query("days") days = "90",
+  ) {
+    return this.service.getAbcAnalysis(branchId, parseInt(days));
+  }
+
+  @Get("hourly-pattern")
+  @Roles("admin", "reports_analyst")
+  @ApiOperation({ summary: "24h × 7-day sales heatmap — powered by ClickHouse" })
+  getHourlySalesPattern(
+    @Query("branchId") branchId: string,
+    @Query("days") days = "30",
+  ) {
+    return this.service.getHourlySalesPattern(branchId, parseInt(days));
+  }
+
   @Get("schedule-h-register")
   @Roles("admin", "pharmacist")
   @ApiOperation({ summary: "Export Schedule H dispensing register as CSV" })

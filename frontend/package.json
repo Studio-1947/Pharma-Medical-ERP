@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
+    "prebuild": "node -e \"try{require.resolve('next/dist/compiled/jest-worker/processChild')}catch(e){process.exit(1)}\" || pnpm -w install --force",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

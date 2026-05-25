@@ -92,6 +92,10 @@ describe("BillingService (Compliance)", () => {
       deductLoyaltyPoints: vi.fn(),
     };
 
+    const mockClickHouse = {
+      insertSaleEvents: vi.fn().mockResolvedValue(undefined),
+    };
+
     service = new BillingService(
       mockRepo,
       mockDrizzle,
@@ -100,6 +104,7 @@ describe("BillingService (Compliance)", () => {
       mockMovementRepo,
       mockPatientsRepo as any,
       mockS3 as any,
+      mockClickHouse as any,
       mockPdfQueue as any,
     );
   });

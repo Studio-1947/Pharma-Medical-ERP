@@ -17,6 +17,7 @@ import { ReportsModule } from "./modules/reports/reports.module";
 import { JobsModule } from "./modules/jobs/jobs.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
 import { S3Module } from "./common/s3/s3.module";
+import { ClickHouseModule } from "./common/clickhouse/clickhouse.module";
 import { GlobalExceptionFilter } from "./common/filters/global-exception.filter";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
 
@@ -51,6 +52,7 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
     JobsModule,
     NotificationsModule,
     S3Module,
+    ClickHouseModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: GlobalExceptionFilter },

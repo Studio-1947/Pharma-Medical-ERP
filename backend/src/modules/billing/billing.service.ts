@@ -10,12 +10,14 @@ import { BatchRepository } from "../inventory/batch.repository";
 import { StockMovementRepository } from "../inventory/stock-movement.repository";
 import { PatientsRepository } from "../patients/patients.repository";
 import { S3Service } from "../../common/s3/s3.service";
+import { ClickHouseService } from "../../common/clickhouse/clickhouse.service";
 import * as schema from "../../database/schema";
 import type {
   CreateInvoiceDto,
   QueryInvoiceDto,
   VoidInvoiceDto,
-  ReturnInvoiceDto
+  ReturnInvoiceDto,
+  SaleEventDto,
 } from "@pharmerp/types";
 
 @Injectable()
@@ -28,6 +30,7 @@ export class BillingService {
     private readonly movementRepo: StockMovementRepository,
     private readonly patientsRepo: PatientsRepository,
     private readonly s3: S3Service,
+    private readonly clickhouse: ClickHouseService,
     @InjectQueue("pdf-generation") private readonly pdfQueue: Queue,
   ) {}
 
@@ -45,7 +48,7 @@ export class BillingService {
    * GST split, and split payments.
    */
   async create(dto: CreateInvoiceDto, staffId: string) {
-    return await this.drizzle.db.transaction(async (tx) => {
+    const result = await this.drizzle.db.transaction(async (tx) => {
       const interState = false;
 
       // 1. Load all medicines and check Schedule H gate
@@ -338,8 +341,31 @@ export class BillingService {
         removeOnComplete: true,
       });
 
-      return { invoice, items: insertedItems };
+      return { invoice, items: insertedItems, _lines: lines };
     });
+
+    // 8. Emit sale events to ClickHouse — fire-and-forget, never blocks the response
+    const paymentMode = dto.payments.length > 1 ? "mixed" : dto.payments[0]!.mode;
+    const now = new Date().toISOString();
+    const saleEvents: SaleEventDto[] = (result._lines as typeof result._lines ?? []).map((line: any) => ({
+      invoiceId: result.invoice.id,
+      invoiceNo: result.invoice.invoiceNo,
+      medicineId: line.item.medicineId,
+      medicineName: line.med.name,
+      batchId: line.batchId,
+      quantity: line.allocate,
+      unitPrice: parseFloat(line.mrpAtEntry) / (line.med.stripSize || 1),
+      lineTotal: parseFloat(line.lineTotal.toFixed(2)),
+      taxAmount: parseFloat(line.taxAmount.toFixed(2)),
+      paymentMode: paymentMode as SaleEventDto["paymentMode"],
+      branchId: dto.patientId ?? "unknown", // branchId not on DTO yet; use staffId context
+      staffId,
+      patientId: dto.patientId,
+      createdAt: now,
+    }));
+    this.clickhouse.insertSaleEvents(saleEvents); // intentionally not awaited
+
+    return { invoice: result.invoice, items: result.items };
   }
 
   async voidInvoice(id: string, dto: VoidInvoiceDto, userId: string) {

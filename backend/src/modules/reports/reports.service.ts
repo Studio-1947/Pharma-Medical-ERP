@@ -1,11 +1,15 @@
 import { Injectable } from "@nestjs/common";
 import { and, between, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
+import { ClickHouseService } from "../../common/clickhouse/clickhouse.service";
 import * as schema from "../../database/schema";
 
 @Injectable()
 export class ReportsService {
-  constructor(private readonly drizzle: DrizzleService) {}
+  constructor(
+    private readonly drizzle: DrizzleService,
+    private readonly clickhouse: ClickHouseService,
+  ) {}
 
   private get db() {
     return this.drizzle.db;
@@ -282,5 +286,13 @@ export class ReportsService {
       doctorName: r.doctorName || "N/A",
       doctorRegNo: r.doctorRegNo || "N/A",
     }));
+  }
+
+  getAbcAnalysis(branchId: string, days: number) {
+    return this.clickhouse.getAbcAnalysis(branchId, days);
+  }
+
+  getHourlySalesPattern(branchId: string, days: number) {
+    return this.clickhouse.getHourlySalesPattern(branchId, days);
   }
 }
