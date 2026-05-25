@@ -8,7 +8,8 @@
       "Bash(powershell *)",
       "Bash(echo \"exit $?\")",
       "Skill(gsd:plan-phase)",
-      "Skill(gsd:discuss-phase)"
+      "Skill(gsd:discuss-phase)",
+      "Bash(pnpm --filter @pharmerp/types typecheck)"
     ]
   }
 }
