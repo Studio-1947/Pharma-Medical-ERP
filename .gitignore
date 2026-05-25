@@ -9,3 +9,5 @@ coverage/
 .DS_Store
 Thumbs.db
 drizzle/migrations/*.sql
+infra/gcp/secrets.tfvars
+*.pem
