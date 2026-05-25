@@ -1,57 +1,75 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
+import { useNavigation } from "@/lib/navigation-context";
 
 export function NavigationProgress() {
-  const pathname = usePathname();
-  const [visible, setVisible] = useState(false);
+  const { isPending } = useNavigation();
   const [width, setWidth] = useState(0);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevPath = useRef(pathname);
+  const [visible, setVisible] = useState(false);
+  const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  function clearTimers() {
+    timers.current.forEach(clearTimeout);
+    timers.current = [];
+  }
 
   useEffect(() => {
-    if (pathname === prevPath.current) return;
-    prevPath.current = pathname;
-
-    // Start the bar
-    setWidth(0);
-    setVisible(true);
-
-    // Animate to 85% quickly then stall
-    const t1 = setTimeout(() => setWidth(30), 20);
-    const t2 = setTimeout(() => setWidth(65), 150);
-    const t3 = setTimeout(() => setWidth(85), 400);
-
-    // Complete and hide after page settles
-    const t4 = setTimeout(() => setWidth(100), 600);
-    const t5 = setTimeout(() => {
-      setVisible(false);
+    if (isPending) {
+      // Navigation started — show bar immediately and animate forward
+      clearTimers();
+      setVisible(true);
       setWidth(0);
-    }, 900);
+      timers.current.push(setTimeout(() => setWidth(25), 10));
+      timers.current.push(setTimeout(() => setWidth(55), 200));
+      timers.current.push(setTimeout(() => setWidth(78), 600));
+    } else {
+      // Navigation committed — complete and hide
+      if (!visible) return;
+      clearTimers();
+      setWidth(100);
+      timers.current.push(
+        setTimeout(() => {
+          setVisible(false);
+          setWidth(0);
+        }, 300),
+      );
+    }
 
-    timerRef.current = t5;
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-      clearTimeout(t3);
-      clearTimeout(t4);
-      clearTimeout(t5);
-    };
-  }, [pathname]);
-
-  if (!visible) return null;
+    return clearTimers;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPending]);
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-[9999] h-[3px] bg-transparent pointer-events-none">
+    <>
+      {/* Top progress bar */}
+      {visible && (
+        <div className="fixed top-0 left-0 right-0 z-[9999] h-[3px] pointer-events-none">
+          <div
+            className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.7)]"
+            style={{
+              width: `${width}%`,
+              transition:
+                width === 100
+                  ? "width 200ms ease-out"
+                  : width === 0
+                    ? "none"
+                    : "width 500ms ease-out",
+            }}
+          />
+        </div>
+      )}
+
+      {/* Full-viewport dimming overlay — pointer-events-none keeps everything clickable */}
       <div
-        className="h-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] transition-all"
+        className="fixed inset-0 z-[9990] pointer-events-none bg-white/25 backdrop-blur-[1px]"
         style={{
-          width: `${width}%`,
-          transitionDuration: width === 100 ? "200ms" : width === 0 ? "0ms" : "400ms",
-          transitionTimingFunction: "ease-out",
+          opacity: isPending ? 1 : 0,
+          transition: isPending
+            ? "opacity 120ms ease-in"
+            : "opacity 250ms ease-out",
         }}
       />
-    </div>
+    </>
   );
 }

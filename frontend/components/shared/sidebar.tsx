@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { clsx } from "clsx";
+import { useNavigation } from "@/lib/navigation-context";
 import {
   LayoutDashboard,
   Package,
@@ -36,6 +36,7 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const { navigate, isPending } = useNavigation();
 
   return (
     <aside
@@ -86,13 +87,16 @@ export function Sidebar() {
       <nav className="relative flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
         {navItems.map(({ href, label, icon: Icon }) => {
           const active = pathname.startsWith(href);
+          // "optimistic active" — treat the item as active the instant it is
+          // clicked, before the route commits, so the sidebar never looks stale.
+          const isNavigatingHere = isPending && active;
           return (
-            <Link
+            <button
               key={href}
-              href={href as any}
+              onClick={() => navigate(href)}
               title={collapsed ? label : undefined}
               className={clsx(
-                "relative flex items-center rounded-lg text-sm font-medium transition-all group",
+                "relative w-full flex items-center rounded-lg text-sm font-medium transition-all group",
                 collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
                 active
                   ? "bg-white/15 text-white shadow-sm"
@@ -104,21 +108,26 @@ export function Sidebar() {
                 className={clsx(
                   "shrink-0 transition-colors",
                   active ? "text-emerald-300" : "text-emerald-400/70 group-hover:text-emerald-300",
+                  isNavigatingHere && "animate-pulse",
                 )}
               />
               {!collapsed && (
                 <>
                   <span className="truncate flex-1">{label}</span>
                   {active && (
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                    <span
+                      className={clsx(
+                        "w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0",
+                        isNavigatingHere && "animate-pulse",
+                      )}
+                    />
                   )}
                 </>
               )}
-              {/* Active indicator in collapsed mode */}
               {collapsed && active && (
                 <span className="absolute right-0.5 top-1/2 -translate-y-1/2 w-1 h-5 rounded-full bg-emerald-400" />
               )}
-            </Link>
+            </button>
           );
         })}
       </nav>
