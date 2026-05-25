@@ -1,5 +1,6 @@
 import { LoginForm } from "@/components/modules/auth/login-form";
 import { Suspense } from "react";
+import Image from "next/image";
 import { ShieldCheck, Package, Receipt, BarChart3 } from "lucide-react";
 
 const features = [
@@ -37,9 +38,7 @@ export default function LoginPage() {
 
         <div className="relative">
           <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center font-bold text-lg">
-              Rx
-            </div>
+            <Image src="/logo.svg" alt="Radha Madhav Medical Hall" width={40} height={40} className="rounded-xl" priority />
             <span className="text-2xl font-bold tracking-tight">Radha Madhav Medical Hall</span>
           </div>
           <p className="text-emerald-200 text-sm">
@@ -80,9 +79,7 @@ export default function LoginPage() {
         <div className="w-full max-w-sm">
           {/* Mobile logo */}
           <div className="flex items-center gap-2 mb-8 lg:hidden">
-            <div className="w-8 h-8 rounded-lg bg-emerald-700 flex items-center justify-center text-white font-bold text-sm">
-              Rx
-            </div>
+            <Image src="/logo.svg" alt="Radha Madhav Medical Hall" width={32} height={32} className="rounded-lg" priority />
             <span className="text-xl font-bold text-emerald-800 dark:text-emerald-400">
               Radha Madhav Medical Hall
             </span>

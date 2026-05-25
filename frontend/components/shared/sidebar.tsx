@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { clsx } from "clsx";
@@ -52,18 +53,28 @@ export function Sidebar() {
       {/* Brand header */}
       <div className="relative h-16 flex items-center border-b border-white/10 overflow-hidden">
         {collapsed ? (
-          /* Collapsed: centered Rx badge only */
+          /* Collapsed: logo icon only */
           <div className="flex w-full justify-center">
-            <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center font-bold text-sm">
-              Rx
-            </div>
+            <Image
+              src="/logo.svg"
+              alt="Radha Madhav Medical Hall"
+              width={32}
+              height={32}
+              className="rounded-lg"
+              priority
+            />
           </div>
         ) : (
-          /* Expanded: Rx + name + collapse button */
+          /* Expanded: logo + name + collapse button */
           <div className="flex items-center gap-3 px-4 w-full">
-            <div className="w-8 h-8 rounded-lg bg-white/15 flex items-center justify-center font-bold text-sm shrink-0">
-              Rx
-            </div>
+            <Image
+              src="/logo.svg"
+              alt="Radha Madhav Medical Hall"
+              width={32}
+              height={32}
+              className="rounded-lg shrink-0"
+              priority
+            />
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-bold leading-tight text-white truncate">
                 Radha Madhav
