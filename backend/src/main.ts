@@ -22,8 +22,18 @@ async function bootstrap() {
 
   app.setGlobalPrefix("api/v1");
 
+  const rawOrigin = process.env.CORS_ORIGIN ?? "http://localhost:3000";
+  const allowedOrigins = rawOrigin.split(",").map((o) => o.trim());
   app.enableCors({
-    origin: process.env.CORS_ORIGIN ?? "http://localhost:3000",
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, server-to-server)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes("*") || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`CORS: origin ${origin} not allowed`), false);
+      }
+    },
     credentials: true,
   });
 

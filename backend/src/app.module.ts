@@ -29,8 +29,8 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
       envFilePath: ".env",
       validate: (config: Record<string, unknown>) => {
         const schema = z.object({
-          DATABASE_URL: z.string().url(),
-          REDIS_URL: z.string().url().optional(),
+          DATABASE_URL: z.string().min(1),
+          REDIS_URL: z.string().min(1).optional(),
           JWT_PRIVATE_KEY: z.string().min(1),
           JWT_PUBLIC_KEY: z.string().min(1),
           JWT_EXPIRES_IN: z.string().default("8h"),
