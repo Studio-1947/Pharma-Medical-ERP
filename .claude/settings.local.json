@@ -38,7 +38,8 @@
       "Bash(gcloud iam *)",
       "Bash(xargs grep -l \"pdf\\\\|PDF\")",
       "Bash(gh run *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(pnpm --filter backend add @fastify/cors)"
     ]
   }
 }
