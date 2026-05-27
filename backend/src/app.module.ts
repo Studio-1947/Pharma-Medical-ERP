@@ -58,8 +58,13 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
         redis: config.get("REDIS_URL")
-          ? { url: config.get<string>("REDIS_URL") }
-          : { host: "localhost", port: 6379 },
+          ? {
+              url: config.get<string>("REDIS_URL"),
+              connectTimeout: 5000,
+              maxRetriesPerRequest: 1,
+              enableOfflineQueue: false,
+            }
+          : { host: "localhost", port: 6379, connectTimeout: 5000, maxRetriesPerRequest: 1, enableOfflineQueue: false },
       }),
     }),
 

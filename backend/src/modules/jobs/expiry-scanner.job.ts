@@ -11,8 +11,10 @@ export class ExpiryScannerJob {
   constructor(@InjectQueue(EXPIRY_SCAN_QUEUE) private readonly queue: Queue) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-  async handleCron() {
+  handleCron() {
     this.logger.log("Enqueuing nightly expiry scan...");
-    await this.queue.add("scan", {}, { attempts: 3, backoff: { type: "exponential", delay: 60_000 } });
+    this.queue
+      .add("scan", {}, { attempts: 3, backoff: { type: "exponential", delay: 60_000 } })
+      .catch((err) => this.logger.error("Failed to enqueue expiry scan", err));
   }
 }

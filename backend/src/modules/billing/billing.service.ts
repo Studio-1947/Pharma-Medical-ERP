@@ -587,7 +587,9 @@ export class BillingService {
     if (!inv) throw new NotFoundException(`Invoice ${invoiceId} not found`);
 
     if (!inv.pdfUrl) {
-      await this.pdfQueue.add({ invoiceId }, { attempts: 3, backoff: 5000 });
+      this.pdfQueue
+        .add({ invoiceId }, { attempts: 3, backoff: 5000 })
+        .catch(() => { /* non-fatal */ });
       return { ready: false, message: "PDF generation queued. Retry in a few seconds." };
     }
 
