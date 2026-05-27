@@ -89,7 +89,7 @@ function buildService() {
 
   const mockS3 = { getPresignedUrl: vi.fn() };
   const mockClickHouse = { insertSaleEvents: vi.fn().mockResolvedValue(undefined) };
-  const mockPdfQueue = { add: vi.fn().mockResolvedValue({ id: "job-1" }) };
+  const mockPdfService = { generateAndUpload: vi.fn().mockResolvedValue("invoices/INV-001.pdf") };
 
   const service = new BillingService(
     mockRepo as any,
@@ -100,10 +100,10 @@ function buildService() {
     mockPatientsRepo as any,
     mockS3 as any,
     mockClickHouse as any,
-    mockPdfQueue as any,
+    mockPdfService as any,
   );
 
-  return { service, mockRepo, mockBatchRepo, mockMovementRepo, mockTaxService, mockPatientsRepo, mockClickHouse, mockPdfQueue, buildTx };
+  return { service, mockRepo, mockBatchRepo, mockMovementRepo, mockTaxService, mockPatientsRepo, mockClickHouse, mockPdfService, buildTx };
 }
 
 // ─── CHECKOUT-01: OTC happy path ────────────────────────────────────────────
@@ -341,11 +341,11 @@ describe("CHECKOUT-08 — Concurrent batch depletion guard", () => {
   });
 });
 
-// ─── CHECKOUT-09: PDF queue triggered ────────────────────────────────────────
+// ─── CHECKOUT-09: PDF generated on-demand ────────────────────────────────────
 
-describe("CHECKOUT-09 — PDF generation job queued after checkout", () => {
-  it("adds a job to the pdf-generation queue", async () => {
-    const { service, mockBatchRepo, mockPdfQueue, buildTx } = buildService();
+describe("CHECKOUT-09 — PDF is not pre-generated during checkout", () => {
+  it("does not call pdfService during checkout — PDF is generated on first /pdf request", async () => {
+    const { service, mockBatchRepo, mockPdfService, buildTx } = buildService();
 
     const dto = {
       items: [{ medicineId: "med-otc", quantity: 1, discountPct: "0" }],
@@ -364,11 +364,7 @@ describe("CHECKOUT-09 — PDF generation job queued after checkout", () => {
 
     await service.create(dto as any, "staff-1");
 
-    expect(mockPdfQueue.add).toHaveBeenCalledOnce();
-    expect(mockPdfQueue.add).toHaveBeenCalledWith(
-      { invoiceId: "inv-1" },
-      expect.objectContaining({ attempts: 3 }),
-    );
+    expect(mockPdfService.generateAndUpload).not.toHaveBeenCalled();
   });
 });
 
