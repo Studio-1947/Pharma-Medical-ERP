@@ -110,7 +110,7 @@ jobs:
         run: |
           sleep 10
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            https://pharmerp-backend-728779791744.asia-south1.run.app/api/v1/health)
+            https://pharmerp-backend-728779791744.asia-south1.run.app/health)
           if [ "$STATUS" != "200" ]; then
             echo "Health check failed with status $STATUS"
             exit 1

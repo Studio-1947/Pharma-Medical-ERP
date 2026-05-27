@@ -48,6 +48,11 @@ async function bootstrap() {
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup("docs", app, document);
 
+  const httpAdapter = app.getHttpAdapter();
+  httpAdapter.get("/health", (_req: unknown, res: any) => {
+    res.send({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   const port = process.env.PORT ?? 4000;
   await app.listen(port, "0.0.0.0");
   console.log(`PharmERP API running on http://localhost:${port}`);
