@@ -37,7 +37,7 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Swagger
+  // Swagger — patchNestJsSwagger must run before createDocument
   patchNestJsSwagger();
   const config = new DocumentBuilder()
     .setTitle("PharmERP API")
@@ -46,12 +46,12 @@ async function bootstrap() {
     .addBearerAuth()
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup("api/docs", app, document);
+  SwaggerModule.setup("docs", app, document);
 
   const port = process.env.PORT ?? 4000;
   await app.listen(port, "0.0.0.0");
   console.log(`PharmERP API running on http://localhost:${port}`);
-  console.log(`Swagger docs: http://localhost:${port}/api/docs`);
+  console.log(`Swagger docs: http://localhost:${port}/docs`);
 }
 
 bootstrap();
