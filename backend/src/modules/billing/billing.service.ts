@@ -367,17 +367,14 @@ export class BillingService {
         }
       }
 
-      // 7. Trigger PDF Generation Background Job
-      await this.pdfQueue.add({
-        invoiceId: invoice.id,
-      }, {
-        attempts: 3,
-        backoff: 5000,
-        removeOnComplete: true,
-      });
-
       return { invoice, items: insertedItems, _lines: lines as AllocationLine[] };
     });
+
+    // 7. Queue PDF generation after transaction commits — never inside the tx
+    this.pdfQueue.add(
+      { invoiceId: result.invoice.id },
+      { attempts: 3, backoff: 5000, removeOnComplete: true },
+    ).catch(() => { /* non-fatal — PDF can be regenerated on demand */ });
 
     // 8. Emit sale events to ClickHouse — fire-and-forget, never blocks the response
     const paymentMode = dto.payments.length > 1 ? "mixed" : dto.payments[0]!.mode;
