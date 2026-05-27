@@ -2,8 +2,6 @@ import { Injectable, NotFoundException, UnprocessableEntityException } from "@ne
 import { and, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import Decimal from "decimal.js";
 import { DrizzleService } from "../../database/drizzle.service";
-import { InjectQueue } from "@nestjs/bull";
-import { Queue } from "bull";
 import { BillingRepository } from "./billing.repository";
 import { TaxService, TaxBreakdown } from "./tax.service";
 import { BatchRepository } from "../inventory/batch.repository";
@@ -11,6 +9,7 @@ import { StockMovementRepository } from "../inventory/stock-movement.repository"
 import { PatientsRepository } from "../patients/patients.repository";
 import { S3Service } from "../../common/s3/s3.service";
 import { ClickHouseService } from "../../common/clickhouse/clickhouse.service";
+import { InvoicePdfService } from "./invoice-pdf.service";
 import * as schema from "../../database/schema";
 import type {
   CreateInvoiceDto,
@@ -65,7 +64,7 @@ export class BillingService {
     private readonly patientsRepo: PatientsRepository,
     private readonly s3: S3Service,
     private readonly clickhouse: ClickHouseService,
-    @InjectQueue("pdf-generation") private readonly pdfQueue: Queue,
+    private readonly pdfService: InvoicePdfService,
   ) {}
 
   findAll(query: QueryInvoiceDto) { return this.repo.findPaginated(query); }
@@ -370,11 +369,7 @@ export class BillingService {
       return { invoice, items: insertedItems, _lines: lines as AllocationLine[] };
     });
 
-    // 7. Queue PDF generation after transaction commits — never inside the tx
-    this.pdfQueue.add(
-      { invoiceId: result.invoice.id },
-      { attempts: 3, backoff: 5000, removeOnComplete: true },
-    ).catch(() => { /* non-fatal — PDF can be regenerated on demand */ });
+    // 7. PDF is generated on first request to /invoices/:id/pdf (synchronous, on-demand)
 
     // 8. Emit sale events to ClickHouse — fire-and-forget, never blocks the response
     const paymentMode = dto.payments.length > 1 ? "mixed" : dto.payments[0]!.mode;
@@ -586,14 +581,8 @@ export class BillingService {
     const inv = await this.repo.findById(invoiceId);
     if (!inv) throw new NotFoundException(`Invoice ${invoiceId} not found`);
 
-    if (!inv.pdfUrl) {
-      this.pdfQueue
-        .add({ invoiceId }, { attempts: 3, backoff: 5000 })
-        .catch(() => { /* non-fatal */ });
-      return { ready: false, message: "PDF generation queued. Retry in a few seconds." };
-    }
-
-    const url = await this.s3.getPresignedUrl(inv.pdfUrl, 300);
+    const key = inv.pdfUrl ?? await this.pdfService.generateAndUpload(invoiceId);
+    const url = await this.s3.getPresignedUrl(key, 300);
     return { ready: true, url };
   }
 }
