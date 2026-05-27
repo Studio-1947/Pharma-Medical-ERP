@@ -28,7 +28,9 @@
       "Bash(gcloud secrets *)",
       "Bash(gcloud logging *)",
       "Bash(curl -s -X POST https://pharmerp-backend-728779791744.asia-south1.run.app/api/v1/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"newuser123@pharmerp.com\",\"password\":\"Test@1234\",\"firstName\":\"Test\",\"lastName\":\"User\",\"role\":\"PHARMACIST\"}')",
-      "Bash(curl -s -X POST https://pharmerp-backend-728779791744.asia-south1.run.app/api/v1/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"newuser@pharmerp.com\",\"password\":\"Test@1234\",\"firstName\":\"Test\",\"lastName\":\"User\",\"role\":\"pharmacist\"}')"
+      "Bash(curl -s -X POST https://pharmerp-backend-728779791744.asia-south1.run.app/api/v1/auth/register -H 'Content-Type: application/json' -d '{\"email\":\"newuser@pharmerp.com\",\"password\":\"Test@1234\",\"firstName\":\"Test\",\"lastName\":\"User\",\"role\":\"pharmacist\"}')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" https://pharmerp-frontend-728779791744.asia-south1.run.app/logo.svg)",
+      "Bash(curl -sL -o /dev/null -w \"%{http_code} %{url_effective}\" https://pharmerp-frontend-728779791744.asia-south1.run.app/logo.svg)"
     ]
   }
 }
