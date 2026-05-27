@@ -105,7 +105,7 @@ jobs:
             --image=${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/backend:${{ github.sha }} \
             --region=${{ env.REGION }} \
             --project=${{ env.PROJECT_ID }} \
-            --update-env-vars "NODE_ENV=production,S3_BUCKET=radha-madhav-prod-files,CORS_ORIGIN=https://pharmerp-frontend-vxdsl3johq-el.a.run.app"
+            --update-env-vars "^;^NODE_ENV=production;S3_BUCKET=radha-madhav-prod-files;CORS_ORIGIN=https://pharmerp-frontend-vxdsl3johq-el.a.run.app,https://pharmerp-frontend-728779791744.asia-south1.run.app"
 
       - name: Verify backend health
         run: |
