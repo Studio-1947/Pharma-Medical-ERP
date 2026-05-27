@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { UserRole } from "../enums";
+
+const userRoleValues = Object.values(UserRole) as [string, ...string[]];
 
 export const loginSchema = z.object({
   email: z.string().email(),
@@ -15,7 +18,7 @@ export const registerSchema = z.object({
     .regex(/[0-9]/, "must contain number"),
   firstName: z.string().min(2, "Required"),
   lastName: z.string().min(2, "Required"),
-  role: z.string().optional(),
+  role: z.string().transform(v => v.toLowerCase()).pipe(z.enum(userRoleValues)).optional(),
   branchId: z.string().uuid().optional(),
 });
 
