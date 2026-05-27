@@ -80,7 +80,7 @@ describe("BillingService (Compliance)", () => {
     };
 
     const mockPdfQueue = {
-      add: vi.fn(),
+      add: vi.fn().mockResolvedValue(undefined),
     };
 
     const mockS3 = {
