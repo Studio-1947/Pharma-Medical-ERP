@@ -122,7 +122,7 @@ export function Sidebar() {
               title={collapsed ? label : undefined}
               className={clsx(
                 "relative w-full flex items-center rounded-lg text-sm font-medium transition-all group",
-                collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5",
+                collapsed ? "justify-center px-0 py-2.5" : "justify-start text-left gap-3 px-3 py-2.5",
                 active
                   ? "bg-white/15 text-white shadow-sm"
                   : "text-emerald-100/70 hover:bg-white/10 hover:text-white",
