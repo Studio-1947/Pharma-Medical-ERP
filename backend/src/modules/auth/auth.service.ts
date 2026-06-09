@@ -2,6 +2,7 @@ import {
   Injectable,
   ConflictException,
   UnauthorizedException,
+  ForbiddenException,
   Logger,
 } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
@@ -22,7 +23,30 @@ export class AuthService {
     private readonly config: ConfigService,
   ) {}
 
-  async register(dto: RegisterDto) {
+  async register(dto: RegisterDto, caller: JwtPayload) {
+    // super_admin can create any role except another super_admin
+    // admin can only create branch-level roles (not super_admin or admin)
+    const requestedRole = dto.role ?? "cashier";
+    const adminOnlyRoles = ["pharmacist", "cashier", "inventory_manager", "distribution_staff", "hr_manager", "reports_analyst"];
+
+    if (caller.role === "admin" && !adminOnlyRoles.includes(requestedRole)) {
+      throw new ForbiddenException("Admins can only create branch-level staff accounts");
+    }
+    if (requestedRole === "super_admin") {
+      throw new ForbiddenException("super_admin accounts cannot be created via API — use the seed script");
+    }
+
+    let targetBranchId = dto.branchId;
+    if (caller.role === "admin") {
+      if (!caller.branchId) {
+        throw new ForbiddenException("Admin account is not assigned to a branch");
+      }
+      if (dto.branchId && dto.branchId !== caller.branchId) {
+        throw new ForbiddenException("Admins can only create users within their own branch");
+      }
+      targetBranchId = caller.branchId;
+    }
+
     const existing = await this.repo.findUserByEmail(dto.email);
     if (existing) throw new ConflictException("Email already registered");
 
@@ -38,11 +62,11 @@ export class AuthService {
       passwordHash,
       firstName: dto.firstName,
       lastName: dto.lastName,
-      role: dto.role,
-      branchId: dto.branchId,
+      role: requestedRole,
+      branchId: targetBranchId,
     });
 
-    this.logger.log(`User registered: ${user!.email}`);
+    this.logger.log(`User ${caller.email} created account for: ${user!.email} (${requestedRole})`);
     return { user: user! };
   }
 

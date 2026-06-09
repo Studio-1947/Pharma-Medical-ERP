@@ -4,6 +4,7 @@ import { z } from "zod";
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
+import { RolesGuard } from "./common/guards/roles.guard";
 import { BullModule } from "@nestjs/bull";
 import { DrizzleModule } from "./database/drizzle.module";
 import { AuthModule } from "./modules/auth/auth.module";
@@ -89,6 +90,7 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
 })
 export class AppModule {}

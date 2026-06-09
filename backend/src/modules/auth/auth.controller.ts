@@ -20,12 +20,13 @@ import { loginSchema, registerSchema, refreshTokenSchema } from "@pharmerp/types
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Public()
+  @UseGuards(JwtAuthGuard)
+  @Roles("super_admin", "admin")
   @Post("register")
-  @ApiOperation({ summary: "Register a new user" })
-  async register(@Body() body: unknown, @Req() req: FastifyRequest) {
+  @ApiOperation({ summary: "Create a new staff user (super_admin or admin only)" })
+  async register(@Body() body: unknown, @CurrentUser() caller: JwtPayload) {
     const dto = registerSchema.parse(body);
-    return this.authService.register(dto);
+    return this.authService.register(dto, caller);
   }
 
   @Public()

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { Modal } from "@/components/ui/modal";
+import { usePermissions } from "@/hooks/use-permissions";
+import { UserRole } from "@pharmerp/types";
 
 interface User {
   id: string;
@@ -30,8 +32,8 @@ interface ApiListResponse {
   meta: { total: number; page: number; totalPages: number; limit: number };
 }
 
+// super_admin cannot be created via UI — seed script only
 const ROLE_OPTIONS = [
-  "SUPER_ADMIN",
   "ADMIN",
   "PHARMACIST",
   "CASHIER",
@@ -67,6 +69,7 @@ interface InviteForm {
   lastName: string;
   role: string;
   password: string;
+  branchId?: string;
 }
 
 function InviteUserModal({
@@ -77,17 +80,31 @@ function InviteUserModal({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const { role } = usePermissions();
   const [form, setForm] = useState<InviteForm>({
     email: "",
     firstName: "",
     lastName: "",
     role: "CASHIER",
     password: "",
+    branchId: "",
   });
   const [error, setError] = useState<string | null>(null);
 
+  const { data: branches } = useQuery<any[]>({
+    queryKey: ["branches"],
+    queryFn: () => apiClient.get("/branches"),
+    enabled: role === UserRole.SUPER_ADMIN && open,
+  });
+
   const mutation = useMutation({
-    mutationFn: (data: InviteForm) => apiClient.post("/users/invite", data),
+    mutationFn: (data: InviteForm) => {
+      const submitData = {
+        ...data,
+        branchId: data.branchId || undefined,
+      };
+      return apiClient.post("/auth/register", submitData);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.users.all() });
       onClose();
@@ -144,17 +161,34 @@ function InviteUserModal({
             {...field("email")}
           />
         </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-600 mb-1.5">
-            Role <span className="text-red-500">*</span>
-          </label>
-          <select required className={inputCls()} {...field("role")}>
-            {ROLE_OPTIONS.map((r) => (
-              <option key={r} value={r}>
-                {r.replace(/_/g, " ")}
-              </option>
-            ))}
-          </select>
+        <div className={role === UserRole.SUPER_ADMIN ? "grid grid-cols-2 gap-3" : "block"}>
+          <div>
+            <label className="block text-xs font-medium text-slate-600 mb-1.5">
+              Role <span className="text-red-500">*</span>
+            </label>
+            <select required className={inputCls()} {...field("role")}>
+              {ROLE_OPTIONS.map((r) => (
+                <option key={r} value={r}>
+                  {r.replace(/_/g, " ")}
+                </option>
+              ))}
+            </select>
+          </div>
+          {role === UserRole.SUPER_ADMIN && (
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1.5">
+                Branch <span className="text-red-500">*</span>
+              </label>
+              <select required className={inputCls()} {...field("branchId")}>
+                <option value="">Select branch</option>
+                {branches?.map((b: any) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1.5">

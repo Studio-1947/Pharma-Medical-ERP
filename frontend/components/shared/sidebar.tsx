@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { clsx } from "clsx";
 import { useNavigation } from "@/lib/navigation-context";
+import { usePermissions } from "@/hooks/use-permissions";
 import {
   LayoutDashboard,
   Package,
@@ -20,24 +21,37 @@ import {
   PanelLeftOpen,
 } from "lucide-react";
 
-const navItems = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  permission?: Parameters<ReturnType<typeof usePermissions>["can"]>[0];
+  roles?: string[];
+};
+
+const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/inventory", label: "Inventory", icon: Package },
-  { href: "/billing", label: "Billing & POS", icon: Receipt },
-  { href: "/prescriptions", label: "Prescriptions", icon: FileText },
-  { href: "/patients", label: "Patients", icon: Users },
-  { href: "/procurement", label: "Procurement", icon: ShoppingCart },
-  { href: "/hr", label: "HR Management", icon: Users },
-  { href: "/distribution", label: "Distribution", icon: Truck },
-  { href: "/analytics", label: "Analytics", icon: BarChart2 },
-  { href: "/reports", label: "Reports & Compliance", icon: ClipboardList },
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/billing", label: "Billing & POS", icon: Receipt, permission: "billing.create" },
+  { href: "/inventory", label: "Inventory", icon: Package, permission: "inventory.adjust" },
+  { href: "/prescriptions", label: "Prescriptions", icon: FileText, permission: "prescriptions.verify" },
+  { href: "/patients", label: "Patients", icon: Users, permission: "patients.write" },
+  { href: "/procurement", label: "Procurement", icon: ShoppingCart, permission: "procurement.write" },
+  { href: "/hr", label: "HR Management", icon: Users, permission: "staff.write" },
+  { href: "/distribution", label: "Distribution", icon: Truck, permission: "distribution.write" },
+  { href: "/analytics", label: "Analytics", icon: BarChart2, permission: "reports.view" },
+  { href: "/reports", label: "Reports & Compliance", icon: ClipboardList, permission: "reports.view" },
+  { href: "/settings", label: "Settings", icon: Settings, permission: "users.manage" },
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const { navigate, isPending } = useNavigation();
+  const { can } = usePermissions();
+
+  const visibleItems = NAV_ITEMS.filter(
+    (item) => !item.permission || can(item.permission),
+  );
 
   return (
     <aside
@@ -96,7 +110,7 @@ export function Sidebar() {
 
       {/* Nav */}
       <nav className="relative flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
-        {navItems.map(({ href, label, icon: Icon }) => {
+        {visibleItems.map(({ href, label, icon: Icon }) => {
           const active = pathname.startsWith(href);
           // "optimistic active" — treat the item as active the instant it is
           // clicked, before the route commits, so the sidebar never looks stale.

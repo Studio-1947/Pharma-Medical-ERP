@@ -39,7 +39,13 @@
       "Bash(xargs grep -l \"pdf\\\\|PDF\")",
       "Bash(gh run *)",
       "Bash(git push *)",
-      "Bash(pnpm --filter backend add @fastify/cors)"
+      "Bash(pnpm --filter backend add @fastify/cors)",
+      "Bash(gcloud config *)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\soumi\\\\Desktop\\\\Pharma-Medical-ERP\\\\frontend\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(timeout 20 pnpm run dev)",
+      "Bash(docker port *)",
+      "Bash(timeout 15 pnpm --filter backend dev)"
     ]
   }
 }

@@ -1,11 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, Users, Building2, Bell, Lock } from "lucide-react";
+import { Settings, Users, Building2, Bell, Lock, ShieldAlert } from "lucide-react";
 import { UsersSettings } from "@/components/modules/settings/users-settings";
 import { BranchSettings } from "@/components/modules/settings/branch-settings";
 import { NotificationSettings } from "@/components/modules/settings/notification-settings";
 import { SecuritySettings } from "@/components/modules/settings/security-settings";
+import { usePermissions } from "@/hooks/use-permissions";
 
 type Tab = "users" | "branches" | "notifications" | "security";
 
@@ -17,7 +18,17 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ];
 
 export default function SettingsPage() {
+  const { can } = usePermissions();
   const [activeTab, setActiveTab] = useState<Tab>("users");
+
+  if (!can("users.manage")) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3 text-gray-500">
+        <ShieldAlert size={32} className="text-red-400" />
+        <p className="font-medium">You do not have permission to access Settings.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

@@ -3,17 +3,14 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { loginSchema, type LoginDto } from "@pharmerp/types";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
-import Link from "next/link";
-import { Eye, EyeOff, Mail, Lock, CheckCircle2, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, AlertCircle } from "lucide-react";
 
 export function LoginForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const isRegistered = searchParams.get("registered") === "true";
   const { setTokens, setUser } = useAuthStore();
   const [showPassword, setShowPassword] = useState(false);
 
@@ -50,13 +47,6 @@ export function LoginForm() {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-      {isRegistered && (
-        <div className="flex items-start gap-3 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-xl text-sm">
-          <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
-          <span>Account created successfully. Sign in to continue.</span>
-        </div>
-      )}
-
       <div className="space-y-1.5">
         <label className="block text-sm font-medium text-gray-700 dark:text-foreground">
           Email address
@@ -126,10 +116,7 @@ export function LoginForm() {
       </button>
 
       <p className="text-center text-sm text-gray-500 dark:text-muted-foreground">
-        Don't have an account?{" "}
-        <Link href="/signup" className="text-emerald-700 dark:text-emerald-400 hover:underline font-semibold">
-          Create one
-        </Link>
+        Contact your administrator to get access.
       </p>
     </form>
   );
