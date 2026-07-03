@@ -1,10 +1,12 @@
-import { Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import { PrescriptionsRepository } from "./prescriptions.repository";
 import { S3Service } from "../../common/s3/s3.service";
 import type { CreatePrescriptionDto, QueryPrescriptionDto, VerifyPrescriptionDto } from "@pharmerp/types";
 
 @Injectable()
 export class PrescriptionsService {
+  private readonly logger = new Logger(PrescriptionsService.name);
+
   constructor(
     private readonly repo: PrescriptionsRepository,
     private readonly s3Service: S3Service,
@@ -24,7 +26,10 @@ export class PrescriptionsService {
       try {
         signedUrl = await this.s3Service.getPresignedUrl(prescription.fileUrl);
       } catch (e) {
-        // Log but don't fail the whole request
+        this.logger.error(
+          `Failed to generate presigned URL for prescription ${id}: ${(e as Error).message}`,
+          (e as Error).stack,
+        );
       }
     }
 

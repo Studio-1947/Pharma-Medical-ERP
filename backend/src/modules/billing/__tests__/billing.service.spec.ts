@@ -73,10 +73,12 @@ describe("BillingService (Compliance)", () => {
     };
     mockBatchRepo = {
       selectBatchesForDispense: vi.fn(),
+      selectBatchesForDispenseMulti: vi.fn(),
       adjustQuantity: vi.fn(),
     };
     mockMovementRepo = {
       log: vi.fn(),
+      logMany: vi.fn().mockResolvedValue(undefined),
     };
 
     const mockPdfQueue = {
@@ -153,6 +155,7 @@ describe("BillingService (Compliance)", () => {
             }],
             [{                                     // Prescription items check
                 id: "rx-item-1",
+                medicineId: "med-h",
                 quantityPrescribed: 5,
                 quantityDispensed: 0,
                 isFullyDispensed: false
@@ -165,12 +168,12 @@ describe("BillingService (Compliance)", () => {
             }]
         ]);
 
-        mockBatchRepo.selectBatchesForDispense.mockResolvedValue([{
+        mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([[{
             batchId: "b1",
             batchNo: "B001",
             allocate: 1,
             mrpAtEntry: "100.00"
-        }]);
+        }]]);
 
         mockTaxService.calculateLineTax.mockReturnValue({
             lineTotal: 112,
@@ -205,12 +208,12 @@ describe("BillingService (Compliance)", () => {
         }]
       ]);
 
-      mockBatchRepo.selectBatchesForDispense.mockResolvedValue([{
+      mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([[{
         batchId: "b1",
         batchNo: "B001",
         allocate: 1,
         mrpAtEntry: "100.00"
-      }]);
+      }]]);
 
       mockTaxService.calculateLineTax.mockReturnValue({
         lineTotal: 112,

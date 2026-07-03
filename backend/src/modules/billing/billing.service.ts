@@ -99,6 +99,60 @@ export class BillingService {
         .from(schema.medicines)
         .where(inArray(schema.medicines.id, medicineIds));
 
+      // Invoice-level checks that don't vary per line item — fetch once
+      // instead of once per controlled-drug item.
+      const today = new Date().toISOString().split("T")[0]!;
+
+      let rx: { id: string; status: string; expiryDate: string | null } | null = null;
+      let rxItemsByMedicine = new Map<string, {
+        id: string;
+        medicineId: string | null;
+        quantityPrescribed: number | null;
+        quantityDispensed: number;
+        isFullyDispensed: boolean;
+      }>();
+      if (dto.prescriptionId) {
+        const [rxRow] = await tx
+          .select({
+            id: schema.prescriptions.id,
+            status: schema.prescriptions.status,
+            expiryDate: schema.prescriptions.expiryDate,
+          })
+          .from(schema.prescriptions)
+          .where(eq(schema.prescriptions.id, dto.prescriptionId));
+        rx = rxRow ?? null;
+
+        const rxItemRows = await tx
+          .select({
+            id: schema.prescriptionItems.id,
+            medicineId: schema.prescriptionItems.medicineId,
+            quantityPrescribed: schema.prescriptionItems.quantityPrescribed,
+            quantityDispensed: schema.prescriptionItems.quantityDispensed,
+            isFullyDispensed: schema.prescriptionItems.isFullyDispensed,
+          })
+          .from(schema.prescriptionItems)
+          .where(
+            and(
+              eq(schema.prescriptionItems.prescriptionId, dto.prescriptionId),
+              inArray(schema.prescriptionItems.medicineId, medicineIds),
+            ),
+          );
+        for (const row of rxItemRows) {
+          if (row.medicineId) rxItemsByMedicine.set(row.medicineId, row);
+        }
+      }
+
+      if (dto.overrideReason && dto.overriddenBy) {
+        const [approver] = await tx
+          .select({ role: schema.users.role })
+          .from(schema.users)
+          .where(eq(schema.users.id, dto.overriddenBy));
+
+        if (!approver || !["super_admin", "admin", "pharmacist"].includes(approver.role)) {
+          throw new UnprocessableEntityException("Override approver must be a pharmacist or admin");
+        }
+      }
+
       for (const item of dto.items) {
         const med = medicines.find(m => m.id === item.medicineId);
         if (!med || !med.isActive) {
@@ -106,7 +160,7 @@ export class BillingService {
         }
 
         const isControlled = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"].includes(med.scheduleClass ?? "") || med.requiresPrescription;
-        
+
         if (isControlled) {
           if (!dto.prescriptionId && !dto.overrideReason) {
             throw new UnprocessableEntityException(
@@ -115,16 +169,6 @@ export class BillingService {
           }
 
           if (dto.prescriptionId) {
-            const [rx] = await tx
-              .select({ 
-                status: schema.prescriptions.status, 
-                expiryDate: schema.prescriptions.expiryDate,
-                id: schema.prescriptions.id 
-              })
-              .from(schema.prescriptions)
-              .where(eq(schema.prescriptions.id, dto.prescriptionId));
-
-            const today = new Date().toISOString().split("T")[0]!;
             if (!rx || rx.status !== "verified") {
               throw new UnprocessableEntityException(`Linked prescription for ${med.name} is not verified`);
             }
@@ -132,22 +176,7 @@ export class BillingService {
               throw new UnprocessableEntityException(`Linked prescription for ${med.name} has expired`);
             }
 
-            // Check dispense quantities
-            const [rxItem] = await tx
-              .select({ 
-                id: schema.prescriptionItems.id,
-                quantityPrescribed: schema.prescriptionItems.quantityPrescribed,
-                quantityDispensed: schema.prescriptionItems.quantityDispensed,
-                isFullyDispensed: schema.prescriptionItems.isFullyDispensed
-              })
-              .from(schema.prescriptionItems)
-              .where(
-                and(
-                  eq(schema.prescriptionItems.prescriptionId, rx.id),
-                  eq(schema.prescriptionItems.medicineId, med.id)
-                )
-              );
-
+            const rxItem = rxItemsByMedicine.get(med.id);
             if (rxItem) {
               if (rxItem.isFullyDispensed) {
                 throw new UnprocessableEntityException(`Prescription for ${med.name} has already been fully dispensed`);
@@ -159,33 +188,22 @@ export class BillingService {
               }
             }
           }
-
-          if (dto.overrideReason && dto.overriddenBy) {
-            const [approver] = await tx
-              .select({ role: schema.users.role })
-              .from(schema.users)
-              .where(eq(schema.users.id, dto.overriddenBy));
-            
-            if (!approver || !["super_admin", "admin", "pharmacist"].includes(approver.role)) {
-              throw new UnprocessableEntityException("Override approver must be a pharmacist or admin");
-            }
-          }
         }
       }
 
-      // 2. FEFO Batch Selection
+      // 2. FEFO Batch Selection — one query for every line item instead of
+      // one query per item.
       const allAllocations: RawAllocation[] = [];
-      for (const item of dto.items) {
+      const batchAllocationsPerItem = await this.batchRepo.selectBatchesForDispenseMulti(
+        dto.items.map(item => ({ medicineId: item.medicineId, needed: item.quantity })),
+        tx,
+      );
+      dto.items.forEach((item, idx) => {
         const med = medicines.find(m => m.id === item.medicineId)!;
-        const batchAllocations = await this.batchRepo.selectBatchesForDispense(
-          item.medicineId,
-          item.quantity,
-          tx
-        );
-        for (const alloc of batchAllocations) {
+        for (const alloc of batchAllocationsPerItem[idx]!) {
           allAllocations.push({ item, med, allocation: alloc });
         }
-      }
+      });
 
       // 3. Compute Totals & Validate Payment Sum
       const lines: AllocationLine[] = allAllocations.map(({ item, med, allocation }) => {
@@ -244,17 +262,28 @@ export class BillingService {
         );
       }
 
-      // 4. Batch Deduction & Logs
+      // 4. Batch Deduction & Logs — the quantity UPDATE stays one-per-batch
+      // (each needs its own atomic "don't oversell" guard), but the
+      // stock-movement inserts are collected and written in one round trip.
+      const movementRows: {
+        batchId: string;
+        medicineId: string;
+        movementType: "sale";
+        quantity: number;
+        performedBy: string;
+        referenceType: string;
+      }[] = [];
+
       for (const { allocation, item } of allAllocations) {
         const [deducted] = await tx
           .update(schema.inventoryBatches)
-          .set({ 
-            quantity: sql`${schema.inventoryBatches.quantity} - ${allocation.allocate}`, 
-            updatedAt: new Date() 
+          .set({
+            quantity: sql`${schema.inventoryBatches.quantity} - ${allocation.allocate}`,
+            updatedAt: new Date()
           })
           .where(
             and(
-              eq(schema.inventoryBatches.id, allocation.batchId), 
+              eq(schema.inventoryBatches.id, allocation.batchId),
               gte(schema.inventoryBatches.quantity, allocation.allocate)
             )
           )
@@ -266,44 +295,39 @@ export class BillingService {
           );
         }
 
-        await this.movementRepo.log({
+        movementRows.push({
           batchId: allocation.batchId,
           medicineId: item.medicineId,
           movementType: "sale",
           quantity: -allocation.allocate,
           performedBy: staffId,
           referenceType: "invoice",
-        }, tx);
+        });
       }
 
-      // 4.5 Update Prescription Dispensed Quantities
+      await this.movementRepo.logMany(movementRows, tx);
+
+      // 4.5 Update Prescription Dispensed Quantities — reuses the map
+      // fetched once above instead of re-querying per item. The map is
+      // updated in place so two cart lines for the same medicine
+      // accumulate correctly instead of the second overwriting the first.
       if (dto.prescriptionId) {
         for (const item of dto.items) {
-          const [rxItem] = await tx
-            .select({ 
-              id: schema.prescriptionItems.id,
-              quantityPrescribed: schema.prescriptionItems.quantityPrescribed,
-              quantityDispensed: schema.prescriptionItems.quantityDispensed
-            })
-            .from(schema.prescriptionItems)
-            .where(
-              and(
-                eq(schema.prescriptionItems.prescriptionId, dto.prescriptionId),
-                eq(schema.prescriptionItems.medicineId, item.medicineId)
-              )
-            );
-          
+          const rxItem = rxItemsByMedicine.get(item.medicineId);
           if (rxItem) {
             const newDispensed = rxItem.quantityDispensed + item.quantity;
             const isFullyDispensed = rxItem.quantityPrescribed ? newDispensed >= rxItem.quantityPrescribed : false;
-            
+
             await tx
               .update(schema.prescriptionItems)
-              .set({ 
+              .set({
                 quantityDispensed: newDispensed,
                 isFullyDispensed
               })
               .where(eq(schema.prescriptionItems.id, rxItem.id));
+
+            rxItem.quantityDispensed = newDispensed;
+            rxItem.isFullyDispensed = isFullyDispensed;
           }
         }
       }

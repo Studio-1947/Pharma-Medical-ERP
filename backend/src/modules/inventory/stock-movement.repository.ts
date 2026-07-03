@@ -45,6 +45,29 @@ export class StockMovementRepository {
     return movement;
   }
 
+  /**
+   * Insert multiple stock movements in a single round trip — use in place
+   * of calling `log()` in a loop when logging several movements at once
+   * (e.g. one per cart line during checkout).
+   */
+  async logMany(
+    rows: {
+      batchId: string;
+      medicineId: string;
+      movementType: MovementType;
+      quantity: number;
+      referenceId?: string;
+      referenceType?: string;
+      performedBy?: string;
+      notes?: string;
+    }[],
+    tx?: any,
+  ) {
+    if (rows.length === 0) return [];
+    const db = tx ?? this.db;
+    return db.insert(schema.stockMovements).values(rows).returning();
+  }
+
   async findByMedicine(medicineId: string, limit = 50) {
     return this.db
       .select()

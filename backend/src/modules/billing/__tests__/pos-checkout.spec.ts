@@ -65,9 +65,13 @@ function buildService() {
 
   const mockBatchRepo = {
     selectBatchesForDispense: vi.fn(),
+    selectBatchesForDispenseMulti: vi.fn(),
   };
 
-  const mockMovementRepo = { log: vi.fn().mockResolvedValue(undefined) };
+  const mockMovementRepo = {
+    log: vi.fn().mockResolvedValue(undefined),
+    logMany: vi.fn().mockResolvedValue(undefined),
+  };
 
   const mockTaxService = {
     calculateLineTax: vi.fn().mockReturnValue({
@@ -125,15 +129,18 @@ describe("CHECKOUT-01 — OTC drug, single cash payment, no patient", () => {
 
     (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
 
-    mockBatchRepo.selectBatchesForDispense.mockResolvedValue([
-      { batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" },
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" }],
     ]);
 
     const result = await service.create(dto as any, "staff-1");
 
     expect(result.invoice.invoiceNo).toBe("INV-20240115-0001");
     expect(mockRepo.createInvoiceWithItems).toHaveBeenCalledOnce();
-    expect(mockBatchRepo.selectBatchesForDispense).toHaveBeenCalledWith("med-otc", 2, tx);
+    expect(mockBatchRepo.selectBatchesForDispenseMulti).toHaveBeenCalledWith(
+      [{ medicineId: "med-otc", needed: 2 }],
+      tx,
+    );
   });
 });
 
@@ -169,9 +176,10 @@ describe("CHECKOUT-02 — Multi-item, split payment produces paymentMode=mixed",
     ]);
 
     (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
-    mockBatchRepo.selectBatchesForDispense
-      .mockResolvedValueOnce([{ batchId: "batch-a", batchNo: "BA01", expiryDate: "2026-06-01", allocate: 1, mrpAtEntry: "1120.00" }])
-      .mockResolvedValueOnce([{ batchId: "batch-b", batchNo: "BB01", expiryDate: "2026-07-01", allocate: 1, mrpAtEntry: "1120.00" }]);
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-a", batchNo: "BA01", expiryDate: "2026-06-01", allocate: 1, mrpAtEntry: "1120.00" }],
+      [{ batchId: "batch-b", batchNo: "BB01", expiryDate: "2026-07-01", allocate: 1, mrpAtEntry: "1120.00" }],
+    ]);
 
     await service.create(dto as any, "staff-1");
 
@@ -200,8 +208,8 @@ describe("CHECKOUT-03 — Loyalty points accrual", () => {
     ]);
 
     (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
-    mockBatchRepo.selectBatchesForDispense.mockResolvedValue([
-      { batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 5, mrpAtEntry: "1000.00" },
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 5, mrpAtEntry: "1000.00" }],
     ]);
 
     await service.create(dto as any, "staff-1");
@@ -231,8 +239,8 @@ describe("CHECKOUT-04 — Loyalty points redemption lowers final total", () => {
     ]);
 
     (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
-    mockBatchRepo.selectBatchesForDispense.mockResolvedValue([
-      { batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "1100.00" },
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "1100.00" }],
     ]);
 
     await service.create(dto as any, "staff-1");
@@ -282,7 +290,7 @@ describe("CHECKOUT-06 — Already-fully-dispensed prescription item rejected", (
     const tx = buildTx([
       [{ id: "med-h", name: "Tramadol", scheduleClass: "SCHEDULE_H", requiresPrescription: true, taxPercent: "12", stripSize: 10, isActive: true }],
       [{ status: "verified", expiryDate: "2099-01-01", id: "rx-1" }],
-      [{ id: "rx-item-1", quantityPrescribed: 2, quantityDispensed: 2, isFullyDispensed: true }],
+      [{ id: "rx-item-1", medicineId: "med-h", quantityPrescribed: 2, quantityDispensed: 2, isFullyDispensed: true }],
     ]);
 
     (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
@@ -333,8 +341,8 @@ describe("CHECKOUT-08 — Concurrent batch depletion guard", () => {
     ]);
 
     (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
-    mockBatchRepo.selectBatchesForDispense.mockResolvedValue([
-      { batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" },
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" }],
     ]);
 
     await expect(service.create(dto as any, "staff-1")).rejects.toThrow(/Concurrent depletion/i);
@@ -358,8 +366,8 @@ describe("CHECKOUT-09 — PDF is not pre-generated during checkout", () => {
     ]);
 
     (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
-    mockBatchRepo.selectBatchesForDispense.mockResolvedValue([
-      { batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 1, mrpAtEntry: "1120.00" },
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 1, mrpAtEntry: "1120.00" }],
     ]);
 
     await service.create(dto as any, "staff-1");
@@ -385,8 +393,8 @@ describe("CHECKOUT-10 — ClickHouse sale events emitted after checkout", () => 
     ]);
 
     (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
-    mockBatchRepo.selectBatchesForDispense.mockResolvedValue([
-      { batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" },
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" }],
     ]);
 
     await service.create(dto as any, "staff-1");

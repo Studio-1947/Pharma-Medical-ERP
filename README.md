@@ -21,6 +21,8 @@ A full-stack, production-grade pharmacy ERP system built for Indian retail pharm
 13. [Database Management](#13-database-management)
 14. [Environment Variables](#14-environment-variables)
 15. [Deployment](#15-deployment)
+16. [Troubleshooting](#16-troubleshooting)
+17. [Known Issues & Hardening Backlog](#17-known-issues--hardening-backlog)
 
 ---
 
@@ -177,7 +179,6 @@ pharmerp/
 ├── frontend/                         # Next.js 15 (port 3000)
 │   ├── app/
 │   │   ├── (auth)/login/             # Public login page
-│   │   ├── (auth)/signup/            # Public signup page
 │   │   └── (shell)/                  # Protected layout (sidebar + header)
 │   │       ├── dashboard/
 │   │       ├── billing/pos/
@@ -305,7 +306,7 @@ stock_transfers ─────────────────────�
 |---|---|
 | `users` | `email UNIQUE`, `role` enum default `cashier` |
 | `medicines` | `sku UNIQUE`, `barcode UNIQUE nullable` |
-| `inventory_batches` | `(medicine_id, warehouse_id, batch_no)` unique index, `expiry_date` index |
+| `inventory_batches` | `(medicine_id, batch_no)` unique index **across the whole table** (not scoped per warehouse — a batch lives at exactly one location/warehouse at a time via `location_id → storage_locations.warehouse_id`), `expiry_date` index |
 | `sales_invoices` | `invoice_no UNIQUE`, `status` enum, soft-delete via `deleted_at` |
 | `sales_invoice_items` | Immutable after invoice confirmation |
 | `payments` | No soft delete — financial record |
@@ -521,14 +522,16 @@ All monetary arithmetic uses `Decimal.js` to avoid float precision errors.
 ### 8.3 FEFO Batch Selection
 
 ```
-selectBatchesForDispense(medicineId, warehouseId, requiredQty):
+selectBatchesForDispense(medicineId, requiredQty):
   
   batches = SELECT * FROM inventory_batches
-            WHERE medicine_id = ? AND warehouse_id = ?
+            WHERE medicine_id = ?
               AND status = 'active'
               AND expiry_date > NOW()
-              AND quantity > reserved_qty
+              AND quantity > 0
             ORDER BY expiry_date ASC          -- First Expired, First Out
+  -- reserved_qty (e.g. stock mid-transfer) is subtracted from each batch's
+  -- quantity in application code before allocating, not filtered in SQL
   
   allocated = []
   remaining = requiredQty
@@ -589,9 +592,22 @@ Distribution Staff (Branch B receives)
         └── PATCH /distribution/transfers/:id/deliver
                 └── { status: "delivered", items: [{itemId, receivedQty, rejectedQty}] }
                         ├── Update received/rejected quantities per item
-                        ├── TODO: Create stock_movement records at destination
+                        ├── Relocate the batch's locationId to a location in the
+                        │     destination warehouse (same row — batchNo is unique
+                        │     per medicine across the whole table, so transfers
+                        │     move a batch's full quantity, not a partial split)
+                        ├── INSERT stock_movements (type: transfer_reject_writeoff)
+                        │     for any rejectedQty
                         └── status → delivered
 ```
+
+> **Note:** A transfer's `requestedQty` must equal the batch's full available
+> quantity (`quantity - reservedQty`) at creation time — partial transfers of
+> a single batch aren't supported without a schema change (see
+> [§17 Hardening Backlog](#17-known-issues--hardening-backlog)). `approve()`
+> atomically sets `reservedQty = quantity` on each batch so it can't be sold
+> or re-transferred while in transit; FEFO sale allocation
+> (`selectBatchesForDispense`) excludes reserved quantity.
 
 ### 8.6 Purchase Order → GRN Flow
 
@@ -706,8 +722,14 @@ Next.js middleware.ts (Edge runtime)
         ├── Protected routes: /dashboard/*, /billing/*, etc.
         │       └── No cookie → redirect to /login?from={pathname}
         │
-        └── Auth routes: /login, /signup
+        └── Auth routes: /login
                 └── Has cookie → redirect to /dashboard
+
+There is no public self-signup route. New accounts are created by an
+existing super_admin/admin via Settings → Users ("Invite User"), which
+calls POST /auth/register with the inviter's own JWT — the endpoint
+requires an authenticated caller and rejects creating super_admin
+accounts entirely (seed script only).
 
 Cookie is set on login (setTokens in auth.store.ts)
 Cookie is cleared on logout (logout() in auth.store.ts)
@@ -836,11 +858,47 @@ pnpm run db:push          # Push schema changes
 pnpm run db:migrate       # Apply versioned migrations
 pnpm run db:generate      # Generate new migration from schema diff
 pnpm run db:studio        # Open Drizzle Studio GUI
-
-# Production (Neon)
-DB_TARGET=prod pnpm run db:push:prod
-DB_TARGET=prod pnpm run db:migrate:prod
 ```
+
+> **`backend/.env`'s `DATABASE_URL_PROD` (Neon) is NOT the live production
+> database.** The actual `pharmerp-backend` Cloud Run service reads
+> `DATABASE_URL` from GCP Secret Manager, pointing at the Terraform-provisioned
+> Cloud SQL instance `pharmerp-prod` (private IP only — see §15). The Neon URL
+> is a leftover/alternate value; running `db:push:prod`/`db:migrate:prod`
+> against it does **not** touch what users actually hit. Verify the live
+> target before assuming otherwise:
+> ```bash
+> gcloud run services describe pharmerp-backend --project=radha-madhav-497409 \
+>   --region=asia-south1 --format="yaml(spec.template.spec.containers[0].env)"
+> ```
+
+### Reaching production Cloud SQL (private IP, no public endpoint)
+
+Cloud SQL has no public IP (`ipv4_enabled = false` in `infra/gcp/main.tf`), so
+it's unreachable directly from a local machine. To run a one-off script or
+migration against it:
+
+1. Build the backend image locally (it already contains `pnpm db:migrate`
+   and any one-off scripts under `backend/src/database/`).
+2. Push it to Artifact Registry:
+   `asia-south1-docker.pkg.dev/radha-madhav-497409/pharmerp/backend`.
+3. Create a temporary Cloud Run Job wired to the same VPC connector
+   (`pharmerp-connector`) and `DATABASE_URL` secret as the live service:
+   ```bash
+   gcloud run jobs create <job-name> \
+     --project=radha-madhav-497409 --region=asia-south1 \
+     --image=<image>:<tag> --command=node --args=dist/path/to/script.js \
+     --vpc-connector=pharmerp-connector --vpc-egress=private-ranges-only \
+     --set-secrets=DATABASE_URL=DATABASE_URL:latest --max-retries=0
+   ```
+4. `gcloud run jobs execute <job-name> --wait`, check logs, then
+   `gcloud run jobs delete <job-name> --quiet` to avoid leaving billed
+   resources behind.
+
+This is how the initial `rkmc@email.com` super_admin was seeded into
+production — see `backend/src/database/seed-admin.ts` for the idempotent
+(`ON CONFLICT DO NOTHING`) pattern used, which only touches that one row
+rather than running the full demo `seed.ts` against real data.
 
 ### Safe schema change workflow
 
@@ -906,48 +964,79 @@ NEXT_PUBLIC_CURRENCY=INR
 
 ## 15. Deployment
 
-### Recommended topology (production)
+### Actual production topology (GCP, project `radha-madhav-497409`, region `asia-south1`)
+
+This is the real, live setup — defined in `infra/gcp/main.tf` (Terraform) and
+deployed by `.github/workflows/deploy-gcp.yml` (GitHub Actions, on push to
+`main`). It does **not** match the generic Neon/Vercel/Upstash description
+this section used to have — see the git history if you need that older,
+never-deployed plan for reference.
 
 ```
-Internet
+GitHub (push to main)
     │
     ▼
-Cloudflare (CDN + DDoS)
-    │
-    ├── frontend.yourdomain.com
-    │       └── Vercel / self-hosted Next.js (standalone output)
-    │
-    └── api.yourdomain.com
-            └── Docker container (NestJS)
-                    ├── PostgreSQL → Neon (managed, serverless)
-                    ├── Redis → Upstash (managed, serverless)
-                    ├── S3 → AWS S3 or MinIO on VM
-                    └── Elasticsearch → Elastic Cloud (Phase 3)
+GitHub Actions (deploy-gcp.yml)
+    ├── lint-typecheck, test
+    ├── Build + push backend image  → Artifact Registry
+    │       asia-south1-docker.pkg.dev/radha-madhav-497409/pharmerp/backend
+    ├── Deploy Cloud Run: pharmerp-backend
+    └── Deploy Cloud Run: pharmerp-frontend
+            (build-arg NEXT_PUBLIC_API_URL = pharmerp-backend's Cloud Run URL)
+
+Cloud Run: pharmerp-frontend  ──HTTPS──▶  Cloud Run: pharmerp-backend
+                                                │
+                                                ├── VPC connector: pharmerp-connector
+                                                │     (vpc-egress: private-ranges-only)
+                                                │
+                                                ├──▶ Cloud SQL: pharmerp-prod
+                                                │      Postgres 16, PRIVATE IP ONLY,
+                                                │      backups + PITR enabled
+                                                │      (DATABASE_URL via Secret Manager)
+                                                │
+                                                ├──▶ Memorystore Redis: pharmerp-redis
+                                                │      (REDIS_URL via Secret Manager)
+                                                │
+                                                └──▶ GCS bucket: radha-madhav-prod-files
+                                                       (S3_BUCKET — prescriptions, invoice PDFs)
 ```
 
-### Docker build
+Secrets (`DATABASE_URL`, `REDIS_URL`, `JWT_PRIVATE_KEY`, `JWT_PUBLIC_KEY`) are
+stored in **Secret Manager** and mounted into Cloud Run via `secretKeyRef` —
+they are set once out-of-band (console/gcloud), not by the deploy workflow,
+which only updates `NODE_ENV`, `S3_BUCKET`, `CORS_ORIGIN` on each deploy.
+
+Inspect the live config at any time:
+```bash
+gcloud run services describe pharmerp-backend --project=radha-madhav-497409 \
+  --region=asia-south1 --format="yaml(spec.template.spec.containers[0].env, spec.template.metadata.annotations)"
+```
+
+### Docker build (matches CI)
 
 ```bash
 # Backend
-cd backend
-docker build -t pharmerp-api .
+docker build -f backend/Dockerfile -t asia-south1-docker.pkg.dev/radha-madhav-497409/pharmerp/backend:local .
 
 # Frontend
-cd frontend
-docker build -t pharmerp-web .
+docker build -f frontend/Dockerfile \
+  --build-arg NEXT_PUBLIC_API_URL=https://pharmerp-backend-728779791744.asia-south1.run.app/api/v1 \
+  -t asia-south1-docker.pkg.dev/radha-madhav-497409/pharmerp/frontend:local .
 ```
 
-### Environment checklist before production
+### Environment checklist before production changes
 
-- [ ] Rotate all JWT keys (`openssl genrsa -out private.pem 2048`)
-- [ ] Set strong `DATABASE_URL_PROD` with SSL
-- [ ] Set Redis password in `REDIS_URL`
-- [ ] Replace MinIO with AWS S3 or configure MinIO TLS
-- [ ] Set `NODE_ENV=production`
-- [ ] Set `CORS_ORIGIN` to actual frontend domain
-- [ ] Run `pnpm run db:migrate:prod` (not db:push)
-- [ ] Configure reverse proxy (nginx/Caddy) with SSL
-- [ ] Set up log aggregation (Loki / Datadog)
+- [ ] Never run `db:push`/`db:migrate` against `DATABASE_URL_PROD` in
+      `backend/.env` expecting it to reach live users — it's Neon, not the
+      real Cloud SQL prod (see §13). Use the Cloud Run Job pattern instead.
+- [ ] Rotate JWT keys via Secret Manager (`gcloud secrets versions add`), not
+      by editing `backend/.env`
+- [ ] `pharmerp-prod` Cloud SQL has `deletion_protection = true` — don't
+      remove that in Terraform without a deliberate, confirmed decision
+- [ ] `google_storage_bucket.files` has `force_destroy = false` — same caution
+- [ ] Any one-off script touching prod data should be idempotent
+      (`ON CONFLICT DO NOTHING`/similar) and run via a temporary, deleted-after
+      Cloud Run Job — never by temporarily exposing Cloud SQL publicly
 
 ---
 
@@ -981,6 +1070,97 @@ pnpm fix-deps
 ```
 
 **Never edit source files to work around a `MODULE_NOT_FOUND` error** — the module is missing from the store, not from the code. `pnpm install --force` is always the correct first step.
+
+---
+
+## 17. Known Issues & Hardening Backlog
+
+Full-codebase audit findings, tracked here so work continues from this list
+rather than re-discovering the same issues. Update this table as items are
+fixed — move the row's Status to `Fixed` with a one-line note, don't delete it
+(keeps the history of what shipped and why).
+
+### Critical
+
+| # | Finding | Status |
+|---|---|---|
+| 1 | Stock transfers never moved inventory — `approve()`/`deliver()` only flipped status flags | **Fixed** — full-batch relocation model; see §8.5 |
+| 2 | Schedule H/H1/X override bypass — cashier can skip Rx requirement with just an `overrideReason` string, no real approver verification | Open |
+| 3 | Patient allergies collected but never checked against dispensed medicines; no UI field to populate them | Open |
+| 4 | Double-return / over-refund race — `createReturn` has no mutex analogous to `voidInvoice`'s conditional update | Open |
+| 5 | `recordPayment` has no amount/state validation — can push `amountDue` negative, no status transition on full payment | Open |
+| 6 | Privilege escalation — any `ADMIN` can PATCH any user's role to `SUPER_ADMIN` (including their own); last `SUPER_ADMIN` can be deactivated | Open |
+| 7 | Notifications never produced — expiry/reorder jobs only `logger.log`, `NotificationsService.create()` never called | Open |
+
+### High
+
+| # | Finding | Status |
+|---|---|---|
+| 8 | GRN over-receiving not checked against remaining ordered qty; PO cancel allowed after partial receipt | Open |
+| 9 | GRN status computed via a query that bypasses the active transaction — reads stale `receivedQty` | Open |
+| 10 | Supplier outstanding balance only increases — no payment-side decrement, no credit-limit enforcement | Open |
+| 11 | Loyalty points: redemption race can drive balance negative; not reversed on invoice void/return | Open |
+| 12 | Cross-branch prescription access — no `branchId` scoping; any user can fetch any patient's Rx image by ID | Open |
+| 13 | `inviteUser` and branch create/update skip Zod validation (unsafe `as` cast, same pattern as old change-password bug) | Open |
+| 14 | `findLeaveRequests` ignores its own `branchId` filter — cross-branch data leak in HR | Open |
+
+### Medium
+
+| # | Finding | Status |
+|---|---|---|
+| 15 | `change-password` skipped Zod validation entirely | **Fixed** |
+| 16 | POS checkout had no `onError` — failed sale showed nothing to the cashier | **Fixed** |
+| 17 | Prescription presigned-URL failures silently swallowed (comment claimed to log, didn't) | **Fixed** |
+| 18 | Split-payment refund always uses the first payment's mode | Open |
+| 19 | Frontend (0.01 tolerance) / backend (exact match) payment-sum mismatch | Open |
+| 20 | Prescription "Edit" button calls a PATCH route that doesn't exist (404) | Open |
+| 21 | Prescription image upload has no size limit, MIME check is client-header only | Open |
+| 22 | `findSkuSet` (bulk import) and GST/Schedule-H CSV export do full-table loads instead of DB-level filtering | Open |
+| 23 | Attendance has no frontend UI at all despite full backend support | Open |
+| 24 | Report query params (`days`, etc.) unvalidated — bad input silently produces `Invalid Date` | Open |
+| 25 | No admin "reset password" and no self-service "forgot password" — an account lockout has no recovery path | Open |
+
+### Low
+
+- Various `as any` casts bypassing type safety at repository boundaries (not exploitable today since controllers validate first, but fragile against future schema changes).
+- Discount-override UI is dead code in the POS terminal (`discountAmount` hardcoded to `"0"`).
+- Generated invoice PDF is cached forever, even after the invoice is later voided/returned.
+- `dotenv/config` is imported by `seed.ts`/would be by any deployed script, but `dotenv` isn't a direct dependency of `backend/package.json` — fine locally (transitively present), fails with `MODULE_NOT_FOUND` if ever run inside the production image. `seed-admin.ts` avoids this by not importing it (Cloud Run injects env vars directly).
+
+### Performance
+
+Ranked by real-world impact — checkout speed matters most since it's what a
+cashier feels every single sale.
+
+| # | Finding | Impact | Status |
+|---|---|---|---|
+| P1 | Checkout issued 20-30+ sequential DB round trips per sale | **Fixed** — FEFO selection batched into one query across all cart lines (`selectBatchesForDispenseMulti`), stock-movement inserts batched into one multi-row insert (`logMany`), and the invoice-level prescription/approver checks (previously re-queried once per controlled-drug item) hoisted to run once. The per-batch quantity `UPDATE` stays one-per-allocation — it needs its own atomic oversell guard and can't be safely batched. |
+| P2 | No debounce on POS medicine/patient search | **Fixed** — both search inputs now debounce the query (not the input's own value/re-render) by 300ms via the existing `useDebounce` hook, cutting a full "paracetamol"-length search from ~11 API calls down to 1. The whole-component re-render issue (single 1000+ line `PosTerminal`, no memoized children/selectors) is still open — deferred as a larger refactor. |
+| P3 | `prescriptionItems` has zero indexes despite being queried by `(prescriptionId, medicineId)` on every controlled-drug checkout line — `schema/prescriptions.ts:48-63` | Compounds P1 as prescriptions accumulate | Open |
+| P4 | `sales_invoices.branch_id` has no index despite being filtered in nearly every report query and EOD summary; combined with the existing `DATE(created_at)` issue this forces full-table scans on report generation past ~50k invoices/branch | Reporting/EOD, not checkout | Open |
+| P5 | Medicine/POS search uses leading-wildcard `ILIKE '%term%'` (can't use the btree index — always a seq scan) with no Redis cache, despite Redis already being wired into `BillingRepository` — `inventory.repository.ts:15-72` | Noticeable at 10k+ SKU catalogs | Open |
+| P6 | `hr` schema (`employees`, `departments`, `attendance`, `leave_requests`) has no indexes at all despite `branchId`/`employeeId` filters in every list query | HR list pages slow as headcount grows | Open |
+| P7 | GRN receiving does 4 sequential insert/update statements per line item (batch insert, stock movement, GRN item, PO item update) — a 50-line GRN issues ~200 round trips in one transaction | Back-office, not customer-facing | Open |
+| P8 | `getScheduleHData` and the GST/Schedule-H CSV export both do "load everything, enrich with a second query, reduce in memory" instead of a single join or streaming | Slow for month-long regulatory report ranges | Open |
+| P9 | `findLeaveRequests` has no pagination — returns the entire table when unfiltered | Payload/latency risk past a few thousand leave rows | Open |
+| P10 | Offline POS sync (`pos-db.ts:49`) does an unindexed `.filter()` full scan instead of using the `synced` index already defined in the Dexie schema | Only runs once on reconnect — low priority | Open |
+
+**Two changes would give the most felt improvement for the least effort:**
+add a ~300ms debounce to the POS medicine/patient search inputs (P2), and
+batch the per-item stock-movement/prescription-item writes in checkout into
+single multi-row statements instead of one query per cart line (P1).
+
+### Architectural note — partial batch transfers
+
+`inventory_batches` has a unique constraint on `(medicine_id, batch_no)`
+**across the whole table** (not scoped per warehouse), and a batch's
+warehouse is derived indirectly via `location_id → storage_locations.warehouse_id`.
+This means a batch physically exists at exactly one location at a time —
+transfers can move a batch's full quantity but can't split it across two
+warehouses without a schema change (e.g. a `batch_stock (batch_id, location_id, quantity)`
+ledger table, decoupling "how much of this batch exists" from "where it is").
+Deferred as a deliberate scope decision, not an oversight — flag before
+building anything that assumes partial-batch transfers work.
 
 ---
 

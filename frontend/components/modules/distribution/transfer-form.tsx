@@ -20,6 +20,7 @@ interface Batch {
   batchNo: string;
   expiryDate: string;
   quantity: number;
+  reservedQty: number;
 }
 
 interface Warehouse {
@@ -181,7 +182,7 @@ function BatchSelect({
 }: {
   medicineId: string;
   value: string;
-  onSelect: (id: string, batchNo: string) => void;
+  onSelect: (id: string, batchNo: string, availableQty: number) => void;
   error?: boolean;
 }) {
   const { data, isLoading } = useQuery<Batch[]>({
@@ -194,14 +195,18 @@ function BatchSelect({
     staleTime: 30_000,
   });
 
-  const batches: Batch[] = data ?? [];
+  // A batch already reserved for another in-transit transfer has nothing
+  // left to move — hide it. Transfers always move a batch's full remaining
+  // quantity, so that's what we show and what gets submitted.
+  const batches: Batch[] = (data ?? []).filter((b) => b.quantity - (b.reservedQty ?? 0) > 0);
 
   return (
     <select
       value={value}
       onChange={(e) => {
         const batch = batches.find((b) => b.id === e.target.value);
-        onSelect(e.target.value, batch?.batchNo ?? "");
+        const available = batch ? batch.quantity - (batch.reservedQty ?? 0) : 0;
+        onSelect(e.target.value, batch?.batchNo ?? "", available);
       }}
       disabled={!medicineId || isLoading}
       className={[
@@ -217,7 +222,7 @@ function BatchSelect({
           : isLoading
           ? "Loading batches..."
           : batches.length === 0
-          ? "No active batches"
+          ? "No transferable batches"
           : "Select batch"}
       </option>
       {batches.map((b) => (
@@ -228,7 +233,7 @@ function BatchSelect({
             month: "short",
             year: "numeric",
           })}{" "}
-          (Qty: {b.quantity})
+          (Qty: {b.quantity - (b.reservedQty ?? 0)})
         </option>
       ))}
     </select>
@@ -387,9 +392,10 @@ export function TransferForm({ onSuccess, onCancel }: Props) {
                   <BatchSelect
                     medicineId={watchedItems[idx]?.medicineId ?? ""}
                     value={watchedItems[idx]?.batchId ?? ""}
-                    onSelect={(id, batchNo) => {
+                    onSelect={(id, batchNo, availableQty) => {
                       setValue(`items.${idx}.batchId`, id);
                       setValue(`items.${idx}.batchNo`, batchNo);
+                      setValue(`items.${idx}.requestedQty`, availableQty);
                     }}
                   />
                 </div>
@@ -403,9 +409,9 @@ export function TransferForm({ onSuccess, onCancel }: Props) {
                       min: { value: 1, message: "Min 1" },
                     })}
                     type="number"
-                    min="1"
-                    placeholder="Qty"
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400 bg-white"
+                    readOnly
+                    title="Transfers always move a batch's full remaining quantity"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm bg-slate-100 text-slate-600 cursor-not-allowed"
                   />
                 </div>
               </div>

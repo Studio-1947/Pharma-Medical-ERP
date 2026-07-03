@@ -10,6 +10,7 @@ import { useAuthStore } from "@/stores/auth.store";
 import { queueOfflineInvoice, syncOfflineQueue } from "@/lib/pos-db";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
+import { useDebounce } from "@/hooks/use-debounce";
 
 const CONTROLLED_CLASSES = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"];
 
@@ -251,10 +252,11 @@ export function PosTerminal() {
   };
 
   // ── Patient lookup ──────────────────────────────────────────────────────────
+  const debouncedPatientSearch = useDebounce(patientSearch, 300);
   const { data: patientResults } = useQuery({
-    queryKey: ["patient-search-pos", patientSearch],
-    queryFn: () => apiClient.get("/patients", { params: { search: patientSearch, limit: 5 } }) as any,
-    enabled: (patientSearch?.length ?? 0) >= 3,
+    queryKey: ["patient-search-pos", debouncedPatientSearch],
+    queryFn: () => apiClient.get("/patients", { params: { search: debouncedPatientSearch, limit: 5 } }) as any,
+    enabled: (debouncedPatientSearch?.length ?? 0) >= 3,
   });
 
   const { data: selectedPatientRaw } = useQuery({
@@ -339,10 +341,11 @@ export function PosTerminal() {
   }, [items, clear, lastInvoice]);
 
   // ── Medicine search ──────────────────────────────────────────────────────────
+  const debouncedSearch = useDebounce(search, 300);
   const { data: searchResults, isFetching } = useQuery({
-    queryKey: ["medicine-search", search],
-    queryFn: () => apiClient.get("/inventory/medicines", { params: { search, limit: 8 } }) as any,
-    enabled: (search?.length ?? 0) >= 2,
+    queryKey: ["medicine-search", debouncedSearch],
+    queryFn: () => apiClient.get("/inventory/medicines", { params: { search: debouncedSearch, limit: 8 } }) as any,
+    enabled: (debouncedSearch?.length ?? 0) >= 2,
   });
 
   // ── Invoice creation ─────────────────────────────────────────────────────────
@@ -356,6 +359,12 @@ export function PosTerminal() {
       clear();
       setPayOpen(false);
       setPrintOpen(true);
+    },
+    onError: (err: any) => {
+      toastError(
+        "Checkout failed",
+        err?.response?.data?.message ?? "Could not complete the sale. Check stock, prescription, and payment details, then try again.",
+      );
     },
   });
 

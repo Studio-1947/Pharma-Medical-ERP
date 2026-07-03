@@ -78,8 +78,8 @@ describe("BatchRepository (FEFO)", () => {
 
     it("returns allocations sorted FEFO (oldest expiry first)", async () => {
       const repo = buildRepo([
-        { id: "batch-early", batchNo: "B01", expiryDate: "2026-04-01", quantity: 3, mrpAtEntry: "300.00" },
-        { id: "batch-late",  batchNo: "B02", expiryDate: "2026-08-01", quantity: 10, mrpAtEntry: "300.00" },
+        { id: "batch-early", batchNo: "B01", expiryDate: "2026-04-01", quantity: 3, reservedQty: 0, mrpAtEntry: "300.00" },
+        { id: "batch-late",  batchNo: "B02", expiryDate: "2026-08-01", quantity: 10, reservedQty: 0, mrpAtEntry: "300.00" },
       ]);
 
       const result = await repo.selectBatchesForDispense("med-1", 5);
@@ -93,7 +93,7 @@ describe("BatchRepository (FEFO)", () => {
 
     it("returns a single allocation when one batch covers the full quantity", async () => {
       const repo = buildRepo([
-        { id: "batch-1", batchNo: "B01", expiryDate: "2026-06-01", quantity: 20, mrpAtEntry: "200.00" },
+        { id: "batch-1", batchNo: "B01", expiryDate: "2026-06-01", quantity: 20, reservedQty: 0, mrpAtEntry: "200.00" },
       ]);
 
       const result = await repo.selectBatchesForDispense("med-1", 7);
@@ -104,7 +104,7 @@ describe("BatchRepository (FEFO)", () => {
 
     it("throws UnprocessableEntityException when stock is insufficient", async () => {
       const repo = buildRepo([
-        { id: "batch-1", batchNo: "B01", expiryDate: "2026-06-01", quantity: 4, mrpAtEntry: "200.00" },
+        { id: "batch-1", batchNo: "B01", expiryDate: "2026-06-01", quantity: 4, reservedQty: 0, mrpAtEntry: "200.00" },
       ]);
 
       await expect(repo.selectBatchesForDispense("med-1", 10)).rejects.toThrow(
@@ -121,9 +121,9 @@ describe("BatchRepository (FEFO)", () => {
 
     it("allocates exactly the needed quantity across 3 batches", async () => {
       const repo = buildRepo([
-        { id: "b1", batchNo: "B01", expiryDate: "2026-01-01", quantity: 5, mrpAtEntry: "100.00" },
-        { id: "b2", batchNo: "B02", expiryDate: "2026-03-01", quantity: 5, mrpAtEntry: "100.00" },
-        { id: "b3", batchNo: "B03", expiryDate: "2026-05-01", quantity: 5, mrpAtEntry: "100.00" },
+        { id: "b1", batchNo: "B01", expiryDate: "2026-01-01", quantity: 5, reservedQty: 0, mrpAtEntry: "100.00" },
+        { id: "b2", batchNo: "B02", expiryDate: "2026-03-01", quantity: 5, reservedQty: 0, mrpAtEntry: "100.00" },
+        { id: "b3", batchNo: "B03", expiryDate: "2026-05-01", quantity: 5, reservedQty: 0, mrpAtEntry: "100.00" },
       ]);
 
       const result = await repo.selectBatchesForDispense("med-1", 12);
@@ -151,7 +151,7 @@ describe("BatchRepository (FEFO)", () => {
         from: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         orderBy: vi.fn().mockResolvedValue([
-          { id: "batch-tx", batchNo: "TX01", expiryDate: "2026-06-01", quantity: 10, mrpAtEntry: "100.00" },
+          { id: "batch-tx", batchNo: "TX01", expiryDate: "2026-06-01", quantity: 10, reservedQty: 0, mrpAtEntry: "100.00" },
         ]),
       };
 

@@ -1,5 +1,5 @@
 import { Injectable, UnprocessableEntityException } from "@nestjs/common";
-import { and, asc, desc, eq, gt, gte, isNull, lt, lte, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, lte, ne, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 import type {
@@ -293,6 +293,7 @@ export class BatchRepository {
         batchNo: schema.inventoryBatches.batchNo,
         expiryDate: schema.inventoryBatches.expiryDate,
         quantity: schema.inventoryBatches.quantity,
+        reservedQty: schema.inventoryBatches.reservedQty,
         mrpAtEntry: schema.inventoryBatches.mrpAtEntry,
       })
       .from(schema.inventoryBatches)
@@ -311,7 +312,11 @@ export class BatchRepository {
 
     for (const batch of batches) {
       if (remaining <= 0) break;
-      const take = Math.min(batch.quantity, remaining);
+      // A batch fully reserved for an in-transit stock transfer has no
+      // sellable quantity left, even though its raw `quantity` is unchanged.
+      const sellable = batch.quantity - batch.reservedQty;
+      if (sellable <= 0) continue;
+      const take = Math.min(sellable, remaining);
       allocations.push({
         batchId: batch.id,
         batchNo: batch.batchNo,
@@ -330,6 +335,101 @@ export class BatchRepository {
     }
 
     return allocations;
+  }
+
+  /**
+   * Same FEFO allocation as `selectBatchesForDispense`, but for several
+   * medicines at once in a single query — use during checkout instead of
+   * calling `selectBatchesForDispense` once per cart line.
+   *
+   * Returns one allocation list per entry in `needs`, aligned by array
+   * index (not keyed by medicineId) so two cart lines for the same
+   * medicine each get their own independent FEFO pass over the remaining
+   * batch quantities, in the order given.
+   */
+  async selectBatchesForDispenseMulti(
+    needs: { medicineId: string; needed: number }[],
+    tx?: any,
+  ): Promise<Array<{ batchId: string; batchNo: string; expiryDate: string; allocate: number; mrpAtEntry: string }>[]> {
+    const db = tx ?? this.db;
+    const today = new Date().toISOString().split("T")[0]!;
+    const medicineIds = [...new Set(needs.map((n) => n.medicineId))];
+
+    const batches = medicineIds.length
+      ? await db
+          .select({
+            id: schema.inventoryBatches.id,
+            medicineId: schema.inventoryBatches.medicineId,
+            batchNo: schema.inventoryBatches.batchNo,
+            expiryDate: schema.inventoryBatches.expiryDate,
+            quantity: schema.inventoryBatches.quantity,
+            reservedQty: schema.inventoryBatches.reservedQty,
+            mrpAtEntry: schema.inventoryBatches.mrpAtEntry,
+          })
+          .from(schema.inventoryBatches)
+          .where(
+            and(
+              inArray(schema.inventoryBatches.medicineId, medicineIds),
+              eq(schema.inventoryBatches.status, "active"),
+              gt(schema.inventoryBatches.quantity, 0),
+              gt(schema.inventoryBatches.expiryDate, today),
+            ),
+          )
+          .orderBy(asc(schema.inventoryBatches.expiryDate))
+      : [];
+
+    // Mutable per-batch running "sellable" counter — shared across every
+    // `needs` entry for the same medicine, so two cart lines for the same
+    // medicine deplete the same pool in FEFO order instead of each seeing
+    // the full untouched quantity.
+    const batchesByMedicine = new Map<
+      string,
+      Array<{ id: string; batchNo: string; expiryDate: string; mrpAtEntry: string; sellable: number }>
+    >();
+    for (const batch of batches) {
+      const list = batchesByMedicine.get(batch.medicineId) ?? [];
+      list.push({
+        id: batch.id,
+        batchNo: batch.batchNo,
+        expiryDate: batch.expiryDate,
+        mrpAtEntry: batch.mrpAtEntry,
+        sellable: batch.quantity - batch.reservedQty,
+      });
+      batchesByMedicine.set(batch.medicineId, list);
+    }
+
+    const result: Array<{ batchId: string; batchNo: string; expiryDate: string; allocate: number; mrpAtEntry: string }>[] = [];
+
+    for (const { medicineId, needed } of needs) {
+      const allocations: Array<{ batchId: string; batchNo: string; expiryDate: string; allocate: number; mrpAtEntry: string }> = [];
+      let remaining = needed;
+
+      for (const batch of batchesByMedicine.get(medicineId) ?? []) {
+        if (remaining <= 0) break;
+        if (batch.sellable <= 0) continue;
+        const take = Math.min(batch.sellable, remaining);
+        allocations.push({
+          batchId: batch.id,
+          batchNo: batch.batchNo,
+          expiryDate: batch.expiryDate,
+          allocate: take,
+          mrpAtEntry: batch.mrpAtEntry,
+        });
+        batch.sellable -= take;
+        remaining -= take;
+      }
+
+      if (remaining > 0) {
+        const available = needed - remaining;
+        throw new UnprocessableEntityException(
+          `Insufficient stock for medicine ${medicineId}: requested ${needed}, available ${available}`,
+        );
+      }
+
+      result.push(allocations);
+    }
+
+    return result;
   }
 
   async hasMovements(batchId: string): Promise<boolean> {
