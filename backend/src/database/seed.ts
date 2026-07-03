@@ -40,7 +40,8 @@ async function seed() {
 
   // 2. Hash passwords
   console.log("Hashing passwords...");
-  const [adminHash, pharmHash, cashHash, invHash] = await Promise.all([
+  const [rkmcHash, adminHash, pharmHash, cashHash, invHash] = await Promise.all([
+    argon2.hash("RadhaMadhav@123"),
     argon2.hash("Admin@123"),
     argon2.hash("Pharm@123"),
     argon2.hash("Cash@123"),
@@ -50,6 +51,12 @@ async function seed() {
   // 3. Users
   console.log("Inserting users...");
   const usersData = [
+    {
+      email: "rkmc@email.com",
+      passwordHash: rkmcHash,
+      role: "super_admin" as const,
+      branchId: null,
+    },
     {
       email: "admin@mederp.com",
       passwordHash: adminHash,
