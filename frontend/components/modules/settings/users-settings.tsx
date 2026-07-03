@@ -91,11 +91,16 @@ function InviteUserModal({
   });
   const [error, setError] = useState<string | null>(null);
 
-  const { data: branches } = useQuery<any[]>({
+  const { data: branchesRaw } = useQuery<any>({
     queryKey: ["branches"],
     queryFn: () => apiClient.get("/branches"),
     enabled: role === UserRole.SUPER_ADMIN && open,
   });
+  const branches: any[] = Array.isArray(branchesRaw)
+    ? branchesRaw
+    : Array.isArray(branchesRaw?.data)
+      ? branchesRaw.data
+      : [];
 
   const mutation = useMutation({
     mutationFn: (data: InviteForm) => {
