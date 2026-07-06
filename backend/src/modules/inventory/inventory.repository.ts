@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, eq, gt, ilike, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, ilike, isNull, or, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 import type { CreateMedicineDto, UpdateMedicineDto, QueryMedicineDto } from "@pharmerp/types";
@@ -18,7 +18,15 @@ export class InventoryRepository {
       eq(schema.medicines.isActive, params.isActive ?? true),
     ];
     if (params.search) {
-      conditions.push(ilike(schema.medicines.name, `%${params.search}%`));
+      const searchFilter = or(
+        ilike(schema.medicines.name, `%${params.search}%`),
+        ilike(schema.medicines.genericName, `%${params.search}%`),
+        eq(schema.medicines.sku, params.search),
+        eq(schema.medicines.barcode, params.search),
+      );
+      if (searchFilter) {
+        conditions.push(searchFilter);
+      }
     }
     if (params.categoryId) {
       conditions.push(eq(schema.medicines.categoryId, params.categoryId));

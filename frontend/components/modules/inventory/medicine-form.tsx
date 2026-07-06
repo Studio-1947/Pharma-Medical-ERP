@@ -1,10 +1,12 @@
-﻿"use client";
+"use client";
 
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { createMedicineSchema, type CreateMedicineDto } from "@pharmerp/types";
 import { apiClient, queryKeys } from "@/lib/api-client";
+import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
 import {
   Pill,
   Barcode,
@@ -14,6 +16,7 @@ import {
   FileText,
   AlertCircle,
   CheckCircle2,
+  Camera,
 } from "lucide-react";
 
 interface Props {
@@ -51,11 +54,13 @@ const GST_OPTIONS = [
 export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
   const qc = useQueryClient();
   const isEdit = !!initial?.id;
+  const [cameraOpen, setCameraOpen] = useState(false);
 
   const {
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors, isSubmitting, isDirty },
     setError,
   } = useForm<CreateMedicineDto>({
@@ -85,10 +90,12 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
   const onSubmit = (data: CreateMedicineDto) => mutation.mutate(data);
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col flex-1 min-h-0">
-
-      {/* ── Scrollable body ──────────────────────────────────────────── */}
-      <div className="overflow-y-auto flex-1 min-h-0">
+    <>
+      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col flex-1 min-h-0">
+        {/* ── Scrollable body ──────────────────────────────────────────── */}
+        <div className="overflow-y-auto flex-1 min-h-0">
+          {/* Content goes here... but wait, let's keep it wrapped */}
+          {/* We will just output the form block, and append the dialog below it */}
 
       {/* ── Section 1: Basic Information ─────────────────────────────── */}
       <Section icon={<Pill size={14} />} title="Basic Information">
@@ -118,13 +125,23 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
           </Field>
 
           <Field label="Barcode" error={errors.barcode?.message}>
-            <div className="relative">
-              <Barcode size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-              <input
-                {...register("barcode")}
-                placeholder="EAN / UPC barcode"
-                className={`${inputCls(!!errors.barcode)} pl-8`}
-              />
+            <div className="relative flex gap-2">
+              <div className="relative flex-1">
+                <Barcode size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+                <input
+                  {...register("barcode")}
+                  placeholder="EAN / UPC barcode"
+                  className={`${inputCls(!!errors.barcode)} pl-8`}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setCameraOpen(true)}
+                className="px-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-lg text-slate-600 hover:text-slate-900 transition flex items-center justify-center shadow-sm"
+                title="Scan Barcode with Camera"
+              >
+                <Camera size={15} />
+              </button>
             </div>
           </Field>
 
@@ -329,7 +346,16 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
           </button>
         </div>
       </div>
-    </form>
+      </form>
+      <BarcodeScannerDialog
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onScan={(code) => {
+          setValue("barcode", code, { shouldDirty: true, shouldValidate: true });
+          setCameraOpen(false);
+        }}
+      />
+    </>
   );
 }
 

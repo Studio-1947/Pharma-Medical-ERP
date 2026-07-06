@@ -1,11 +1,13 @@
-﻿"use client";
+"use client";
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { AlertTriangle, CheckCircle, Clock, Pencil, Plus, X } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, Pencil, Plus, X, Camera } from "lucide-react";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
+import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
+import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
 
 interface Batch {
   id: string;
@@ -49,6 +51,7 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
   const { user } = useAuthStore();
   const [medicineSearch, setMedicineSearch] = useState("");
   const [selectedMedicine, setSelectedMedicine] = useState<Medicine | null>(lockedMedicine ?? null);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [form, setForm] = useState({
     batchNo: "",
     expiryDate: "",
@@ -57,6 +60,30 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
     mrpAtEntry: lockedMedicine ? parseFloat(lockedMedicine.priceMrp).toFixed(2) : "",
   });
   const [error, setError] = useState("");
+
+  const handleBarcodeScan = async (scanCode: string) => {
+    if (!scanCode) return;
+    try {
+      const res: any = await apiClient.get("/inventory/medicines", { params: { search: scanCode, limit: 1 } });
+      const medicine = res?.data?.data?.[0] ?? res?.data?.[0];
+      if (medicine) {
+        setSelectedMedicine(medicine);
+        setForm((f) => ({
+          ...f,
+          mrpAtEntry: parseFloat(medicine.priceMrp).toFixed(2),
+          costPrice: parseFloat(medicine.priceMrp).toFixed(2),
+        }));
+        setMedicineSearch("");
+        setError("");
+      } else {
+        setError(`No medicine found for barcode/SKU: "${scanCode}"`);
+      }
+    } catch {
+      setError("Failed to fetch medicine from barcode scan.");
+    }
+  };
+
+  useBarcodeScanner(handleBarcodeScan, { enabled: !selectedMedicine });
 
   // For medicines searched inside the form (not locked), fetch their existing batch numbers
   const { data: dupCheck } = useQuery({
@@ -159,30 +186,41 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
                 </button>
               </div>
             ) : (
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Type medicine name to search..."
-                  value={medicineSearch}
-                  onChange={(e) => setMedicineSearch(e.target.value)}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-                {medicines.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {medicines.map((m) => (
-                      <button key={m.id} type="button"
-                        onClick={() => {
-                          setSelectedMedicine(m);
-                          setForm((f) => ({ ...f, mrpAtEntry: parseFloat(m.priceMrp).toFixed(2) }));
-                          setMedicineSearch("");
-                        }}
-                        className="w-full text-left px-4 py-2.5 hover:bg-muted/50 text-sm border-b last:border-b-0">
-                        <span className="font-medium">{m.name}</span>
-                        <span className="text-muted-foreground ml-2 text-xs">{m.sku} — MRP ₹{parseFloat(m.priceMrp).toFixed(2)}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    placeholder="Type name, SKU, or scan barcode..."
+                    value={medicineSearch}
+                    onChange={(e) => setMedicineSearch(e.target.value)}
+                    data-barcode-capture="true"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                  />
+                  {medicines.length > 0 && (
+                    <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {medicines.map((m) => (
+                        <button key={m.id} type="button"
+                          onClick={() => {
+                            setSelectedMedicine(m);
+                            setForm((f) => ({ ...f, mrpAtEntry: parseFloat(m.priceMrp).toFixed(2) }));
+                            setMedicineSearch("");
+                          }}
+                          className="w-full text-left px-4 py-2.5 hover:bg-muted/50 text-sm border-b last:border-b-0">
+                          <span className="font-medium">{m.name}</span>
+                          <span className="text-muted-foreground ml-2 text-xs">{m.sku} — MRP ₹{parseFloat(m.priceMrp).toFixed(2)}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCameraOpen(true)}
+                  className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition text-slate-600 hover:text-slate-900 bg-white flex items-center justify-center shadow-sm"
+                  title="Scan Medicine Barcode"
+                >
+                  <Camera size={16} />
+                </button>
               </div>
             )}
           </div>
@@ -272,6 +310,14 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
             </button>
           </div>
         </form>
+        <BarcodeScannerDialog
+          open={cameraOpen}
+          onClose={() => setCameraOpen(false)}
+          onScan={(code) => {
+            handleBarcodeScan(code);
+            setCameraOpen(false);
+          }}
+        />
       </div>
     </div>
   );

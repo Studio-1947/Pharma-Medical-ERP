@@ -1,8 +1,8 @@
-﻿"use client";
+"use client";
 
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus } from "lucide-react";
+import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera } from "lucide-react";
 import { useCartStore } from "@/stores/cart.store";
 import { PaymentModal } from "./payment-modal";
 import { apiClient } from "@/lib/api-client";
@@ -11,6 +11,8 @@ import { queueOfflineInvoice, syncOfflineQueue } from "@/lib/pos-db";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { useDebounce } from "@/hooks/use-debounce";
+import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
+import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
 
 const CONTROLLED_CLASSES = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"];
 
@@ -23,6 +25,7 @@ export function PosTerminal() {
   const { warning: toastWarning, success: toastSuccess, info: toastInfo, error: toastError } = useToast();
   const [search, setSearch] = useState("");
   const [payOpen, setPayOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [printOpen, setPrintOpen] = useState(false);
   const [lastInvoice, setLastInvoice] = useState<any>(null);
@@ -270,52 +273,44 @@ export function PosTerminal() {
   const patientResults_: any[] = Array.isArray(prRaw?.data?.data) ? prRaw.data.data : Array.isArray(prRaw?.data) ? prRaw.data : [];
 
   // ── Barcode scanner ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    let buffer = "";
-    let lastKeyTime = Date.now();
-
-    const handleGlobalKeydown = async (e: KeyboardEvent) => {
-      if (!e.key) return;
-      const currentTime = Date.now();
-      if (e.key === "Enter") {
-        if (buffer && currentTime - lastKeyTime < 50) {
-          e.preventDefault();
-          const scanCode = buffer.trim();
-          buffer = "";
-          if (scanCode.length > 2) {
-            try {
-              const res: any = await apiClient.get("/inventory/medicines", { params: { search: scanCode, limit: 1 } });
-              const medicine = res?.data?.data?.[0] ?? res?.data?.[0];
-              if (medicine) {
-                const batchesRes: any = await apiClient.get("/inventory/batches", { params: { medicineId: medicine.id, status: "active", limit: 50 } });
-                const batchList: any[] = Array.isArray(batchesRes) ? batchesRes : Array.isArray(batchesRes?.data?.data) ? batchesRes.data.data : Array.isArray(batchesRes?.data) ? batchesRes.data : [];
-                const firstBatch = batchList[0];
-                if (firstBatch) {
-                  addItem({
-                    medicineId: medicine.id, batchId: firstBatch.id,
-                    name: medicine.name, sku: medicine.sku, batchNo: firstBatch.batchNo,
-                    unitPrice: parseFloat(medicine.priceMrp),
-                    stripSize: medicine.stripSize ? parseInt(medicine.stripSize) : 1,
-                    taxPct: parseFloat(medicine.taxPercent ?? "0"), discountPct: 0, quantity: 1,
-                    scheduleClass: medicine.scheduleClass, requiresPrescription: medicine.requiresPrescription,
-                  });
-                  setSearch("");
-                }
-              }
-            } catch {}
-          }
+  const handleBarcodeScan = async (scanCode: string) => {
+    if (!scanCode) return;
+    try {
+      const res: any = await apiClient.get("/inventory/medicines", { params: { search: scanCode, limit: 1 } });
+      const medicine = res?.data?.data?.[0] ?? res?.data?.[0];
+      if (medicine) {
+        const batchesRes: any = await apiClient.get("/inventory/batches", { params: { medicineId: medicine.id, status: "active", limit: 50 } });
+        const batchList: any[] = Array.isArray(batchesRes) ? batchesRes : Array.isArray(batchesRes?.data?.data) ? batchesRes.data.data : Array.isArray(batchesRes?.data) ? batchesRes.data : [];
+        const firstBatch = batchList[0];
+        if (firstBatch) {
+          addItem({
+            medicineId: medicine.id,
+            batchId: firstBatch.id,
+            name: medicine.name,
+            sku: medicine.sku,
+            batchNo: firstBatch.batchNo,
+            unitPrice: parseFloat(medicine.priceMrp),
+            stripSize: medicine.stripSize ? parseInt(medicine.stripSize) : 1,
+            taxPct: parseFloat(medicine.taxPercent ?? "0"),
+            discountPct: 0,
+            quantity: 1,
+            scheduleClass: medicine.scheduleClass,
+            requiresPrescription: medicine.requiresPrescription,
+          });
+          setSearch("");
+          toastSuccess("Item added", `${medicine.name} added to checkout.`);
         } else {
-          buffer = "";
+          toastWarning("Out of stock", `No active batches found for "${medicine.name}".`);
         }
-      } else if (e.key && e.key.length === 1) {
-        buffer = currentTime - lastKeyTime < 50 ? buffer + e.key : e.key;
+      } else {
+        toastWarning("Not found", `No medicine found for barcode: "${scanCode}"`);
       }
-      lastKeyTime = currentTime;
-    };
+    } catch {
+      toastError("Scan error", "Failed to search scanned item.");
+    }
+  };
 
-    window.addEventListener("keydown", handleGlobalKeydown);
-    return () => window.removeEventListener("keydown", handleGlobalKeydown);
-  }, [addItem]);
+  useBarcodeScanner(handleBarcodeScan);
 
   // ── Online/offline ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -420,9 +415,15 @@ export function PosTerminal() {
             <span key={k} className="text-xs bg-muted border font-semibold px-2 py-1 rounded-md">{k}</span>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`w-3 h-3 rounded-full ${isOnline ? "bg-green-500" : "bg-amber-500"}`} />
-          <span className="text-xs font-semibold text-gray-700">{isOnline ? "Online Terminal" : "Offline Storage Mode"}</span>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg border border-emerald-100 text-xs font-semibold shadow-sm">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Scanner Hook Active
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`w-3 h-3 rounded-full ${isOnline ? "bg-green-500" : "bg-amber-500"}`} />
+            <span className="text-xs font-semibold text-gray-700">{isOnline ? "Online Terminal" : "Offline Storage Mode"}</span>
+          </div>
         </div>
       </div>
 
@@ -603,15 +604,26 @@ export function PosTerminal() {
           </div>
 
           {/* Medicine search */}
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              ref={searchRef}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Scan barcode or type name/SKU… (F2)"
-              className="w-full border rounded-xl pl-9 pr-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background shadow-sm"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                ref={searchRef}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Scan barcode or type name/SKU… (F2)"
+                data-barcode-capture="true"
+                className="w-full border rounded-xl pl-9 pr-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background shadow-sm"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setCameraOpen(true)}
+              className="p-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-slate-600 hover:text-slate-900 transition flex items-center justify-center shadow-sm"
+              title="Open Camera Scanner"
+            >
+              <Camera size={16} />
+            </button>
           </div>
 
           <div className="flex-1 overflow-y-auto rounded-xl border bg-card">
@@ -776,6 +788,12 @@ export function PosTerminal() {
         onClose={() => setPayOpen(false)}
         onConfirm={handlePayConfirm}
         loading={createMutation.isPending}
+      />
+
+      <BarcodeScannerDialog
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onScan={handleBarcodeScan}
       />
 
       <Modal
