@@ -275,11 +275,15 @@ export function PosTerminal() {
   // ── Barcode scanner ─────────────────────────────────────────────────────────
   const handleBarcodeScan = async (scanCode: string) => {
     if (!scanCode) return;
+    // Scanner keystrokes also land in the focused search input; clear them
+    // regardless of the lookup outcome so failed scans don't leave garbage.
+    setSearch("");
     try {
       const res: any = await apiClient.get("/inventory/medicines", { params: { search: scanCode, limit: 1 } });
       const medicine = res?.data?.data?.[0] ?? res?.data?.[0];
       if (medicine) {
-        const batchesRes: any = await apiClient.get("/inventory/batches", { params: { medicineId: medicine.id, status: "active", limit: 50 } });
+        // FEFO dispense endpoint: active, non-expired batches with qty > 0, earliest expiry first
+        const batchesRes: any = await apiClient.get(`/inventory/medicines/${medicine.id}/batches`);
         const batchList: any[] = Array.isArray(batchesRes) ? batchesRes : Array.isArray(batchesRes?.data?.data) ? batchesRes.data.data : Array.isArray(batchesRes?.data) ? batchesRes.data : [];
         const firstBatch = batchList[0];
         if (firstBatch) {
@@ -297,7 +301,6 @@ export function PosTerminal() {
             scheduleClass: medicine.scheduleClass,
             requiresPrescription: medicine.requiresPrescription,
           });
-          setSearch("");
           toastSuccess("Item added", `${medicine.name} added to checkout.`);
         } else {
           toastWarning("Out of stock", `No active batches found for "${medicine.name}".`);
@@ -310,7 +313,11 @@ export function PosTerminal() {
     }
   };
 
-  useBarcodeScanner(handleBarcodeScan);
+  // Suspend global scan capture while any modal is open so a stray scan
+  // can't mutate the cart mid-payment.
+  useBarcodeScanner(handleBarcodeScan, {
+    enabled: !payOpen && !cameraOpen && !printOpen && !clearConfirm && !isPatientModalOpen,
+  });
 
   // ── Online/offline ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -637,7 +644,7 @@ export function PosTerminal() {
                     key={m.id}
                     onClick={async () => {
                       try {
-                        const batchRes: any = await apiClient.get("/inventory/batches", { params: { medicineId: m.id, status: "active", limit: 50 } });
+                        const batchRes: any = await apiClient.get(`/inventory/medicines/${m.id}/batches`);
                         const batchArr: any[] = Array.isArray(batchRes) ? batchRes : Array.isArray(batchRes?.data?.data) ? batchRes.data.data : Array.isArray(batchRes?.data) ? batchRes.data : [];
                         const first = batchArr[0];
                         if (!first) {

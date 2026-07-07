@@ -25,6 +25,8 @@ export function BarcodeScannerDialog({
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
+  // Bumped by the Retry button to re-run the camera startup effect
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     if (!open) {
@@ -87,7 +89,7 @@ export function BarcodeScannerDialog({
       clearTimeout(timer);
       handleStop();
     };
-  }, [open]);
+  }, [open, attempt]);
 
   const handleStop = async () => {
     if (scannerRef.current) {
@@ -140,16 +142,11 @@ export function BarcodeScannerDialog({
                 onClick={() => {
                   setError(null);
                   setIsInitializing(true);
-                  // Trigger restart of scanner
-                  const dummy = {};
-                  onClose();
-                  setTimeout(() => {
-                    // Quick toggle open state callback by parent
-                  }, 100);
+                  setAttempt((a) => a + 1);
                 }}
                 className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-xs font-semibold rounded-lg transition"
               >
-                Close & Retry
+                Retry
               </button>
             </div>
           )}

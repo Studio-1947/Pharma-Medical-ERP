@@ -56,6 +56,24 @@ export function MedicineList() {
     },
   });
 
+  // The barcode.png endpoint is JWT-guarded, so a plain <a href> gets a 401 —
+  // fetch it through apiClient (which attaches the Bearer token) instead.
+  const downloadBarcode = async (m: Medicine) => {
+    try {
+      const blob = (await apiClient.get(`/inventory/medicines/${m.id}/barcode.png`, {
+        responseType: "blob",
+      })) as unknown as Blob;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${m.sku}-barcode.png`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toastError("Download failed", "Could not generate the barcode image.");
+    }
+  };
+
   const params = { search, page, limit: 20 };
 
   const { data, isLoading, isError } = useQuery<ApiListResponse>({
@@ -174,15 +192,13 @@ export function MedicineList() {
                         >
                           Edit
                         </button>
-                        <a
-                          href={`${process.env.NEXT_PUBLIC_API_URL}/inventory/medicines/${m.id}/barcode.png`}
-                          target="_blank"
-                          rel="noreferrer"
+                        <button
+                          onClick={() => downloadBarcode(m)}
                           title="Download barcode"
                           className="text-muted-foreground hover:text-foreground"
                         >
                           <Barcode size={14} />
-                        </a>
+                        </button>
                         {isAdmin && (
                           confirmDeleteId === m.id ? (
                             <span className="flex items-center gap-1">
