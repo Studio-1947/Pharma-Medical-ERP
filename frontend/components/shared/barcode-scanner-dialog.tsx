@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Html5Qrcode } from "html5-qrcode";
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { Modal } from "@/components/ui/modal";
 import { Camera, AlertCircle, RefreshCw } from "lucide-react";
 import { playScanBeep } from "@/hooks/use-barcode-scanner";
@@ -43,7 +43,28 @@ export function BarcodeScannerDialog({
       try {
         if (!isMounted) return;
         
-        const html5Qrcode = new Html5Qrcode(qrReaderId);
+        // formatsToSupport + experimentalFeatures must go in the CONSTRUCTOR
+        // config (not start()) — html5-qrcode reads them only here.
+        const html5Qrcode = new Html5Qrcode(qrReaderId, {
+          // Books and medicine strips carry 1D barcodes (EAN-13, UPC, Code-128).
+          // Without an explicit list the live-video decoder skews toward QR and
+          // silently fails to read these striped codes.
+          formatsToSupport: [
+            Html5QrcodeSupportedFormats.EAN_13,
+            Html5QrcodeSupportedFormats.EAN_8,
+            Html5QrcodeSupportedFormats.UPC_A,
+            Html5QrcodeSupportedFormats.UPC_E,
+            Html5QrcodeSupportedFormats.CODE_128,
+            Html5QrcodeSupportedFormats.CODE_39,
+            Html5QrcodeSupportedFormats.ITF,
+            Html5QrcodeSupportedFormats.CODABAR,
+            Html5QrcodeSupportedFormats.QR_CODE,
+          ],
+          // Prefer the phone's native BarcodeDetector when present — far more
+          // reliable at 1D barcodes than the JS fallback (Android Chrome/Edge).
+          experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+          verbose: false,
+        });
         scannerRef.current = html5Qrcode;
 
         await html5Qrcode.start(
@@ -62,8 +83,10 @@ export function BarcodeScannerDialog({
             if (isMounted) {
               playScanBeep();
               onScan(decodedText);
-              // Stop scanning and close
+              // Stop the camera AND dismiss the dialog — otherwise it lingers
+              // on a frozen frame and hides the resulting toast / cart update.
               handleStop();
+              onClose();
             }
           },
           () => {
