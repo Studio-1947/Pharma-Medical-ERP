@@ -17,7 +17,16 @@
       "Bash(curl -s -m 2 http://localhost:4000/api/v1/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"email\":\"admin@mederp.com\",\"password\":\"Admin@123\"}')",
       "Bash(node node-decode-test.mjs __TRACKED_VAR__/ean13.png __TRACKED_VAR__/code128.png)",
       "Bash(node node-decode-test.mjs __TRACKED_VAR__/qr.png __TRACKED_VAR__/ean13-pad.png __TRACKED_VAR__/ean13.png)",
-      "Bash(node verify-photo-decode.mjs ./ean13-pad.png \"EAN-13 \\(padded, phone-like\\)\")"
+      "Bash(node verify-photo-decode.mjs ./ean13-pad.png \"EAN-13 \\(padded, phone-like\\)\")",
+      "Bash(curl -s -m 3 -o /dev/null -w \"backend :4000 -> %{http_code}\\\\n\" http://localhost:4000/health)",
+      "Bash(curl -s -m 3 -o /dev/null -w \"frontend :3000 -> %{http_code}\\\\n\" http://localhost:3000/login)",
+      "Bash(node verify-photo-decode.mjs ./qr.png \"QR-code\")",
+      "Bash(node -e \"for\\(const f of ['ean13.png','qr.png','code128.png']\\){const b=require\\('fs'\\).readFileSync\\(f\\);console.log\\(f, b.length, 'bytes'\\);}\")",
+      "Bash(grep -rln \"MedicineList\" frontend/app)",
+      "Bash(node verify-quickadd.mjs)",
+      "Bash(sed -i 's/const CODE = \"[0-9]*\"/const CODE = \"8901222333440\"/' verify-quickadd.mjs)",
+      "Bash(sed -i 's/const CODE = \"[0-9]*\"/const CODE = \"8901222333445\"/' verify-quickadd.mjs)",
+      "Bash(python -c ' *)"
     ]
   }
 }
