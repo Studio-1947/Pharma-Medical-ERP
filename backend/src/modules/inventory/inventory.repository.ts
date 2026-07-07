@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, eq, gt, ilike, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, gte, ilike, isNull, ne, or, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 import type { CreateMedicineDto, UpdateMedicineDto, QueryMedicineDto } from "@pharmerp/types";
@@ -18,7 +18,15 @@ export class InventoryRepository {
       eq(schema.medicines.isActive, params.isActive ?? true),
     ];
     if (params.search) {
-      conditions.push(ilike(schema.medicines.name, `%${params.search}%`));
+      const searchFilter = or(
+        ilike(schema.medicines.name, `%${params.search}%`),
+        ilike(schema.medicines.genericName, `%${params.search}%`),
+        eq(schema.medicines.sku, params.search),
+        eq(schema.medicines.barcode, params.search),
+      );
+      if (searchFilter) {
+        conditions.push(searchFilter);
+      }
     }
     if (params.categoryId) {
       conditions.push(eq(schema.medicines.categoryId, params.categoryId));
@@ -78,6 +86,24 @@ export class InventoryRepository {
     });
   }
 
+  async findMedicineByBarcode(barcode: string, excludeId?: string) {
+    const conditions = [
+      eq(schema.medicines.barcode, barcode),
+      isNull(schema.medicines.deletedAt),
+    ];
+    if (excludeId) conditions.push(ne(schema.medicines.id, excludeId));
+    const [medicine] = await this.db
+      .select({
+        id: schema.medicines.id,
+        name: schema.medicines.name,
+        sku: schema.medicines.sku,
+      })
+      .from(schema.medicines)
+      .where(and(...conditions))
+      .limit(1);
+    return medicine ?? null;
+  }
+
   async createMedicine(data: CreateMedicineDto, createdBy?: string) {
     const [medicine] = await this.db
       .insert(schema.medicines)
@@ -112,6 +138,7 @@ export class InventoryRepository {
           eq(schema.inventoryBatches.medicineId, medicineId),
           eq(schema.inventoryBatches.status, "active"),
           gt(schema.inventoryBatches.quantity, 0),
+          gte(schema.inventoryBatches.expiryDate, sql`CURRENT_DATE`),
         ),
       )
       .orderBy(asc(schema.inventoryBatches.expiryDate));
@@ -176,6 +203,16 @@ export class InventoryRepository {
       .where(and(isNull(schema.medicines.deletedAt)));
     const existing = new Set(rows.map((r) => r.sku));
     return new Set(skus.filter((s) => existing.has(s)));
+  }
+
+  async findBarcodeSet(barcodes: string[]): Promise<Set<string>> {
+    if (barcodes.length === 0) return new Set();
+    const rows = await this.db
+      .select({ barcode: schema.medicines.barcode })
+      .from(schema.medicines)
+      .where(isNull(schema.medicines.deletedAt));
+    const existing = new Set(rows.map((r) => r.barcode).filter(Boolean));
+    return new Set(barcodes.filter((b) => existing.has(b)));
   }
 
   async bulkCreateMedicines(

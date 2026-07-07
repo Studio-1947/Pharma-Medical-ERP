@@ -2,7 +2,8 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Search, Barcode, Pill, Trash2, Upload } from "lucide-react";
+import { Plus, Search, Barcode, Pill, Trash2, Upload, Camera } from "lucide-react";
+import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
@@ -38,6 +39,7 @@ export function MedicineList() {
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Medicine | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
@@ -54,6 +56,24 @@ export function MedicineList() {
     },
   });
 
+  // The barcode.png endpoint is JWT-guarded, so a plain <a href> gets a 401 —
+  // fetch it through apiClient (which attaches the Bearer token) instead.
+  const downloadBarcode = async (m: Medicine) => {
+    try {
+      const blob = (await apiClient.get(`/inventory/medicines/${m.id}/barcode.png`, {
+        responseType: "blob",
+      })) as unknown as Blob;
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${m.sku}-barcode.png`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toastError("Download failed", "Could not generate the barcode image.");
+    }
+  };
+
   const params = { search, page, limit: 20 };
 
   const { data, isLoading, isError } = useQuery<ApiListResponse>({
@@ -65,19 +85,29 @@ export function MedicineList() {
   return (
     <div>
       {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="relative flex-1 max-w-sm">
-          <Search
-            size={16}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-          />
-          <input
-            type="text"
-            placeholder="Search medicines..."
-            value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-            className="w-full border rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          />
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="relative flex-1 min-w-[220px] sm:max-w-sm flex gap-2">
+          <div className="relative flex-1">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground animate-in"
+            />
+            <input
+              type="text"
+              placeholder="Search medicines by name, barcode..."
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              className="w-full border rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setCameraOpen(true)}
+            className="p-2 border rounded-lg hover:bg-slate-50 transition text-slate-600 hover:text-slate-900 bg-white shadow-sm flex items-center justify-center"
+            title="Scan Medicine Barcode"
+          >
+            <Camera size={16} />
+          </button>
         </div>
         <button
           onClick={() => setImportOpen(true)}
@@ -162,15 +192,13 @@ export function MedicineList() {
                         >
                           Edit
                         </button>
-                        <a
-                          href={`${process.env.NEXT_PUBLIC_API_URL}/inventory/medicines/${m.id}/barcode.png`}
-                          target="_blank"
-                          rel="noreferrer"
+                        <button
+                          onClick={() => downloadBarcode(m)}
                           title="Download barcode"
                           className="text-muted-foreground hover:text-foreground"
                         >
                           <Barcode size={14} />
-                        </a>
+                        </button>
                         {isAdmin && (
                           confirmDeleteId === m.id ? (
                             <span className="flex items-center gap-1">
@@ -270,6 +298,16 @@ export function MedicineList() {
           />
         )}
       </Modal>
+
+      <BarcodeScannerDialog
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onScan={(code) => {
+          setSearch(code);
+          setPage(1);
+          setCameraOpen(false);
+        }}
+      />
     </div>
   );
 }

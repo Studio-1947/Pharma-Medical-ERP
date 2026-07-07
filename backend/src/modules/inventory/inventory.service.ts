@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
 import { InventoryRepository } from "./inventory.repository";
 import { createMedicineSchema } from "@pharmerp/types";
 import type { CreateMedicineDto, UpdateMedicineDto, QueryMedicineDto } from "@pharmerp/types";
@@ -18,14 +18,27 @@ export class InventoryService {
   }
 
   async create(dto: CreateMedicineDto, userId?: string) {
+    await this.assertBarcodeUnique(dto.barcode);
     const medicine = await this.repo.createMedicine(dto, userId);
     return { data: medicine, message: "Medicine created" };
   }
 
   async update(id: string, dto: UpdateMedicineDto) {
     await this.findOne(id);
+    await this.assertBarcodeUnique(dto.barcode, id);
     const medicine = await this.repo.updateMedicine(id, dto);
     return { data: medicine, message: "Medicine updated" };
+  }
+
+  /** A barcode shared by two medicines would let a POS scan dispense the wrong product. */
+  private async assertBarcodeUnique(barcode?: string, excludeId?: string) {
+    if (!barcode) return;
+    const existing = await this.repo.findMedicineByBarcode(barcode, excludeId);
+    if (existing) {
+      throw new ConflictException(
+        `Barcode ${barcode} is already assigned to "${existing.name}" (SKU ${existing.sku})`,
+      );
+    }
   }
 
   async remove(id: string) {
@@ -41,6 +54,7 @@ export class InventoryService {
     const errors: { row: number; sku: string; reason: string }[] = [];
     const valid: CreateMedicineDto[] = [];
     const seenSkus = new Set<string>();
+    const seenBarcodes = new Set<string>();
 
     for (let i = 0; i < rawRows.length; i++) {
       const raw = rawRows[i];
@@ -51,6 +65,15 @@ export class InventoryService {
       if (!sku) { errors.push({ row: rowNum, sku: "", reason: "SKU is required" }); continue; }
       if (seenSkus.has(sku)) { errors.push({ row: rowNum, sku, reason: "Duplicate SKU in file" }); continue; }
       seenSkus.add(sku);
+
+      const rowBarcode = raw.barcode?.trim();
+      if (rowBarcode) {
+        if (seenBarcodes.has(rowBarcode)) {
+          errors.push({ row: rowNum, sku, reason: `Duplicate barcode in file: ${rowBarcode}` });
+          continue;
+        }
+        seenBarcodes.add(rowBarcode);
+      }
 
       const parsed = createMedicineSchema.safeParse({
         name: raw.name?.trim(),
@@ -82,12 +105,20 @@ export class InventoryService {
 
     if (valid.length === 0) return { created: 0, skipped: 0, errors };
 
-    const existingSkus = await this.repo.findSkuSet(valid.map((r) => r.sku));
-    const toInsert = valid.filter((r) => !existingSkus.has(r.sku));
+    const [existingSkus, existingBarcodes] = await Promise.all([
+      this.repo.findSkuSet(valid.map((r) => r.sku)),
+      this.repo.findBarcodeSet(valid.map((r) => r.barcode).filter((b): b is string => !!b)),
+    ]);
+    const toInsert = valid.filter(
+      (r) => !existingSkus.has(r.sku) && !(r.barcode && existingBarcodes.has(r.barcode)),
+    );
     const skipped = valid.length - toInsert.length;
 
     for (const r of valid.filter((r) => existingSkus.has(r.sku))) {
       errors.push({ row: 0, sku: r.sku, reason: "SKU already exists — skipped" });
+    }
+    for (const r of valid.filter((r) => !existingSkus.has(r.sku) && r.barcode && existingBarcodes.has(r.barcode))) {
+      errors.push({ row: 0, sku: r.sku, reason: `Barcode ${r.barcode} already exists — skipped` });
     }
 
     const created = await this.repo.bulkCreateMedicines(toInsert, userId);

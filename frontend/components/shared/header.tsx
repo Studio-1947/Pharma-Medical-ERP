@@ -4,11 +4,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth.store";
 import { apiClient, queryKeys } from "@/lib/api-client";
-import { LogOut, Bell } from "lucide-react";
+import { LogOut, Bell, Menu } from "lucide-react";
 import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { useNavigation } from "@/lib/navigation-context";
 
-export function Header() {
+export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { user, logout, accessToken } = useAuthStore();
   const router = useRouter();
   const { navigate } = useNavigation();
@@ -44,10 +44,19 @@ export function Header() {
     : "";
 
   return (
-    <header className="h-16 border-b border-slate-100 flex items-center justify-between px-6 bg-white shrink-0">
-      <Breadcrumbs />
+    <header className="h-16 border-b border-slate-100 flex items-center justify-between gap-2 px-4 sm:px-6 bg-white shrink-0">
+      <div className="flex items-center gap-1.5 min-w-0 flex-1 overflow-hidden">
+        <button
+          onClick={onMenuClick}
+          aria-label="Open menu"
+          className="lg:hidden shrink-0 p-2 -ml-2 rounded-lg hover:bg-slate-50 text-slate-500 hover:text-slate-700 transition-colors"
+        >
+          <Menu size={18} />
+        </button>
+        <Breadcrumbs />
+      </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0">
         {/* Notifications */}
         <button
           onClick={() => navigate("/notifications")}

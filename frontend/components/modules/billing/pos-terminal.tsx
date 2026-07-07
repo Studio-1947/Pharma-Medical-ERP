@@ -1,8 +1,8 @@
-﻿"use client";
+"use client";
 
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus } from "lucide-react";
+import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera } from "lucide-react";
 import { useCartStore } from "@/stores/cart.store";
 import { PaymentModal } from "./payment-modal";
 import { apiClient } from "@/lib/api-client";
@@ -11,6 +11,8 @@ import { queueOfflineInvoice, syncOfflineQueue } from "@/lib/pos-db";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { useDebounce } from "@/hooks/use-debounce";
+import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
+import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
 
 const CONTROLLED_CLASSES = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"];
 
@@ -23,6 +25,7 @@ export function PosTerminal() {
   const { warning: toastWarning, success: toastSuccess, info: toastInfo, error: toastError } = useToast();
   const [search, setSearch] = useState("");
   const [payOpen, setPayOpen] = useState(false);
+  const [cameraOpen, setCameraOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [printOpen, setPrintOpen] = useState(false);
   const [lastInvoice, setLastInvoice] = useState<any>(null);
@@ -270,52 +273,51 @@ export function PosTerminal() {
   const patientResults_: any[] = Array.isArray(prRaw?.data?.data) ? prRaw.data.data : Array.isArray(prRaw?.data) ? prRaw.data : [];
 
   // ── Barcode scanner ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    let buffer = "";
-    let lastKeyTime = Date.now();
-
-    const handleGlobalKeydown = async (e: KeyboardEvent) => {
-      if (!e.key) return;
-      const currentTime = Date.now();
-      if (e.key === "Enter") {
-        if (buffer && currentTime - lastKeyTime < 50) {
-          e.preventDefault();
-          const scanCode = buffer.trim();
-          buffer = "";
-          if (scanCode.length > 2) {
-            try {
-              const res: any = await apiClient.get("/inventory/medicines", { params: { search: scanCode, limit: 1 } });
-              const medicine = res?.data?.data?.[0] ?? res?.data?.[0];
-              if (medicine) {
-                const batchesRes: any = await apiClient.get("/inventory/batches", { params: { medicineId: medicine.id, status: "active", limit: 50 } });
-                const batchList: any[] = Array.isArray(batchesRes) ? batchesRes : Array.isArray(batchesRes?.data?.data) ? batchesRes.data.data : Array.isArray(batchesRes?.data) ? batchesRes.data : [];
-                const firstBatch = batchList[0];
-                if (firstBatch) {
-                  addItem({
-                    medicineId: medicine.id, batchId: firstBatch.id,
-                    name: medicine.name, sku: medicine.sku, batchNo: firstBatch.batchNo,
-                    unitPrice: parseFloat(medicine.priceMrp),
-                    stripSize: medicine.stripSize ? parseInt(medicine.stripSize) : 1,
-                    taxPct: parseFloat(medicine.taxPercent ?? "0"), discountPct: 0, quantity: 1,
-                    scheduleClass: medicine.scheduleClass, requiresPrescription: medicine.requiresPrescription,
-                  });
-                  setSearch("");
-                }
-              }
-            } catch {}
-          }
+  const handleBarcodeScan = async (scanCode: string) => {
+    if (!scanCode) return;
+    // Scanner keystrokes also land in the focused search input; clear them
+    // regardless of the lookup outcome so failed scans don't leave garbage.
+    setSearch("");
+    try {
+      const res: any = await apiClient.get("/inventory/medicines", { params: { search: scanCode, limit: 1 } });
+      const medicine = res?.data?.data?.[0] ?? res?.data?.[0];
+      if (medicine) {
+        // FEFO dispense endpoint: active, non-expired batches with qty > 0, earliest expiry first
+        const batchesRes: any = await apiClient.get(`/inventory/medicines/${medicine.id}/batches`);
+        const batchList: any[] = Array.isArray(batchesRes) ? batchesRes : Array.isArray(batchesRes?.data?.data) ? batchesRes.data.data : Array.isArray(batchesRes?.data) ? batchesRes.data : [];
+        const firstBatch = batchList[0];
+        if (firstBatch) {
+          addItem({
+            medicineId: medicine.id,
+            batchId: firstBatch.id,
+            name: medicine.name,
+            sku: medicine.sku,
+            batchNo: firstBatch.batchNo,
+            unitPrice: parseFloat(medicine.priceMrp),
+            stripSize: medicine.stripSize ? parseInt(medicine.stripSize) : 1,
+            taxPct: parseFloat(medicine.taxPercent ?? "0"),
+            discountPct: 0,
+            quantity: 1,
+            scheduleClass: medicine.scheduleClass,
+            requiresPrescription: medicine.requiresPrescription,
+          });
+          toastSuccess("Item added", `${medicine.name} added to checkout.`);
         } else {
-          buffer = "";
+          toastWarning("Out of stock", `No active batches found for "${medicine.name}".`);
         }
-      } else if (e.key && e.key.length === 1) {
-        buffer = currentTime - lastKeyTime < 50 ? buffer + e.key : e.key;
+      } else {
+        toastWarning("Not found", `No medicine found for barcode: "${scanCode}"`);
       }
-      lastKeyTime = currentTime;
-    };
+    } catch {
+      toastError("Scan error", "Failed to search scanned item.");
+    }
+  };
 
-    window.addEventListener("keydown", handleGlobalKeydown);
-    return () => window.removeEventListener("keydown", handleGlobalKeydown);
-  }, [addItem]);
+  // Suspend global scan capture while any modal is open so a stray scan
+  // can't mutate the cart mid-payment.
+  useBarcodeScanner(handleBarcodeScan, {
+    enabled: !payOpen && !cameraOpen && !printOpen && !clearConfirm && !isPatientModalOpen,
+  });
 
   // ── Online/offline ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -412,25 +414,32 @@ export function PosTerminal() {
   const medicines: any[] = Array.isArray(searchRaw?.data?.data) ? searchRaw.data.data : Array.isArray(searchRaw?.data) ? searchRaw.data : [];
 
   return (
-    <div className="flex flex-col gap-4 h-[calc(100vh-8rem)]">
+    <div className="flex flex-col gap-4 lg:h-[calc(100vh-8rem)]">
       {/* Top bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-muted/40 p-4 rounded-xl border">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-muted/40 p-3 sm:p-4 rounded-xl border">
+        {/* Keyboard hotkeys are meaningless on touch devices */}
+        <div className="hidden md:flex flex-wrap items-center gap-2">
           {(["[F2] Search", "[F4] Pay", "[F6] Clear", "[Ctrl+P] Print"] as const).map((k) => (
             <span key={k} className="text-xs bg-muted border font-semibold px-2 py-1 rounded-md">{k}</span>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`w-3 h-3 rounded-full ${isOnline ? "bg-green-500" : "bg-amber-500"}`} />
-          <span className="text-xs font-semibold text-gray-700">{isOnline ? "Online Terminal" : "Offline Storage Mode"}</span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg border border-emerald-100 text-xs font-semibold shadow-sm">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Scanner Hook Active
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`w-3 h-3 rounded-full ${isOnline ? "bg-green-500" : "bg-amber-500"}`} />
+            <span className="text-xs font-semibold text-gray-700">{isOnline ? "Online Terminal" : "Offline Storage Mode"}</span>
+          </div>
         </div>
       </div>
 
       {/* F6 Clear cart confirm banner */}
       {clearConfirm && (
-        <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between bg-red-50 border border-red-200 rounded-xl px-4 py-3">
           <span className="text-sm font-semibold text-red-700">Clear the entire cart? This cannot be undone.</span>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <button
               onClick={() => { clear(); setClearConfirm(false); }}
               className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition-colors"
@@ -473,9 +482,10 @@ export function PosTerminal() {
         </div>
       )}
 
-      <div className="flex gap-4 flex-1 overflow-hidden">
+      {/* Stacked on mobile (page scrolls), side-by-side panes on lg+ */}
+      <div className="flex flex-col lg:flex-row gap-4 flex-1 lg:overflow-hidden">
         {/* Left: search + patient */}
-        <div className="flex-1 flex flex-col gap-3 h-full overflow-hidden">
+        <div className="flex-1 flex flex-col gap-3 lg:h-full lg:overflow-hidden">
           {/* Patient selector */}
           <div className="relative">
             {selectedPatient ? (
@@ -603,18 +613,29 @@ export function PosTerminal() {
           </div>
 
           {/* Medicine search */}
-          <div className="relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <input
-              ref={searchRef}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Scan barcode or type name/SKU… (F2)"
-              className="w-full border rounded-xl pl-9 pr-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background shadow-sm"
-            />
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <input
+                ref={searchRef}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Scan barcode or type name/SKU… (F2)"
+                data-barcode-capture="true"
+                className="w-full border rounded-xl pl-9 pr-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background shadow-sm"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setCameraOpen(true)}
+              className="p-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-slate-600 hover:text-slate-900 transition flex items-center justify-center shadow-sm"
+              title="Open Camera Scanner"
+            >
+              <Camera size={16} />
+            </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto rounded-xl border bg-card">
+          <div className="flex-1 min-h-[200px] max-h-[45dvh] lg:max-h-none overflow-y-auto rounded-xl border bg-card">
             {search.length >= 2 ? (
               <div className="divide-y">
                 {isFetching && (
@@ -625,7 +646,7 @@ export function PosTerminal() {
                     key={m.id}
                     onClick={async () => {
                       try {
-                        const batchRes: any = await apiClient.get("/inventory/batches", { params: { medicineId: m.id, status: "active", limit: 50 } });
+                        const batchRes: any = await apiClient.get(`/inventory/medicines/${m.id}/batches`);
                         const batchArr: any[] = Array.isArray(batchRes) ? batchRes : Array.isArray(batchRes?.data?.data) ? batchRes.data.data : Array.isArray(batchRes?.data) ? batchRes.data : [];
                         const first = batchArr[0];
                         if (!first) {
@@ -675,7 +696,7 @@ export function PosTerminal() {
         </div>
 
         {/* Right: cart */}
-        <div className="w-96 flex flex-col border rounded-xl bg-card shadow-sm">
+        <div className="w-full lg:w-96 shrink-0 flex flex-col border rounded-xl bg-card shadow-sm">
           <div className="flex items-center gap-2 px-4 py-3.5 border-b bg-muted/20">
             <ShoppingCart size={16} />
             <span className="font-semibold text-sm">Cart</span>
@@ -684,7 +705,7 @@ export function PosTerminal() {
             </span>
           </div>
 
-          <div className="flex-1 overflow-y-auto divide-y bg-white/50">
+          <div className="flex-1 max-h-[40dvh] lg:max-h-none overflow-y-auto divide-y bg-white/50">
             {items.length === 0 && (
               <div className="text-center py-16 text-xs text-muted-foreground flex flex-col items-center gap-1">
                 <ShoppingCart className="w-8 h-8 mb-1 opacity-25" />
@@ -705,18 +726,18 @@ export function PosTerminal() {
                       )}
                     </div>
                   </div>
-                  <button onClick={() => removeItem(item.medicineId, item.batchId)} className="text-muted-foreground hover:text-red-500 ml-2 transition">
+                  <button onClick={() => removeItem(item.medicineId, item.batchId)} className="text-muted-foreground hover:text-red-500 ml-2 p-1.5 -m-1.5 transition">
                     <Trash2 size={14} />
                   </button>
                 </div>
                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-muted/30">
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-md">
-                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity - 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
+                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity - 1)} className="w-8 h-8 lg:w-6 lg:h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
                         <Minus size={10} />
                       </button>
                       <span className="w-8 text-center text-xs font-semibold">{item.quantity}</span>
-                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity + 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
+                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity + 1)} className="w-8 h-8 lg:w-6 lg:h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
                         <Plus size={10} />
                       </button>
                     </div>
@@ -770,12 +791,35 @@ export function PosTerminal() {
         </div>
       </div>
 
+      {/* Mobile sticky checkout bar — the cart panel can be scrolled past on
+          small screens, so keep the total and Pay always reachable */}
+      {items.length > 0 && (
+        <div className="lg:hidden sticky bottom-0 z-30 -mx-4 -mb-4 px-4 py-3 sm:-mx-6 sm:px-6 bg-white/95 backdrop-blur border-t shadow-[0_-4px_12px_rgba(0,0,0,0.06)] flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">{items.length} {items.length === 1 ? "item" : "items"} in cart</p>
+            <p className="text-lg font-bold text-primary leading-tight">₹{finalTotal.toFixed(2)}</p>
+          </div>
+          <button
+            onClick={() => setPayOpen(true)}
+            className="shrink-0 px-8 py-3 bg-primary text-primary-foreground rounded-xl text-sm font-bold hover:bg-primary/90 transition shadow-sm"
+          >
+            Pay
+          </button>
+        </div>
+      )}
+
       <PaymentModal
         open={payOpen}
         total={finalTotal}
         onClose={() => setPayOpen(false)}
         onConfirm={handlePayConfirm}
         loading={createMutation.isPending}
+      />
+
+      <BarcodeScannerDialog
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onScan={handleBarcodeScan}
       />
 
       <Modal
@@ -810,7 +854,7 @@ export function PosTerminal() {
                     className={formInputCls}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className={formLabelCls}>Phone Number <span className="text-red-500">*</span></label>
                     <input
@@ -842,7 +886,7 @@ export function PosTerminal() {
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Additional Information (Optional)</p>
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className={formLabelCls}>Gender</label>
                     <select
@@ -888,7 +932,7 @@ export function PosTerminal() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className={formLabelCls}>Street / City</label>
                     <input

@@ -46,7 +46,7 @@ A full-stack, production-grade pharmacy ERP system built for Indian retail pharm
 │   ├── Audit Interceptor → writes to audit_logs table               │
 │   ├── Transform Interceptor → unwraps response data                │
 │   ├── Rate Limiter (@nestjs/throttler)                              │
-│   └── Swagger UI at /api/v1/docs                                    │
+│   └── Swagger UI at /docs                                           │
 └───────────────────────────────┬─────────────────────────────────────┘
                                 │
         ┌───────────────────────┼───────────────────────┐
@@ -54,7 +54,7 @@ A full-stack, production-grade pharmacy ERP system built for Indian retail pharm
 ┌───────▼───────┐     ┌─────────▼────────┐    ┌────────▼──────────┐
 │  BUSINESS     │     │   ASYNC LAYER    │    │   STORAGE LAYER   │
 │  MODULES      │     │                  │    │                   │
-│               │     │  BullMQ + Redis  │    │  PostgreSQL 16    │
+│               │     │  Bull + Redis    │    │  PostgreSQL 16    │
 │  auth         │     │  ├── pdf-queue   │    │  (Drizzle ORM)    │
 │  billing      │     │  ├── expiry-scan │    │                   │
 │  inventory    │     │  └── reorder-eng │    │  Redis 7          │
@@ -102,8 +102,9 @@ Request
 | HTTP Adapter | Fastify | 4 | High-performance HTTP server |
 | ORM | Drizzle ORM | 0.33 | Type-safe SQL query builder |
 | Database | PostgreSQL | 16 | Primary data store |
-| Cache / Queue | Redis | 7 | Sessions, invoice sequences, BullMQ backend |
-| Job Queue | BullMQ | 5 | Background job processing |
+| Cache / Queue | Redis | 7 | Invoice sequences, cache, Bull backend |
+| Job Queue | Bull (`@nestjs/bull`) | 4 | Background job processing |
+| Barcode | bwip-js | 3.4 | Code-128 barcode PNG generation for shelf labels |
 | Auth | Passport + JWT | RS256 | Stateless authentication |
 | Password | Argon2id | — | Key stretching (2 iter, 64 MB) |
 | Validation | Zod | 3 | Runtime schema validation |
@@ -124,11 +125,13 @@ Request
 | Tables | TanStack Table | 8 | Sortable, filterable data tables |
 | Offline | Dexie (IndexedDB) | 4 | Offline POS queue + sync |
 | HTTP Client | Axios | 1.7 | API calls with interceptors |
+| Camera scanning | html5-qrcode | 2.3 | Camera-based barcode scanning (mobile/tablet) |
 
 ### Shared
 | Package | Purpose |
 |---|---|
-| `@pharmerp/types` | Zod schemas + TypeScript types shared between frontend and backend |
+| `@pharmerp/types` | Zod schemas + TypeScript types shared between frontend and backend (builds to `dist` — run `pnpm build` after editing) |
+| `@pharmerp/utils` | Pure utilities (EAN-13 validation, currency, date helpers) |
 | `@pharmerp/config-typescript` | Shared TypeScript config |
 
 ---
@@ -192,7 +195,7 @@ pharmerp/
 │   │       └── settings/
 │   ├── components/
 │   │   ├── ui/                       # Radix primitives (toast, modal, etc.)
-│   │   ├── layout/                   # Sidebar, Header
+│   │   ├── shared/                   # AppShell, Sidebar, Header, barcode scanner dialog
 │   │   └── modules/                  # Feature-specific components
 │   ├── hooks/                        # use-auth, use-permissions, use-barcode-scanner, etc.
 │   ├── stores/                       # Zustand: auth, cart, branch
@@ -216,22 +219,28 @@ pharmerp/
 ```
 docker-compose.yml
 │
-├── postgres:5433   TimescaleDB (PostgreSQL 16)
+├── postgres:5433   PostgreSQL 16 (postgres:16 image, host port 5433)
 │                   Volumes: postgres_data
 │                   User: pharmerp / password
 │
 ├── redis:6379      Redis 7 Alpine
-│                   Used for: BullMQ queues, session cache, invoice
-│                   sequence counters (INCR pharmerp:invoice_seq:{branchId})
+│                   Used for: Bull queues, cache, invoice sequence
+│                   counters (INCR invoice_seq:{YYYY-MM-DD} — global
+│                   daily counter, invoice no INV-YYYYMMDD-0001)
 │
 ├── minio:9000      MinIO (S3-compatible object store)
 │   :9001           Console UI at port 9001
 │                   Buckets: pharmerp-bucket
 │                   Used for: prescription images, invoice PDFs
 │
-└── elasticsearch:9200   Elasticsearch 8 (single-node, no security)
-                         Index: medicines
-                         Used for: fast medicine name/barcode search (Phase 3)
+├── elasticsearch:9200   Elasticsearch 8 (single-node, no security)
+│                        Index: medicines
+│                        Used for: fast medicine name/barcode search (Phase 3)
+│
+└── clickhouse:8123      ClickHouse 24.3 (HTTP :8123, native TCP :9009)
+                         DB: pharmerp_analytics
+                         Provisioned for Phase 4 analytics — not yet
+                         consumed by the backend
 ```
 
 ### Service health checks
@@ -248,6 +257,9 @@ curl http://localhost:9000/minio/health/live
 
 # Elasticsearch
 curl http://localhost:9200/_cluster/health
+
+# ClickHouse
+curl http://localhost:8123/ping
 ```
 
 ---
@@ -305,7 +317,7 @@ stock_transfers ─────────────────────�
 | Table | Notable constraints |
 |---|---|
 | `users` | `email UNIQUE`, `role` enum default `cashier` |
-| `medicines` | `sku UNIQUE`, `barcode UNIQUE nullable` |
+| `medicines` | `sku UNIQUE`; `barcode` nullable with a **non-unique** index — uniqueness is enforced at the service layer (create/update reject duplicates with 409, bulk import skips them) and 13-digit barcodes are EAN-13 checksum-validated in the shared Zod schema |
 | `inventory_batches` | `(medicine_id, batch_no)` unique index **across the whole table** (not scoped per warehouse — a batch lives at exactly one location/warehouse at a time via `location_id → storage_locations.warehouse_id`), `expiry_date` index |
 | `sales_invoices` | `invoice_no UNIQUE`, `status` enum, soft-delete via `deleted_at` |
 | `sales_invoice_items` | Immutable after invoice confirmation |
@@ -394,8 +406,9 @@ List endpoints accept `?page=1&limit=20` and return:
 ### Swagger UI
 Interactive API documentation available at:
 ```
-http://localhost:4000/api/v1/docs
+http://localhost:4000/docs
 ```
+(`SwaggerModule.setup("docs", ...)` is not affected by the `api/v1` global prefix.)
 
 ---
 
@@ -404,25 +417,23 @@ http://localhost:4000/api/v1/docs
 ### JWT flow
 
 ```
-Client                      Server                          Redis
+Client                      Server                          PostgreSQL
   │                            │                               │
   ├─── POST /auth/login ───────►│                               │
   │    { email, password }      │── argon2id verify password    │
   │                             │── sign access JWT (RS256, 15m)│
   │                             │── sign refresh JWT (RS256, 7d)│
-  │                             │── hash refresh token ─────────►│ SET refresh:{userId}
-  │◄── { accessToken,           │                               │
+  │                             │── sha256(refresh token) ──────►│ INSERT refresh_tokens
+  │◄── { accessToken,           │                               │   (token_hash, expires_at)
   │      refreshToken } ────────│                               │
   │                             │                               │
   ├─── GET /any/protected ──────►│                               │
   │    Authorization: Bearer ... │── verify RS256 signature      │
-  │                             │── check token not revoked      │
   │◄── { data } ────────────────│                               │
   │                             │                               │
   ├─── POST /auth/refresh ──────►│                               │
-  │    { refreshToken }          │────────── GET refresh:{userId}►│
-  │                             │◄──────────────────────────────│
-  │                             │── verify hash match            │
+  │    { refreshToken }          │── SELECT by sha256 hash ──────►│ token_hash match,
+  │                             │◄──────────────────────────────│ not revoked, not expired
   │◄── { accessToken } ─────────│                               │
 ```
 
@@ -467,9 +478,11 @@ finalizeInvoice(...) { }
 ```
 Cashier opens POS terminal
         │
-        ├── Scan barcode / type name
-        │       └── GET /inventory/medicines?search=... (debounced 200ms)
-        │               └── Returns: name, MRP, schedule class, available batches
+        ├── Scan barcode (USB scanner or camera dialog) / type name
+        │       ├── GET /inventory/medicines?search=... (debounced 300ms;
+        │       │     exact match on barcode/SKU, ILIKE on name)
+        │       └── GET /inventory/medicines/:id/batches
+        │               └── FEFO-ordered active batches (qty > 0, not expired)
         │
         ├── Add item to cart (Zustand cart store)
         │       └── POST /billing/invoices/:id/items
@@ -527,7 +540,7 @@ selectBatchesForDispense(medicineId, requiredQty):
   batches = SELECT * FROM inventory_batches
             WHERE medicine_id = ?
               AND status = 'active'
-              AND expiry_date > NOW()
+              AND expiry_date > CURRENT_DATE
               AND quantity > 0
             ORDER BY expiry_date ASC          -- First Expired, First Out
   -- reserved_qty (e.g. stock mid-transfer) is subtracted from each batch's
@@ -639,7 +652,7 @@ Supplier delivers → GRN (Goods Received Note)
 ### Queue architecture
 
 ```
-Redis (BullMQ backend)
+Redis (Bull backend — @nestjs/bull + bull v4, not BullMQ)
 ├── Queue: pdf-generation
 │     └── Worker: InvoicePdfWorker
 │           ├── Triggered by: BillingService.finalizeInvoice()
@@ -661,10 +674,10 @@ Redis (BullMQ backend)
 
 ### Adding a new job
 
-1. Define queue name in `backend/src/modules/jobs/jobs.module.ts`
-2. Create worker class extending `WorkerHost`
-3. Inject queue in the service that triggers it: `@InjectQueue('queue-name')`
-4. Add worker to `jobs.module.ts` providers
+1. Register the queue name in `backend/src/modules/jobs/jobs.module.ts` (`BullModule.registerQueue`)
+2. Create a worker class decorated with `@Processor('queue-name')` and a `@Process()` handler method
+3. Inject the queue in the service that triggers it: `@InjectQueue('queue-name')`
+4. Add the worker to `jobs.module.ts` providers
 
 ---
 
@@ -752,9 +765,9 @@ Invalidation strategy: mutations invalidate the `.all()` key, which cascades to 
 ## 11. Security Model
 
 ### Token security
-- Access tokens: RS256 asymmetric JWT, 15-minute TTL, stored in **memory only** (Zustand, not persisted to localStorage)
-- Refresh tokens: RS256 JWT, 7-day TTL, stored as bcrypt hash in Redis
-- Session cookie `pharmerp_session=1`: HttpOnly-adjacent (JS-set), serves only as middleware signal — no token data inside
+- Access tokens: RS256 asymmetric JWT, 15-minute TTL, persisted in localStorage via the Zustand `persist` middleware (survives reload; accepted XSS trade-off — see §10 route protection note)
+- Refresh tokens: RS256 JWT, 7-day TTL, stored server-side as a **sha256 hash in the Postgres `refresh_tokens` table** with `revoked_at`/`expires_at` checks
+- Session cookie `pharmerp_session=1`: JS-set, serves only as a middleware routing signal — no token data inside
 
 ### Password security
 - Argon2id with: time cost 2, memory 64 MB, parallelism 1
@@ -810,17 +823,18 @@ pnpm run db:seed
 pnpm run dev
 # Frontend: http://localhost:3000
 # Backend:  http://localhost:4000
-# Swagger:  http://localhost:4000/api/v1/docs
+# Swagger:  http://localhost:4000/docs
 # MinIO UI: http://localhost:9001
 ```
 
 ### Default login credentials (after seed)
-| Role | Email | Password |
-|---|---|---|
-| Super Admin | admin@pharmerp.com | Admin@1234 |
-| Pharmacist | pharmacist@pharmerp.com | Pharma@1234 |
-| Cashier | cashier@pharmerp.com | Cash@1234 |
-| Inventory Manager | inventory@pharmerp.com | Inv@1234 |
+| Role | Email | Password | Branch |
+|---|---|---|---|
+| Super Admin | rkmc@email.com | RadhaMadhav@123 | — (cross-branch) |
+| Super Admin | admin@mederp.com | Admin@123 | — (cross-branch) |
+| Pharmacist | pharmacist@mederp.com | Pharm@123 | BRN01 |
+| Cashier | cashier@mederp.com | Cash@123 | BRN01 |
+| Inventory Manager | inventory@mederp.com | Inv@123 | BRN02 |
 
 ### Individual service commands
 
@@ -1120,6 +1134,17 @@ fixed — move the row's Status to `Fixed` with a one-line note, don't delete it
 | 24 | Report query params (`days`, etc.) unvalidated — bad input silently produces `Invalid Date` | Open |
 | 25 | No admin "reset password" and no self-service "forgot password" — an account lockout has no recovery path | Open |
 
+### Barcode scanner feature audit (July 2026, `bar-code-scanner` branch)
+
+| # | Finding | Status |
+|---|---|---|
+| 26 | Barcode PNG download used a plain `<a href>` to a JWT-guarded endpoint — always 401 (token only travels in the Authorization header) | **Fixed** — fetched as a blob via `apiClient`, downloaded as `{SKU}-barcode.png` |
+| 27 | Duplicate barcodes possible (column has only a non-unique index, no validation) — POS scan with `limit: 1` would silently dispense whichever medicine sorts first | **Fixed** — create/update reject duplicates with 409, bulk import skips them (in-file + against DB), 13-digit codes EAN-13 checksum-validated in the shared Zod schema |
+| 28 | POS scan and click-to-add picked `batchList[0]` from the unfiltered batch list — could select an expired or zero-quantity batch | **Fixed** — POS now uses the FEFO dispense endpoint (`GET /inventory/medicines/:id/batches`), which also excludes expired batches (`expiry_date >= CURRENT_DATE`) |
+| 29 | Camera scanner dialog "Close & Retry" button was a stub (dead placeholder code) — never restarted the camera | **Fixed** — retry re-runs the camera startup effect |
+| 30 | Hardware scanner stayed active while the payment modal was open (a stray scan mutated the cart mid-payment); failed scans left scanner characters in the search box | **Fixed** — scan capture suspended while any POS modal is open; search input cleared on every scan |
+| 31 | No DB-level unique constraint on `medicines.barcode` — service check closes the practical hole, but a partial unique index (`WHERE deleted_at IS NULL`) would make it airtight; needs a duplicate-data check + migration first | Open |
+
 ### Low
 
 - Various `as any` casts bypassing type safety at repository boundaries (not exploitable today since controllers validate first, but fragile against future schema changes).
@@ -1182,6 +1207,8 @@ building anything that assumes partial-batch transfers work.
 | 2-C — All pages | Done | Dashboard, inventory, billing, HR, reports, procurement |
 | 2-D — Distribution module | Done | Stock transfers backend + frontend page |
 | 2-E — Polish | Done | Toast, error boundaries, print styles, hooks |
+| 2-F — Barcode scanner | Done | USB HID + camera scanning (html5-qrcode), Code-128 label PNGs (bwip-js), EAN-13 checksum validation, service-level barcode uniqueness, FEFO-safe POS dispense |
+| 2-G — Mobile responsive UI | Done | Off-canvas sidebar drawer, stacked POS with sticky pay bar, bottom-sheet modals on phones, fluid camera scanner viewport |
 | 3 | Planned | Elasticsearch full-text medicine search, WhatsApp notifications |
 | 4 | Planned | ClickHouse analytics, demand forecasting |
 | 5 | Planned | Payroll engine, salary slips, leave encashment |

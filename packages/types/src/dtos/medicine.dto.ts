@@ -1,10 +1,28 @@
 import { z } from "zod";
 
+// Duplicated from @pharmerp/utils (isValidEAN13) — types is the bottom-level
+// package and cannot depend on utils.
+function isValidEan13Checksum(code: string): boolean {
+  const digits = code.split("").map(Number);
+  const check = digits[12]!;
+  const sum = digits.slice(0, 12).reduce((acc, d, i) => acc + d * (i % 2 === 0 ? 1 : 3), 0);
+  return (10 - (sum % 10)) % 10 === check;
+}
+
+// Only 13-digit codes are checksum-validated; other formats (Code-128, UPC-A,
+// internal SKU-style codes) pass through untouched.
+const barcodeSchema = z
+  .string()
+  .max(100)
+  .refine((v) => !/^\d{13}$/.test(v) || isValidEan13Checksum(v), {
+    message: "Invalid EAN-13 barcode: checksum digit does not match",
+  });
+
 export const createMedicineSchema = z.object({
   name: z.string().min(1).max(255),
   genericName: z.string().max(255).optional(),
   sku: z.string().min(1).max(100),
-  barcode: z.string().max(100).optional(),
+  barcode: barcodeSchema.optional(),
   categoryId: z.string().uuid().optional(),
   manufacturer: z.string().max(255).optional(),
   hsnCode: z.string().max(20).optional(),
