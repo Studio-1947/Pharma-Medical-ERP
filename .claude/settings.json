@@ -1,7 +1,23 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node verify-camera.mjs)"
+      "Bash(node verify-camera.mjs)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(pnpm --filter frontend add barcode-detector)",
+      "Bash(node -e \"console.log\\('barcode-detector:', require\\('./frontend/node_modules/barcode-detector/package.json'\\).version\\); console.log\\('zxing-wasm:', require\\('./frontend/node_modules/zxing-wasm/package.json'\\).version\\)\")",
+      "Bash(node -e \"const p=require\\('./frontend/node_modules/barcode-detector/package.json'\\); console.log\\(JSON.stringify\\(p.exports?.['./ponyfill'] ?? p.exports, null, 1\\)\\)\")",
+      "Bash(curl -s -m 3 -o /dev/null -w \"localhost:3000 -> HTTP %{http_code}\\\\n\" http://localhost:3000/login)",
+      "Bash(curl -s -m 3 -o /dev/null -w \"backend :4000 -> HTTP %{http_code}\\\\n\" http://localhost:4000/health)",
+      "Bash(node -e ' *)",
+      "Bash(node verify-photo-decode.mjs ./ean13.png \"EAN-13\")",
+      "Bash(python -c \"import sys;d=sys.stdin.read\\(\\);print\\(d[:600]\\)\")",
+      "Bash(powershell.exe -Command \"Start-Process 'C:\\\\Program Files\\\\Docker\\\\Docker\\\\Docker Desktop.exe'\")",
+      "Bash(echo \"launch requested, exit=$?\")",
+      "Bash(curl -s -m 2 http://localhost:4000/api/v1/auth/login -X POST -H \"Content-Type: application/json\" -d '{\"email\":\"admin@mederp.com\",\"password\":\"Admin@123\"}')",
+      "Bash(node node-decode-test.mjs __TRACKED_VAR__/ean13.png __TRACKED_VAR__/code128.png)",
+      "Bash(node node-decode-test.mjs __TRACKED_VAR__/qr.png __TRACKED_VAR__/ean13-pad.png __TRACKED_VAR__/ean13.png)",
+      "Bash(node verify-photo-decode.mjs ./ean13-pad.png \"EAN-13 \\(padded, phone-like\\)\")"
     ]
   }
 }
