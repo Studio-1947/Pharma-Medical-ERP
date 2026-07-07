@@ -3,8 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from "html5-qrcode";
 import { Modal } from "@/components/ui/modal";
-import { Camera, AlertCircle, RefreshCw } from "lucide-react";
+import { Camera, AlertCircle, RefreshCw, ImageUp } from "lucide-react";
 import { playScanBeep } from "@/hooks/use-barcode-scanner";
+
+// 1D barcode formats used by medicine strips and general retail goods, plus QR.
+const SCAN_FORMATS = [
+  "ean_13", "ean_8", "upc_a", "upc_e",
+  "code_128", "code_39", "itf", "codabar", "qr_code",
+] as const;
 
 interface Props {
   open: boolean;
@@ -27,6 +33,37 @@ export function BarcodeScannerDialog({
   const [isInitializing, setIsInitializing] = useState(true);
   // Bumped by the Retry button to re-run the camera startup effect
   const [attempt, setAttempt] = useState(0);
+  // Photo-capture fallback: iOS Safari has no BarcodeDetector API and its live
+  // video 1D decode is unreliable, so snap a still and decode it with a WASM
+  // ZXing reader instead.
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoStatus, setPhotoStatus] = useState<null | "reading" | "notfound">(null);
+
+  const handlePhotoCapture = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // reset so selecting the same photo again re-fires onChange
+    if (!file) return;
+    setPhotoStatus("reading");
+    try {
+      // Loaded on demand so the WASM decoder isn't pulled into the main bundle.
+      const { BarcodeDetector } = await import("barcode-detector/ponyfill");
+      const detector = new BarcodeDetector({ formats: [...SCAN_FORMATS] });
+      const results = await detector.detect(file);
+      const code = results.find((r) => r.rawValue)?.rawValue;
+      if (code) {
+        playScanBeep();
+        onScan(code);
+        setPhotoStatus(null);
+        await handleStop();
+        onClose();
+      } else {
+        setPhotoStatus("notfound");
+      }
+    } catch (err) {
+      console.error("Photo decode error:", err);
+      setPhotoStatus("notfound");
+    }
+  };
 
   useEffect(() => {
     if (!open) {
@@ -235,6 +272,52 @@ export function BarcodeScannerDialog({
         <p className="text-xs text-slate-500 text-center font-medium bg-slate-50 px-4 py-2 rounded-lg border border-slate-100 max-w-sm">
           Tip: Hold the barcode steady. If the image is dark, ensure your workspace is well-lit.
         </p>
+
+        {/* Photo-capture fallback — the reliable path on iPhone/iOS Safari,
+            where the live video scanner can't decode striped barcodes. */}
+        <div className="w-full max-w-sm flex flex-col items-center gap-2 pt-1">
+          <div className="flex items-center gap-3 w-full text-[11px] font-semibold text-slate-400">
+            <div className="h-px flex-1 bg-slate-200" />
+            OR
+            <div className="h-px flex-1 bg-slate-200" />
+          </div>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handlePhotoCapture}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={photoStatus === "reading"}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-semibold rounded-lg transition"
+          >
+            {photoStatus === "reading" ? (
+              <>
+                <RefreshCw size={16} className="animate-spin" />
+                Reading barcode...
+              </>
+            ) : (
+              <>
+                <ImageUp size={16} />
+                Take a Photo to Scan
+              </>
+            )}
+          </button>
+
+          {photoStatus === "notfound" && (
+            <p className="text-xs text-red-600 font-medium text-center">
+              Couldn&apos;t read a barcode in that photo. Fill the frame with the barcode, hold steady, and try again.
+            </p>
+          )}
+          <p className="text-[11px] text-slate-400 text-center">
+            On iPhone, use this if the live scanner above doesn&apos;t pick up the barcode.
+          </p>
+        </div>
       </div>
     </Modal>
   );
