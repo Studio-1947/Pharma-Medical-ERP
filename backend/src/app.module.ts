@@ -57,16 +57,24 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
-        redis: config.get("REDIS_URL")
-          ? {
-              url: config.get<string>("REDIS_URL"),
-              connectTimeout: 5000,
-              maxRetriesPerRequest: 1,
-              enableOfflineQueue: false,
-            }
-          : { host: "localhost", port: 6379, connectTimeout: 5000, maxRetriesPerRequest: 1, enableOfflineQueue: false },
-      }),
+      useFactory: (config: ConfigService) => {
+        // enableOfflineQueue must stay true: Bull issues commands the moment a
+        // worker registers, before the socket is ready, and with the offline
+        // queue disabled that race crashes the whole boot.
+        const common = { connectTimeout: 5000, maxRetriesPerRequest: 1, enableOfflineQueue: true };
+        const redisUrl = config.get<string>("REDIS_URL");
+        if (!redisUrl) return { redis: { host: "localhost", port: 6379, ...common } };
+        // ioredis has no `url` option — parse it into host/port/password fields
+        const parsed = new URL(redisUrl);
+        return {
+          redis: {
+            host: parsed.hostname,
+            port: parsed.port ? Number(parsed.port) : 6379,
+            ...(parsed.password ? { password: parsed.password } : {}),
+            ...common,
+          },
+        };
+      },
     }),
 
     DrizzleModule,
