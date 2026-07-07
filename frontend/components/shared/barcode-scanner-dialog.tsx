@@ -162,8 +162,8 @@ export function BarcodeScannerDialog({
                 {/* Left side shade */}
                 <div className="bg-black/50 h-full flex-1" />
                 
-                {/* Visual Scanner Box Focus Frame */}
-                <div className="w-[320px] h-[150px] shrink-0 border-2 border-emerald-500 rounded-lg relative overflow-hidden bg-transparent">
+                {/* Visual Scanner Box Focus Frame — fluid so it never overflows narrow phone screens */}
+                <div className="w-[min(320px,85%)] h-[150px] shrink-0 border-2 border-emerald-500 rounded-lg relative overflow-hidden bg-transparent">
                   {/* Corner brackets */}
                   <div className="absolute top-0 left-0 w-4 h-4 border-t-4 border-l-4 border-emerald-400 rounded-tl" />
                   <div className="absolute top-0 right-0 w-4 h-4 border-t-4 border-r-4 border-emerald-400 rounded-tr" />

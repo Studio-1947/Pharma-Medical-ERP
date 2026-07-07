@@ -26,7 +26,7 @@ describe("InventoryService - barcode uniqueness", () => {
   it("creates a medicine when the barcode is unused", async () => {
     const res = await service.create({ ...baseDto, barcode: "8901030865275" });
     expect(mockRepo.findMedicineByBarcode).toHaveBeenCalledWith("8901030865275", undefined);
-    expect(res.data.id).toBe("med-new");
+    expect(res.data?.id).toBe("med-new");
   });
 
   it("rejects create when another medicine already has the barcode", async () => {

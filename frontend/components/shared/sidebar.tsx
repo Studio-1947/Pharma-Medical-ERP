@@ -19,6 +19,7 @@ import {
   Settings,
   PanelLeftClose,
   PanelLeftOpen,
+  X,
 } from "lucide-react";
 
 type NavItem = {
@@ -43,21 +44,44 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/settings", label: "Settings", icon: Settings, permission: "users.manage" },
 ];
 
-export function Sidebar() {
+interface SidebarProps {
+  mobileOpen?: boolean;
+  onMobileClose?: () => void;
+}
+
+export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
   const { navigate, isPending } = useNavigation();
   const { can } = usePermissions();
+
+  // The collapse feature only exists on desktop; the mobile drawer always
+  // shows the full menu.
+  const collapsed = desktopCollapsed && !mobileOpen;
+  const setCollapsed = setDesktopCollapsed;
 
   const visibleItems = NAV_ITEMS.filter(
     (item) => !item.permission || can(item.permission),
   );
 
   return (
+    <>
+      {/* Mobile drawer backdrop */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] lg:hidden"
+          onClick={onMobileClose}
+          aria-hidden="true"
+        />
+      )}
     <aside
       className={clsx(
-        "relative shrink-0 flex flex-col bg-gradient-to-b from-emerald-900 via-teal-900 to-cyan-950 text-white transition-all duration-300 ease-in-out overflow-visible",
-        collapsed ? "w-16" : "w-64",
+        "flex flex-col bg-gradient-to-b from-emerald-900 via-teal-900 to-cyan-950 text-white overflow-visible",
+        // Mobile: fixed off-canvas drawer. Desktop (lg+): static column.
+        "fixed inset-y-0 left-0 z-50 w-64 transition-transform duration-300 ease-in-out",
+        mobileOpen ? "translate-x-0" : "-translate-x-full",
+        "lg:relative lg:translate-x-0 lg:shrink-0 lg:transition-all",
+        collapsed ? "lg:w-16" : "lg:w-64",
       )}
     >
       {/* Decorative orbs */}
@@ -100,9 +124,16 @@ export function Sidebar() {
             <button
               onClick={() => setCollapsed(true)}
               title="Collapse sidebar"
-              className="shrink-0 p-1.5 rounded-lg hover:bg-white/15 text-emerald-300/70 hover:text-white transition-colors"
+              className="hidden lg:block shrink-0 p-1.5 rounded-lg hover:bg-white/15 text-emerald-300/70 hover:text-white transition-colors"
             >
               <PanelLeftClose size={16} />
+            </button>
+            <button
+              onClick={onMobileClose}
+              aria-label="Close menu"
+              className="lg:hidden shrink-0 p-1.5 rounded-lg hover:bg-white/15 text-emerald-300/70 hover:text-white transition-colors"
+            >
+              <X size={18} />
             </button>
           </div>
         )}
@@ -118,7 +149,7 @@ export function Sidebar() {
           return (
             <button
               key={href}
-              onClick={() => navigate(href)}
+              onClick={() => { navigate(href); onMobileClose?.(); }}
               title={collapsed ? label : undefined}
               className={clsx(
                 "relative w-full flex items-center rounded-lg text-sm font-medium transition-all group",
@@ -166,16 +197,17 @@ export function Sidebar() {
         </div>
       )}
 
-      {/* Expand tab — floats on the right edge when collapsed */}
+      {/* Expand tab — floats on the right edge when collapsed (desktop only) */}
       {collapsed && (
         <button
           onClick={() => setCollapsed(false)}
           title="Expand sidebar"
-          className="absolute top-1/2 -translate-y-1/2 -right-3 z-50 flex items-center justify-center w-6 h-10 bg-emerald-700 hover:bg-emerald-600 rounded-r-lg shadow-lg transition-colors border border-white/10"
+          className="hidden lg:flex absolute top-1/2 -translate-y-1/2 -right-3 z-50 items-center justify-center w-6 h-10 bg-emerald-700 hover:bg-emerald-600 rounded-r-lg shadow-lg transition-colors border border-white/10"
         >
           <PanelLeftOpen size={13} className="text-white" />
         </button>
       )}
     </aside>
+    </>
   );
 }

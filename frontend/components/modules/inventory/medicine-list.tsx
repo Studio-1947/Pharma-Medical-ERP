@@ -85,8 +85,8 @@ export function MedicineList() {
   return (
     <div>
       {/* Toolbar */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="relative flex-1 max-w-sm flex gap-2">
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="relative flex-1 min-w-[220px] sm:max-w-sm flex gap-2">
           <div className="relative flex-1">
             <Search
               size={16}

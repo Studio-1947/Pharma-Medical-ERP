@@ -39,7 +39,7 @@ export function Modal({ title, subtitle, open, onClose, children, size = "lg", i
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-modal="true" role="dialog">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" aria-modal="true" role="dialog">
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/40 backdrop-blur-[2px] transition-opacity animate-in fade-in duration-150"
@@ -48,10 +48,10 @@ export function Modal({ title, subtitle, open, onClose, children, size = "lg", i
 
       {/* Panel */}
       <div
-        className={`relative w-full ${sizeMap[size]} bg-white rounded-2xl shadow-2xl ring-1 ring-black/5 max-h-[92vh] flex flex-col animate-in fade-in zoom-in-95 duration-150`}
+        className={`relative w-full ${sizeMap[size]} bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl ring-1 ring-black/5 max-h-[94dvh] sm:max-h-[92dvh] flex flex-col animate-in fade-in slide-in-from-bottom-4 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-150`}
       >
         {/* Header */}
-        <div className="flex items-start justify-between px-6 py-5 border-b border-slate-100 shrink-0">
+        <div className="flex items-start justify-between px-4 py-4 sm:px-6 sm:py-5 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-3">
             {icon && (
               <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-emerald-50 text-emerald-600 shrink-0">
@@ -75,7 +75,7 @@ export function Modal({ title, subtitle, open, onClose, children, size = "lg", i
         </div>
 
         {/* Content */}
-        <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-6">{children}</div>
+        <div className="flex flex-col flex-1 min-h-0 overflow-y-auto p-4 sm:p-6">{children}</div>
       </div>
     </div>
   );

@@ -414,15 +414,16 @@ export function PosTerminal() {
   const medicines: any[] = Array.isArray(searchRaw?.data?.data) ? searchRaw.data.data : Array.isArray(searchRaw?.data) ? searchRaw.data : [];
 
   return (
-    <div className="flex flex-col gap-4 h-[calc(100vh-8rem)]">
+    <div className="flex flex-col gap-4 lg:h-[calc(100vh-8rem)]">
       {/* Top bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-muted/40 p-4 rounded-xl border">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-muted/40 p-3 sm:p-4 rounded-xl border">
+        {/* Keyboard hotkeys are meaningless on touch devices */}
+        <div className="hidden md:flex flex-wrap items-center gap-2">
           {(["[F2] Search", "[F4] Pay", "[F6] Clear", "[Ctrl+P] Print"] as const).map((k) => (
             <span key={k} className="text-xs bg-muted border font-semibold px-2 py-1 rounded-md">{k}</span>
           ))}
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
           <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg border border-emerald-100 text-xs font-semibold shadow-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
             Scanner Hook Active
@@ -436,9 +437,9 @@ export function PosTerminal() {
 
       {/* F6 Clear cart confirm banner */}
       {clearConfirm && (
-        <div className="flex items-center justify-between bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between bg-red-50 border border-red-200 rounded-xl px-4 py-3">
           <span className="text-sm font-semibold text-red-700">Clear the entire cart? This cannot be undone.</span>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <button
               onClick={() => { clear(); setClearConfirm(false); }}
               className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition-colors"
@@ -481,9 +482,10 @@ export function PosTerminal() {
         </div>
       )}
 
-      <div className="flex gap-4 flex-1 overflow-hidden">
+      {/* Stacked on mobile (page scrolls), side-by-side panes on lg+ */}
+      <div className="flex flex-col lg:flex-row gap-4 flex-1 lg:overflow-hidden">
         {/* Left: search + patient */}
-        <div className="flex-1 flex flex-col gap-3 h-full overflow-hidden">
+        <div className="flex-1 flex flex-col gap-3 lg:h-full lg:overflow-hidden">
           {/* Patient selector */}
           <div className="relative">
             {selectedPatient ? (
@@ -633,7 +635,7 @@ export function PosTerminal() {
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto rounded-xl border bg-card">
+          <div className="flex-1 min-h-[200px] max-h-[45dvh] lg:max-h-none overflow-y-auto rounded-xl border bg-card">
             {search.length >= 2 ? (
               <div className="divide-y">
                 {isFetching && (
@@ -694,7 +696,7 @@ export function PosTerminal() {
         </div>
 
         {/* Right: cart */}
-        <div className="w-96 flex flex-col border rounded-xl bg-card shadow-sm">
+        <div className="w-full lg:w-96 shrink-0 flex flex-col border rounded-xl bg-card shadow-sm">
           <div className="flex items-center gap-2 px-4 py-3.5 border-b bg-muted/20">
             <ShoppingCart size={16} />
             <span className="font-semibold text-sm">Cart</span>
@@ -703,7 +705,7 @@ export function PosTerminal() {
             </span>
           </div>
 
-          <div className="flex-1 overflow-y-auto divide-y bg-white/50">
+          <div className="flex-1 max-h-[40dvh] lg:max-h-none overflow-y-auto divide-y bg-white/50">
             {items.length === 0 && (
               <div className="text-center py-16 text-xs text-muted-foreground flex flex-col items-center gap-1">
                 <ShoppingCart className="w-8 h-8 mb-1 opacity-25" />
@@ -724,18 +726,18 @@ export function PosTerminal() {
                       )}
                     </div>
                   </div>
-                  <button onClick={() => removeItem(item.medicineId, item.batchId)} className="text-muted-foreground hover:text-red-500 ml-2 transition">
+                  <button onClick={() => removeItem(item.medicineId, item.batchId)} className="text-muted-foreground hover:text-red-500 ml-2 p-1.5 -m-1.5 transition">
                     <Trash2 size={14} />
                   </button>
                 </div>
                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-muted/30">
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-md">
-                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity - 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
+                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity - 1)} className="w-8 h-8 lg:w-6 lg:h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
                         <Minus size={10} />
                       </button>
                       <span className="w-8 text-center text-xs font-semibold">{item.quantity}</span>
-                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity + 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
+                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity + 1)} className="w-8 h-8 lg:w-6 lg:h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
                         <Plus size={10} />
                       </button>
                     </div>
@@ -789,6 +791,23 @@ export function PosTerminal() {
         </div>
       </div>
 
+      {/* Mobile sticky checkout bar — the cart panel can be scrolled past on
+          small screens, so keep the total and Pay always reachable */}
+      {items.length > 0 && (
+        <div className="lg:hidden sticky bottom-0 z-30 -mx-4 -mb-4 px-4 py-3 sm:-mx-6 sm:px-6 bg-white/95 backdrop-blur border-t shadow-[0_-4px_12px_rgba(0,0,0,0.06)] flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs text-muted-foreground">{items.length} {items.length === 1 ? "item" : "items"} in cart</p>
+            <p className="text-lg font-bold text-primary leading-tight">₹{finalTotal.toFixed(2)}</p>
+          </div>
+          <button
+            onClick={() => setPayOpen(true)}
+            className="shrink-0 px-8 py-3 bg-primary text-primary-foreground rounded-xl text-sm font-bold hover:bg-primary/90 transition shadow-sm"
+          >
+            Pay
+          </button>
+        </div>
+      )}
+
       <PaymentModal
         open={payOpen}
         total={finalTotal}
@@ -835,7 +854,7 @@ export function PosTerminal() {
                     className={formInputCls}
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className={formLabelCls}>Phone Number <span className="text-red-500">*</span></label>
                     <input
@@ -867,7 +886,7 @@ export function PosTerminal() {
             <div>
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">Additional Information (Optional)</p>
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className={formLabelCls}>Gender</label>
                     <select
@@ -913,7 +932,7 @@ export function PosTerminal() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className={formLabelCls}>Street / City</label>
                     <input

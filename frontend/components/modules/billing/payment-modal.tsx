@@ -80,8 +80,8 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading }: Props
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-md sm:mx-4 max-h-[94dvh] overflow-y-auto">
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b">
@@ -91,7 +91,7 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading }: Props
           </button>
         </div>
 
-        <div className="px-6 py-5 space-y-5">
+        <div className="px-4 sm:px-6 py-5 space-y-5">
 
           {/* Amount due */}
           <div className="bg-slate-50 rounded-xl px-5 py-4 text-center border border-slate-200">
