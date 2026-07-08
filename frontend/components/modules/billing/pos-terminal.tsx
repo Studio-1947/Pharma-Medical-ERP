@@ -279,8 +279,9 @@ export function PosTerminal() {
     // regardless of the lookup outcome so failed scans don't leave garbage.
     setSearch("");
     try {
-      const res: any = await apiClient.get("/inventory/medicines", { params: { search: scanCode, limit: 1 } });
-      const medicine = res?.data?.data?.[0] ?? res?.data?.[0];
+      // Indexed exact-barcode lookup (uses medicines_barcode_idx), not the fuzzy search.
+      const res: any = await apiClient.get(`/inventory/medicines/barcode/${encodeURIComponent(scanCode)}`);
+      const medicine = res?.data?.data ?? res?.data ?? null;
       if (medicine) {
         // FEFO dispense endpoint: active, non-expired batches with qty > 0, earliest expiry first
         const batchesRes: any = await apiClient.get(`/inventory/medicines/${medicine.id}/batches`);

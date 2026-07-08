@@ -71,6 +71,21 @@ export class ProcurementRepository {
     });
   }
 
+  /** Find a live supplier by its unique code (for duplicate detection). */
+  async findSupplierByCode(code: string, excludeId?: string) {
+    const conditions = [
+      eq(schema.suppliers.code, code),
+      isNull(schema.suppliers.deletedAt),
+    ];
+    if (excludeId) conditions.push(sql`${schema.suppliers.id} <> ${excludeId}`);
+    const [supplier] = await this.db
+      .select({ id: schema.suppliers.id, name: schema.suppliers.name, code: schema.suppliers.code })
+      .from(schema.suppliers)
+      .where(and(...conditions))
+      .limit(1);
+    return supplier ?? null;
+  }
+
   async createSupplier(data: CreateSupplierDto) {
     const [supplier] = await this.db
       .insert(schema.suppliers)

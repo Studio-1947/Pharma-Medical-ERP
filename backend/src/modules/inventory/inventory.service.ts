@@ -17,17 +17,32 @@ export class InventoryService {
     return { data: medicine };
   }
 
+  /** Exact-match barcode lookup for POS/inventory scanning — uses the
+   *  medicines_barcode_idx index (O(log n)), unlike the fuzzy `findAll` search. */
+  async getByBarcode(code: string) {
+    const medicine = await this.repo.findActiveByBarcode(code);
+    return { data: medicine ?? null };
+  }
+
   async create(dto: CreateMedicineDto, userId?: string) {
     await this.assertBarcodeUnique(dto.barcode);
-    const medicine = await this.repo.createMedicine(dto, userId);
-    return { data: medicine, message: "Medicine created" };
+    try {
+      const medicine = await this.repo.createMedicine(dto, userId);
+      return { data: medicine, message: "Medicine created" };
+    } catch (e) {
+      throw this.mapBarcodeConflict(e, dto.barcode);
+    }
   }
 
   async update(id: string, dto: UpdateMedicineDto) {
     await this.findOne(id);
     await this.assertBarcodeUnique(dto.barcode, id);
-    const medicine = await this.repo.updateMedicine(id, dto);
-    return { data: medicine, message: "Medicine updated" };
+    try {
+      const medicine = await this.repo.updateMedicine(id, dto);
+      return { data: medicine, message: "Medicine updated" };
+    } catch (e) {
+      throw this.mapBarcodeConflict(e, dto.barcode);
+    }
   }
 
   /** A barcode shared by two medicines would let a POS scan dispense the wrong product. */
@@ -39,6 +54,17 @@ export class InventoryService {
         `Barcode ${barcode} is already assigned to "${existing.name}" (SKU ${existing.sku})`,
       );
     }
+  }
+
+  /** Backstop for the check-then-insert race: the DB partial-unique index throws
+   *  23505; turn that into the same clean 409 instead of a generic 500. */
+  private mapBarcodeConflict(e: unknown, barcode?: string): never {
+    const err = e as { code?: string; cause?: { code?: string }; message?: string };
+    const code = err?.code ?? err?.cause?.code;
+    if (code === "23505" && /barcode/i.test(err?.message ?? "")) {
+      throw new ConflictException(`Barcode ${barcode ?? ""} is already assigned to another medicine`);
+    }
+    throw e as Error;
   }
 
   async remove(id: string) {

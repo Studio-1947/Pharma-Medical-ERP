@@ -45,7 +45,7 @@ async function seed() {
     argon2.hash("Admin@123"),
     argon2.hash("Pharm@123"),
     argon2.hash("Cash@123"),
-    argon2.hash("Inv@123"),
+    argon2.hash("Inv@1234"),
   ]);
 
   // 3. Users

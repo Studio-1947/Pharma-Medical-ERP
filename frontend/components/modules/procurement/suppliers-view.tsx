@@ -18,8 +18,28 @@ interface Supplier {
   address?: string;
   gstNo?: string;
   panNo?: string;
+  drugLicenseNo?: string;
+  drugLicenseExpiry?: string;
+  creditDays?: number;
+  creditLimit?: string;
   rating: number;
 }
+
+const emptyForm = {
+  name: "",
+  code: "",
+  contactPerson: "",
+  phone: "",
+  email: "",
+  address: "",
+  gstNo: "",
+  panNo: "",
+  drugLicenseNo: "",
+  drugLicenseExpiry: "",
+  creditDays: 0,
+  creditLimit: "0",
+  rating: 3,
+};
 
 export function SuppliersView() {
   const queryClient = useQueryClient();
@@ -31,17 +51,8 @@ export function SuppliersView() {
   const [isOpen, setIsOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
 
-  const [form, setForm] = useState({
-    name: "",
-    code: "",
-    contactPerson: "",
-    phone: "",
-    email: "",
-    address: "",
-    gstNo: "",
-    panNo: "",
-    rating: 3,
-  });
+  const [form, setForm] = useState(emptyForm);
+  const [formError, setFormError] = useState("");
 
   const { data: rawSuppliers, isLoading } = useQuery({
     queryKey: ["suppliers", { search }],
@@ -57,12 +68,24 @@ export function SuppliersView() {
     return [];
   })();
 
+  const extractError = (err: any): string => {
+    const data = err?.response?.data;
+    // Zod field errors come back as { errors: { field: [msg] } }
+    if (data?.errors && typeof data.errors === "object") {
+      const first = Object.entries(data.errors)[0] as [string, string[]] | undefined;
+      if (first) return `${first[0]}: ${first[1]?.[0] ?? "invalid"}`;
+    }
+    return data?.message ?? "Could not save the supplier. Check the fields and try again.";
+  };
+
   const createMutation = useMutation({
     mutationFn: (data: any) => apiClient.post("/procurement/suppliers", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+      toastSuccess("Supplier created", "The supplier has been registered.");
       handleClose();
     },
+    onError: (err: any) => setFormError(extractError(err)),
   });
 
   const updateMutation = useMutation({
@@ -70,8 +93,10 @@ export function SuppliersView() {
       apiClient.patch(`/procurement/suppliers/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["suppliers"] });
+      toastSuccess("Supplier updated", "Changes have been saved.");
       handleClose();
     },
+    onError: (err: any) => setFormError(extractError(err)),
   });
 
   const deleteMutation = useMutation({
@@ -89,17 +114,8 @@ export function SuppliersView() {
 
   function openCreate() {
     setEditingSupplier(null);
-    setForm({
-      name: "",
-      code: "",
-      contactPerson: "",
-      phone: "",
-      email: "",
-      address: "",
-      gstNo: "",
-      panNo: "",
-      rating: 3,
-    });
+    setForm(emptyForm);
+    setFormError("");
     setIsOpen(true);
   }
 
@@ -114,25 +130,47 @@ export function SuppliersView() {
       address: sup.address ?? "",
       gstNo: sup.gstNo ?? "",
       panNo: sup.panNo ?? "",
+      drugLicenseNo: sup.drugLicenseNo ?? "",
+      drugLicenseExpiry: sup.drugLicenseExpiry ? sup.drugLicenseExpiry.slice(0, 10) : "",
+      creditDays: sup.creditDays ?? 0,
+      creditLimit: sup.creditLimit ?? "0",
       rating: sup.rating ?? 3,
     });
+    setFormError("");
     setIsOpen(true);
   }
 
   function handleClose() {
     setIsOpen(false);
     setEditingSupplier(null);
+    setFormError("");
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.name || !form.code || !form.phone) return;
+    setFormError("");
+    if (!form.name.trim() || !form.code.trim() || !form.phone.trim()) {
+      setFormError("Name, Code and Phone are required.");
+      return;
+    }
 
+    // Send blanks as undefined so optional fields store as NULL and skip
+    // format validation (empty email/GSTIN must not be rejected).
+    const clean = (v: string) => (v.trim() === "" ? undefined : v.trim());
     const payload = {
-      ...form,
+      name: form.name.trim(),
+      code: form.code.trim(),
+      phone: form.phone.trim(),
+      contactPerson: clean(form.contactPerson),
+      email: clean(form.email),
+      address: clean(form.address),
+      gstNo: clean(form.gstNo),
+      panNo: clean(form.panNo),
+      drugLicenseNo: clean(form.drugLicenseNo),
+      drugLicenseExpiry: clean(form.drugLicenseExpiry),
+      creditDays: Number(form.creditDays) || 0,
+      creditLimit: form.creditLimit?.toString().trim() || "0",
       rating: Number(form.rating),
-      creditDays: 0,
-      creditLimit: "0",
     };
 
     if (editingSupplier) {
@@ -214,6 +252,23 @@ export function SuppliersView() {
                       <span className="font-mono text-xs">{sup.gstNo}</span>
                     </p>
                   )}
+                  {sup.drugLicenseNo && (
+                    <p className="flex items-center gap-2">
+                      <FileText className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="font-mono text-xs">{sup.drugLicenseNo}</span>
+                      {sup.drugLicenseExpiry && (
+                        <span
+                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                            new Date(sup.drugLicenseExpiry) < new Date()
+                              ? "bg-red-50 text-red-600"
+                              : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          exp {sup.drugLicenseExpiry.slice(0, 10)}
+                        </span>
+                      )}
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -263,6 +318,11 @@ export function SuppliersView() {
             <h3 className="text-lg font-bold mb-4">
               {editingSupplier ? "Edit Supplier" : "Register Supplier"}
             </h3>
+            {formError && (
+              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                {formError}
+              </div>
+            )}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
@@ -342,7 +402,8 @@ export function SuppliersView() {
                   <input
                     type="text"
                     value={form.gstNo}
-                    onChange={(e) => setForm({ ...form, gstNo: e.target.value })}
+                    onChange={(e) => setForm({ ...form, gstNo: e.target.value.toUpperCase() })}
+                    placeholder="22ABCDE1234F1Z5"
                     className="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   />
                 </div>
@@ -351,8 +412,56 @@ export function SuppliersView() {
                   <input
                     type="text"
                     value={form.panNo}
-                    onChange={(e) => setForm({ ...form, panNo: e.target.value })}
+                    onChange={(e) => setForm({ ...form, panNo: e.target.value.toUpperCase() })}
+                    placeholder="ABCDE1234F"
                     className="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold">Drug License No.</label>
+                  <input
+                    type="text"
+                    value={form.drugLicenseNo}
+                    onChange={(e) => setForm({ ...form, drugLicenseNo: e.target.value })}
+                    placeholder="20B / 21B licence"
+                    className="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold">License Expiry</label>
+                  <input
+                    type="date"
+                    value={form.drugLicenseExpiry}
+                    onChange={(e) => setForm({ ...form, drugLicenseExpiry: e.target.value })}
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold">Credit Days</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={365}
+                    value={form.creditDays}
+                    onChange={(e) => setForm({ ...form, creditDays: Number(e.target.value) })}
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-semibold">Credit Limit (₹)</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={form.creditLimit}
+                    onChange={(e) => setForm({ ...form, creditLimit: e.target.value })}
+                    placeholder="0.00"
+                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
                   />
                 </div>
               </div>

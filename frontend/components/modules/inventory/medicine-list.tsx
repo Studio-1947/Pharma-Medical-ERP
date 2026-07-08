@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { MedicineForm } from "./medicine-form";
 import { BulkImportModal } from "./bulk-import-modal";
+import type { CreateMedicineDto } from "@pharmerp/types";
 
 interface Medicine {
   id: string;
@@ -38,6 +39,9 @@ export function MedicineList() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
+  // When a scan finds no match, we open the create form pre-filled with the
+  // scanned barcode plus sensible defaults, so only name and MRP remain to enter.
+  const [createInitial, setCreateInitial] = useState<Partial<CreateMedicineDto> | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Medicine | null>(null);
@@ -117,7 +121,7 @@ export function MedicineList() {
           Import CSV
         </button>
         <button
-          onClick={() => setCreateOpen(true)}
+          onClick={() => { setCreateInitial(null); setCreateOpen(true); }}
           className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:opacity-90 transition-opacity"
         >
           <Plus size={16} />
@@ -271,14 +275,31 @@ export function MedicineList() {
 
       {/* Create modal */}
       <Modal
-        title="Add New Medicine"
-        subtitle="Fill in the details below to register a new medicine in the formulary"
+        title={createInitial ? "Add Scanned Medicine" : "Add New Medicine"}
+        subtitle={
+          createInitial
+            ? `Barcode ${createInitial.barcode} isn't in your catalog yet — enter name, price and GST to register it.`
+            : "Fill in the details below to register a new medicine in the formulary"
+        }
         icon={<Pill size={16} />}
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => { setCreateOpen(false); setCreateInitial(null); }}
         size="xl"
       >
-        <MedicineForm onSuccess={() => setCreateOpen(false)} onCancel={() => setCreateOpen(false)} />
+        {createInitial && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <span className="font-bold shrink-0">Schedule check:</span>
+            <span>
+              This item defaults to <b>prescription required</b>. If it is a Schedule H / H1 / X drug,
+              set the correct schedule class below. If it is genuinely OTC, untick &ldquo;Requires Prescription&rdquo;.
+            </span>
+          </div>
+        )}
+        <MedicineForm
+          initial={createInitial ?? undefined}
+          onSuccess={() => { setCreateOpen(false); setCreateInitial(null); }}
+          onCancel={() => { setCreateOpen(false); setCreateInitial(null); }}
+        />
       </Modal>
 
       {/* Edit modal */}
@@ -302,10 +323,38 @@ export function MedicineList() {
       <BarcodeScannerDialog
         open={cameraOpen}
         onClose={() => setCameraOpen(false)}
-        onScan={(code) => {
+        onScan={async (code) => {
+          setCameraOpen(false);
           setSearch(code);
           setPage(1);
-          setCameraOpen(false);
+          try {
+            // Indexed exact-barcode lookup (uses medicines_barcode_idx).
+            const res: any = await apiClient.get(`/inventory/medicines/barcode/${encodeURIComponent(code)}`);
+            const found = res?.data?.data ?? res?.data ?? null;
+            if (found) {
+              toastSuccess("Already in catalog", `${found.name} is already registered.`);
+            } else {
+              // Not found — jump straight into a create form with the barcode
+              // filled and defaults seeded, so only name + MRP remain to enter.
+              // Compliance: default to prescription-required (fail-safe) so a
+              // rushed add can't silently register a Schedule H drug as OTC and
+              // bypass the POS Rx gate. The manager unticks it for genuine OTC.
+              setCreateInitial({
+                barcode: code,
+                sku: code,
+                unit: "strip",
+                taxPercent: "12",
+                stripSize: 1,
+                reorderLevel: 10,
+                reorderQty: 50,
+                requiresPrescription: true,
+                isControlled: false,
+              });
+              setCreateOpen(true);
+            }
+          } catch {
+            toastError("Lookup failed", "Couldn't check the catalog for that barcode. Try again.");
+          }
         }}
       />
     </div>

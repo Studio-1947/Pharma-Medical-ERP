@@ -11,18 +11,26 @@ function isValidEan13Checksum(code: string): boolean {
 
 // Only 13-digit codes are checksum-validated; other formats (Code-128, UPC-A,
 // internal SKU-style codes) pass through untouched.
-const barcodeSchema = z
-  .string()
-  .max(100)
-  .refine((v) => !/^\d{13}$/.test(v) || isValidEan13Checksum(v), {
-    message: "Invalid EAN-13 barcode: checksum digit does not match",
-  });
+// A blank/whitespace barcode is normalized to undefined so it stores as NULL
+// (not ""), keeping the barcode column clean for the unique index.
+// `.optional()` must live INSIDE the preprocess: a blank barcode is turned into
+// undefined here, so the inner schema has to accept undefined or it 400s.
+const barcodeSchema = z.preprocess(
+  (v) => (typeof v === "string" && v.trim() === "" ? undefined : v),
+  z
+    .string()
+    .max(100)
+    .refine((v) => !/^\d{13}$/.test(v) || isValidEan13Checksum(v), {
+      message: "Invalid EAN-13 barcode: checksum digit does not match",
+    })
+    .optional(),
+);
 
 export const createMedicineSchema = z.object({
   name: z.string().min(1).max(255),
   genericName: z.string().max(255).optional(),
   sku: z.string().min(1).max(100),
-  barcode: barcodeSchema.optional(),
+  barcode: barcodeSchema,
   categoryId: z.string().uuid().optional(),
   manufacturer: z.string().max(255).optional(),
   hsnCode: z.string().max(20).optional(),

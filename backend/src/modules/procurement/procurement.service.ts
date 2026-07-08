@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import { DrizzleService } from "../../database/drizzle.service";
 import { ProcurementRepository } from "./procurement.repository";
 import type {
@@ -31,14 +31,41 @@ export class ProcurementService {
   }
 
   async createSupplier(dto: CreateSupplierDto) {
-    const supplier = await this.repo.createSupplier(dto);
-    return { data: supplier, message: "Supplier created" };
+    await this.assertSupplierCodeUnique(dto.code);
+    try {
+      const supplier = await this.repo.createSupplier(dto);
+      return { data: supplier, message: "Supplier created" };
+    } catch (e) {
+      throw this.mapSupplierConflict(e, dto.code);
+    }
   }
 
   async updateSupplier(id: string, dto: UpdateSupplierDto) {
     await this.findSupplierById(id);
-    const supplier = await this.repo.updateSupplier(id, dto);
-    return { data: supplier, message: "Supplier updated" };
+    if (dto.code) await this.assertSupplierCodeUnique(dto.code, id);
+    try {
+      const supplier = await this.repo.updateSupplier(id, dto);
+      return { data: supplier, message: "Supplier updated" };
+    } catch (e) {
+      throw this.mapSupplierConflict(e, dto.code);
+    }
+  }
+
+  /** Supplier code is the human key used on POs — it must be unique. */
+  private async assertSupplierCodeUnique(code: string, excludeId?: string) {
+    const existing = await this.repo.findSupplierByCode(code, excludeId);
+    if (existing) {
+      throw new ConflictException(`Supplier code "${code}" is already used by "${existing.name}"`);
+    }
+  }
+
+  /** Backstop for the check-then-insert race on the unique code index. */
+  private mapSupplierConflict(e: unknown, code?: string): never {
+    const err = e as { code?: string; cause?: { code?: string }; message?: string };
+    if ((err?.code ?? err?.cause?.code) === "23505") {
+      throw new ConflictException(`Supplier code "${code ?? ""}" is already used`);
+    }
+    throw e as Error;
   }
 
   async removeSupplier(id: string) {

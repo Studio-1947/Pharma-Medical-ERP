@@ -1,16 +1,35 @@
 import { z } from "zod";
 
+// A blank/whitespace value from a form input is treated as "not provided" so
+// optional fields store as NULL and don't trip format validation (e.g. an empty
+// email string must not fail `.email()`). Trims incoming values too.
+function optionalField<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess(
+    (v) => (typeof v === "string" ? (v.trim() === "" ? undefined : v.trim()) : v),
+    schema.optional(),
+  );
+}
+
+// Indian GSTIN: 15 chars — 2 state digits, 5 PAN letters, 4 digits, 1 letter,
+// 1 entity digit/letter, 'Z', 1 checksum char.
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+// Indian PAN: 5 letters, 4 digits, 1 letter.
+const PAN_RE = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
 export const createSupplierSchema = z.object({
   name: z.string().min(1).max(255),
   code: z.string().min(1).max(50),
-  contactPerson: z.string().max(255).optional(),
-  phone: z.string().min(7).max(20),
-  email: z.string().email().max(255).optional(),
-  address: z.string().optional(),
-  gstNo: z.string().max(20).optional(),
-  panNo: z.string().max(20).optional(),
-  creditDays: z.number().int().min(0).default(0),
-  creditLimit: z.string().regex(/^\d+(\.\d{1,2})?$/).default("0"),
+  contactPerson: optionalField(z.string().max(255)),
+  phone: z.string().min(7).max(20).regex(/^[0-9+\-\s()]{7,20}$/, "Enter a valid phone number"),
+  email: optionalField(z.string().email("Enter a valid email address").max(255)),
+  address: optionalField(z.string().max(500)),
+  gstNo: optionalField(z.string().toUpperCase().regex(GSTIN_RE, "Invalid GSTIN (15-char format)")),
+  panNo: optionalField(z.string().toUpperCase().regex(PAN_RE, "Invalid PAN (e.g. ABCDE1234F)")),
+  drugLicenseNo: optionalField(z.string().max(50)),
+  drugLicenseExpiry: optionalField(z.string().regex(DATE_RE, "Use YYYY-MM-DD")),
+  creditDays: z.number().int().min(0).max(365).default(0),
+  creditLimit: z.string().regex(/^\d+(\.\d{1,2})?$/, "Must be a valid amount").default("0"),
   rating: z.number().int().min(1).max(5).default(3),
 });
 
