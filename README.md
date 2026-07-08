@@ -834,7 +834,7 @@ pnpm run dev
 | Super Admin | admin@mederp.com | Admin@123 | — (cross-branch) |
 | Pharmacist | pharmacist@mederp.com | Pharm@123 | BRN01 |
 | Cashier | cashier@mederp.com | Cash@123 | BRN01 |
-| Inventory Manager | inventory@mederp.com | Inv@123 | BRN02 |
+| Inventory Manager | inventory@mederp.com | Inv@1234 | BRN02 |
 
 ### Individual service commands
 

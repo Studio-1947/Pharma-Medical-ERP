@@ -39,14 +39,14 @@ export class ProcurementController {
   }
 
   @Post("suppliers")
-  @Roles("admin")
+  @Roles("admin", "inventory_manager")
   @ApiOperation({ summary: "Create a new supplier" })
   createSupplier(@Body() body: unknown) {
     return this.service.createSupplier(createSupplierSchema.parse(body));
   }
 
   @Patch("suppliers/:id")
-  @Roles("admin")
+  @Roles("admin", "inventory_manager")
   @ApiOperation({ summary: "Update supplier details" })
   updateSupplier(@Param("id") id: string, @Body() body: unknown) {
     return this.service.updateSupplier(id, updateSupplierSchema.parse(body));

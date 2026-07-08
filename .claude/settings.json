@@ -30,7 +30,15 @@
       "Bash(node -e \"console.log\\(require\\('./node_modules/.pnpm/drizzle-orm@0.33.0_@types+pg@8.20.0_@types+react@18.3.28_pg@8.20.0_react@18.3.1/node_modules/drizzle-orm/package.json'\\).version\\)\")",
       "Bash(pnpm db:generate)",
       "Bash(pnpm db:migrate)",
-      "Bash(python -c \"import sys;raw=sys.stdin.read\\(\\);import json;lines=raw.strip\\(\\).split\\(chr\\(10\\)\\);body=json.loads\\(lines[0]\\);print\\('HTTP:',lines[-1]\\);print\\('success:',body.get\\('success'\\)\\);print\\('barcode:',repr\\(\\(body.get\\('data'\\) or {}\\).get\\('barcode'\\)\\)\\);print\\('id:',\\(body.get\\('data'\\) or {}\\).get\\('id'\\)\\)\")"
+      "Bash(python -c \"import sys;raw=sys.stdin.read\\(\\);import json;lines=raw.strip\\(\\).split\\(chr\\(10\\)\\);body=json.loads\\(lines[0]\\);print\\('HTTP:',lines[-1]\\);print\\('success:',body.get\\('success'\\)\\);print\\('barcode:',repr\\(\\(body.get\\('data'\\) or {}\\).get\\('barcode'\\)\\)\\);print\\('id:',\\(body.get\\('data'\\) or {}\\).get\\('id'\\)\\)\")",
+      "Bash(xargs cat)",
+      "Bash(curl -s -m 2 -o /dev/null -w \"frontend:%{http_code}\\\\n\" http://localhost:3000/login)",
+      "Bash(node verify-supplier.mjs)",
+      "Bash(curl -s -m 5 -X POST http://localhost:4000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin@mederp.com\",\"password\":\"Admin@123\"}')",
+      "Bash(python -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\('success:',d.get\\('success'\\),'| has token:',bool\\(d.get\\('accessToken'\\)\\),'| msg:',d.get\\('message'\\)\\)\")",
+      "Bash(curl -s -m 40 -o /dev/null -w \"dashboard:%{http_code} time:%{time_total}s\\\\n\" http://localhost:3000/dashboard)",
+      "Bash(sed -i 's/waitForURL\\(\"\\\\*\\\\*\\\\/dashboard\\\\*\\\\*\", { timeout: 30000 }\\)/waitForURL\\(\"**\\\\/dashboard**\", { timeout: 90000 }\\)/' verify-supplier.mjs)",
+      "Bash(curl -s -m 3 http://localhost:3000/login)"
     ]
   }
 }

@@ -24,6 +24,10 @@ export const suppliers = pgTable("suppliers", {
   address: text("address"),
   gstNo: varchar("gst_no", { length: 20 }),
   panNo: varchar("pan_no", { length: 20 }),
+  // Drug licence (Form 20B/21B wholesale) — a pharma supplier needs one to
+  // legally sell scheduled drugs; expiry is tracked for compliance renewal.
+  drugLicenseNo: varchar("drug_license_no", { length: 50 }),
+  drugLicenseExpiry: date("drug_license_expiry"),
   creditDays: integer("credit_days").notNull().default(0),
   creditLimit: numeric("credit_limit", { precision: 12, scale: 2 })
     .notNull()
