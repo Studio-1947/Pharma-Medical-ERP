@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS "medicines_barcode_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "medicines_barcode_unique" ON "medicines" USING btree ("barcode") WHERE "medicines"."barcode" IS NOT NULL AND "medicines"."deleted_at" IS NULL;

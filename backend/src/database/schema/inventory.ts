@@ -11,7 +11,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { batchStatusEnum } from "./enums";
 import { users } from "./auth";
 
@@ -65,7 +65,11 @@ export const medicines = pgTable(
   (t) => ({
     nameIdx: index("medicines_name_idx").on(t.name),
     skuIdx: uniqueIndex("medicines_sku_idx").on(t.sku),
-    barcodeIdx: index("medicines_barcode_idx").on(t.barcode),
+    // Partial unique: one live medicine per barcode. NULL barcodes are exempt
+    // (many medicines have none), and soft-deleted rows free their barcode.
+    barcodeIdx: uniqueIndex("medicines_barcode_unique")
+      .on(t.barcode)
+      .where(sql`${t.barcode} IS NOT NULL AND ${t.deletedAt} IS NULL`),
   }),
 );
 

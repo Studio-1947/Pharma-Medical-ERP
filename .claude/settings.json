@@ -26,7 +26,11 @@
       "Bash(node verify-quickadd.mjs)",
       "Bash(sed -i 's/const CODE = \"[0-9]*\"/const CODE = \"8901222333440\"/' verify-quickadd.mjs)",
       "Bash(sed -i 's/const CODE = \"[0-9]*\"/const CODE = \"8901222333445\"/' verify-quickadd.mjs)",
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(node -e \"console.log\\(require\\('./node_modules/.pnpm/drizzle-orm@0.33.0_@types+pg@8.20.0_@types+react@18.3.28_pg@8.20.0_react@18.3.1/node_modules/drizzle-orm/package.json'\\).version\\)\")",
+      "Bash(pnpm db:generate)",
+      "Bash(pnpm db:migrate)",
+      "Bash(python -c \"import sys;raw=sys.stdin.read\\(\\);import json;lines=raw.strip\\(\\).split\\(chr\\(10\\)\\);body=json.loads\\(lines[0]\\);print\\('HTTP:',lines[-1]\\);print\\('success:',body.get\\('success'\\)\\);print\\('barcode:',repr\\(\\(body.get\\('data'\\) or {}\\).get\\('barcode'\\)\\)\\);print\\('id:',\\(body.get\\('data'\\) or {}\\).get\\('id'\\)\\)\")"
     ]
   }
 }

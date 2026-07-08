@@ -86,6 +86,18 @@ export class InventoryRepository {
     });
   }
 
+  /** Full active medicine row by exact barcode (uses medicines_barcode_idx). */
+  async findActiveByBarcode(code: string) {
+    return this.db.query.medicines.findFirst({
+      where: and(
+        eq(schema.medicines.barcode, code),
+        eq(schema.medicines.isActive, true),
+        isNull(schema.medicines.deletedAt),
+      ),
+      with: { category: true },
+    });
+  }
+
   async findMedicineByBarcode(barcode: string, excludeId?: string) {
     const conditions = [
       eq(schema.medicines.barcode, barcode),

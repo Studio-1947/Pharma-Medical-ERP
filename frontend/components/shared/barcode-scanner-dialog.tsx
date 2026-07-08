@@ -12,6 +12,20 @@ const SCAN_FORMATS = [
   "code_128", "code_39", "itf", "codabar", "qr_code",
 ] as const;
 
+// Point the ZXing WASM at our own origin (public/wasm) instead of the jsDelivr
+// CDN default — no external runtime dependency, works under strict CSP. Call
+// once before the first decode.
+let wasmPrepared = false;
+function prepareLocalWasm(prepare: (opts: { overrides: { locateFile: (p: string, prefix: string) => string } }) => void) {
+  if (wasmPrepared) return;
+  prepare({
+    overrides: {
+      locateFile: (path, prefix) => (path.endsWith(".wasm") ? `/wasm/${path}` : `${prefix}${path}`),
+    },
+  });
+  wasmPrepared = true;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -46,7 +60,8 @@ export function BarcodeScannerDialog({
     setPhotoStatus("reading");
     try {
       // Loaded on demand so the WASM decoder isn't pulled into the main bundle.
-      const { BarcodeDetector } = await import("barcode-detector/ponyfill");
+      const { BarcodeDetector, prepareZXingModule } = await import("barcode-detector/ponyfill");
+      prepareLocalWasm(prepareZXingModule);
       const detector = new BarcodeDetector({ formats: [...SCAN_FORMATS] });
       const results = await detector.detect(file);
       const code = results.find((r) => r.rawValue)?.rawValue;

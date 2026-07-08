@@ -286,6 +286,15 @@ export function MedicineList() {
         onClose={() => { setCreateOpen(false); setCreateInitial(null); }}
         size="xl"
       >
+        {createInitial && (
+          <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            <span className="font-bold shrink-0">Schedule check:</span>
+            <span>
+              This item defaults to <b>prescription required</b>. If it is a Schedule H / H1 / X drug,
+              set the correct schedule class below. If it is genuinely OTC, untick &ldquo;Requires Prescription&rdquo;.
+            </span>
+          </div>
+        )}
         <MedicineForm
           initial={createInitial ?? undefined}
           onSuccess={() => { setCreateOpen(false); setCreateInitial(null); }}
@@ -319,15 +328,17 @@ export function MedicineList() {
           setSearch(code);
           setPage(1);
           try {
-            const res: any = await apiClient.get("/inventory/medicines", {
-              params: { search: code, limit: 1 },
-            });
-            const found = res?.data?.data?.[0] ?? res?.data?.[0];
+            // Indexed exact-barcode lookup (uses medicines_barcode_idx).
+            const res: any = await apiClient.get(`/inventory/medicines/barcode/${encodeURIComponent(code)}`);
+            const found = res?.data?.data ?? res?.data ?? null;
             if (found) {
               toastSuccess("Already in catalog", `${found.name} is already registered.`);
             } else {
               // Not found — jump straight into a create form with the barcode
               // filled and defaults seeded, so only name + MRP remain to enter.
+              // Compliance: default to prescription-required (fail-safe) so a
+              // rushed add can't silently register a Schedule H drug as OTC and
+              // bypass the POS Rx gate. The manager unticks it for genuine OTC.
               setCreateInitial({
                 barcode: code,
                 sku: code,
@@ -336,7 +347,7 @@ export function MedicineList() {
                 stripSize: 1,
                 reorderLevel: 10,
                 reorderQty: 50,
-                requiresPrescription: false,
+                requiresPrescription: true,
                 isControlled: false,
               });
               setCreateOpen(true);

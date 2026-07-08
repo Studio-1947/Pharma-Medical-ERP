@@ -78,6 +78,13 @@
       "when": 1779354192006,
       "tag": "0010_batch_batchno_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1783443581930,
+      "tag": "0011_last_celestials",
+      "breakpoints": true
     }
   ]
 }

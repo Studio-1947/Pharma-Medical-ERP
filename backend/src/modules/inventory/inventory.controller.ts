@@ -58,6 +58,13 @@ export class InventoryController {
     return this.service.getStockValuation(warehouseId);
   }
 
+  @Get("barcode/:code")
+  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @ApiOperation({ summary: "Exact-match medicine lookup by barcode (indexed, for scanning)" })
+  getByBarcode(@Param("code") code: string) {
+    return this.service.getByBarcode(code);
+  }
+
   @Get(":id")
   @Roles("admin", "pharmacist", "inventory_manager", "cashier")
   @ApiOperation({ summary: "Get a medicine by ID" })
