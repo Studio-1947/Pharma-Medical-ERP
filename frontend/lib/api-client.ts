@@ -55,6 +55,9 @@ function clearAuthAndRedirect() {
       localStorage.setItem("pharmerp-auth", JSON.stringify(raw));
     }
   } catch {}
+  if (typeof document !== "undefined") {
+    document.cookie = "pharmerp_session=; path=/; max-age=0; SameSite=Lax";
+  }
   window.location.href = "/login";
 }
 
@@ -106,6 +109,20 @@ apiClient.interceptors.response.use(
       apiClient.defaults.headers["Authorization"] = `Bearer ${newAccess}`;
       original.headers["Authorization"] = `Bearer ${newAccess}`;
 
+      // Keep the Zustand store in sync so the in-memory state never goes stale.
+      try {
+        const raw = JSON.parse(localStorage.getItem("pharmerp-auth") ?? "{}");
+        if (raw?.state) {
+          raw.state.accessToken = newAccess;
+          if (newRefresh) raw.state.refreshToken = newRefresh;
+          localStorage.setItem("pharmerp-auth", JSON.stringify(raw));
+        }
+      } catch {}
+
+      if (typeof document !== "undefined") {
+        document.cookie = "pharmerp_session=1; path=/; max-age=604800; SameSite=Lax";
+      }
+
       processQueue(null, newAccess);
       return apiClient(original);
     } catch (err) {
@@ -142,6 +159,10 @@ export async function bootstrapSession(): Promise<boolean> {
         localStorage.setItem("pharmerp-auth", JSON.stringify(raw));
       }
     } catch {}
+
+    if (typeof document !== "undefined") {
+      document.cookie = "pharmerp_session=1; path=/; max-age=604800; SameSite=Lax";
+    }
 
     return true;
   } catch {
