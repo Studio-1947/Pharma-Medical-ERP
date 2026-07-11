@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { useState } from "react";
+import { Modal } from "@/components/ui/modal";
 
 const ROLE_OPTIONS: UserRole[] = [
   "admin" as UserRole,
@@ -179,54 +180,59 @@ export function StaffList() {
     </div>
 
       {/* Edit Staff Modal */}
-      {editingUser && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setEditingUser(null)}>
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">Edit Staff Member</h3>
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">First Name</label>
-                  <input
-                    type="text"
-                    value={editForm.firstName}
-                    onChange={(e) => setEditForm((f) => ({ ...f, firstName: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Last Name</label>
-                  <input
-                    type="text"
-                    value={editForm.lastName}
-                    onChange={(e) => setEditForm((f) => ({ ...f, lastName: e.target.value }))}
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                  />
-                </div>
+      <Modal
+        title="Edit Staff Member"
+        subtitle={editingUser ? `Editing user: ${editingUser.email}` : undefined}
+        open={!!editingUser}
+        onClose={() => setEditingUser(null)}
+        size="md"
+        icon={<Shield size={16} />}
+      >
+        {editingUser && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold">First Name</label>
+                <input
+                  type="text"
+                  value={editForm.firstName}
+                  onChange={(e) => setEditForm((f) => ({ ...f, firstName: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+                />
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-semibold">Role</label>
-                <select
-                  value={editForm.role}
-                  onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value as UserRole }))}
-                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
-                >
-                  {ROLE_OPTIONS.map((r) => (
-                    <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
+                <label className="text-xs font-semibold">Last Name</label>
                 <input
-                  id="staff-active"
-                  type="checkbox"
-                  checked={editForm.isActive}
-                  onChange={(e) => setEditForm((f) => ({ ...f, isActive: e.target.checked }))}
-                  className="w-4 h-4 rounded border-gray-300 text-primary"
+                  type="text"
+                  value={editForm.lastName}
+                  onChange={(e) => setEditForm((f) => ({ ...f, lastName: e.target.value }))}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
                 />
-                <label htmlFor="staff-active" className="text-sm select-none cursor-pointer">Active account</label>
               </div>
             </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Role</label>
+              <select
+                value={editForm.role}
+                onChange={(e) => setEditForm((f) => ({ ...f, role: e.target.value as UserRole }))}
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                {ROLE_OPTIONS.map((r) => (
+                  <option key={r} value={r}>{r.replace(/_/g, " ")}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                id="staff-active"
+                type="checkbox"
+                checked={editForm.isActive}
+                onChange={(e) => setEditForm((f) => ({ ...f, isActive: e.target.checked }))}
+                className="w-4 h-4 rounded border-gray-300 text-primary"
+              />
+              <label htmlFor="staff-active" className="text-sm select-none cursor-pointer">Active account</label>
+            </div>
+
             <div className="flex justify-end gap-3 mt-5">
               <button
                 onClick={() => setEditingUser(null)}
@@ -253,8 +259,8 @@ export function StaffList() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </>
   );
 }

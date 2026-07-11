@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -11,7 +11,6 @@ import {
   TrendingUp, ShoppingCart, FileText, Calendar, Download,
   IndianRupee, Package, CheckCircle, Clock,
 } from "lucide-react";
-import axios from "axios";
 import { apiClient } from "@/lib/api-client";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -419,20 +418,18 @@ function ComplianceTab() {
 
   const downloadCsv = async (url: string, params: object, filename: string) => {
     try {
-      const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
-      const token = typeof window !== "undefined" ? localStorage.getItem("pharmerp_access_token") : null;
-      const response = await axios.get(`${base}${url}`, {
+      const blob = (await apiClient.get(url, {
         params: { ...params, format: "csv" },
         responseType: "blob",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const blobUrl = window.URL.createObjectURL(new Blob([response.data]));
+      })) as unknown as Blob;
+      const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = blobUrl;
       link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
+      window.URL.revokeObjectURL(blobUrl);
     } catch {
       toastError("Download failed", "Could not generate the CSV export. Check your connection and try again.");
     }

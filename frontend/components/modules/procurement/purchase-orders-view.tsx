@@ -601,160 +601,161 @@ export function PurchaseOrdersView() {
       )}
 
       {/* Draft PO Modal */}
-      {isOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={handleClose}>
-          <div className="bg-white rounded-xl shadow-xl max-w-xl w-full border max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">{editingPO ? "Edit Purchase Order" : "Create Draft Purchase Order"}</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Supplier *</label>
-                  <select
-                    required
-                    value={form.supplierId}
-                    onChange={(e) => setForm({ ...form, supplierId: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  >
-                    {suppliers.map((s: any) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Warehouse *</label>
-                  <select
-                    required
-                    value={form.warehouseId}
-                    onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  >
-                    {warehouses.map((w: any) => (
-                      <option key={w.id} value={w.id}>
-                        {w.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
+      <Modal
+        title={editingPO ? "Edit Purchase Order" : "Create Draft Purchase Order"}
+        subtitle={editingPO ? `Editing purchase order: ${editingPO.poNumber}` : "Draft a new purchase order for supplier review"}
+        open={isOpen}
+        onClose={handleClose}
+        size="xl"
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Supplier *</label>
+              <select
+                required
+                value={form.supplierId}
+                onChange={(e) => setForm({ ...form, supplierId: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              >
+                {suppliers.map((s: any) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Warehouse *</label>
+              <select
+                required
+                value={form.warehouseId}
+                onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              >
+                {warehouses.map((w: any) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Expected Delivery Date</label>
-                  <input
-                    type="date"
-                    value={form.expectedDelivery}
-                    onChange={(e) => setForm({ ...form, expectedDelivery: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Notes</label>
-                  <input
-                    type="text"
-                    value={form.notes}
-                    onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  />
-                </div>
-              </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Expected Delivery Date</label>
+              <input
+                type="date"
+                value={form.expectedDelivery}
+                onChange={(e) => setForm({ ...form, expectedDelivery: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Notes</label>
+              <input
+                type="text"
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+            </div>
+          </div>
 
-              <div className="border-t pt-4">
-                <div className="flex justify-between items-center mb-2">
-                  <label className="text-xs font-semibold text-slate-700">Order Items *</label>
+          <div className="border-t pt-4">
+            <div className="flex justify-between items-center mb-2">
+              <label className="text-xs font-semibold text-slate-700">Order Items *</label>
+              <button
+                type="button"
+                onClick={handleAddItem}
+                className="text-xs font-bold text-emerald-600 hover:underline"
+              >
+                + Add Item
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
+              {form.items.map((item: any, idx: number) => (
+                <div key={idx} className="flex gap-3 items-end">
+                  <div className="flex-1">
+                    <label className="text-[10px] text-muted-foreground uppercase">Medicine</label>
+                    <select
+                      required
+                      value={item.medicineId}
+                      onChange={(e) => {
+                        const n = [...form.items];
+                        if (n[idx]) n[idx].medicineId = e.target.value;
+                        setForm({ ...form, items: n });
+                      }}
+                      className="w-full border rounded-lg px-2 py-1.5 text-xs bg-background"
+                    >
+                      {medicines.map((m: any) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.sku})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="w-20">
+                    <label className="text-[10px] text-muted-foreground uppercase">Qty</label>
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      value={item.orderedQty}
+                      onChange={(e) => {
+                        const n = [...form.items];
+                        if (n[idx]) n[idx].orderedQty = Number(e.target.value);
+                        setForm({ ...form, items: n });
+                      }}
+                      className="w-full border rounded-lg px-2 py-1.5 text-xs font-mono"
+                    />
+                  </div>
+                  <div className="w-24">
+                    <label className="text-[10px] text-muted-foreground uppercase">Cost (₹)</label>
+                    <input
+                      type="text"
+                      required
+                      value={item.unitCost}
+                      onChange={(e) => {
+                        const n = [...form.items];
+                        if (n[idx]) n[idx].unitCost = e.target.value;
+                        setForm({ ...form, items: n });
+                      }}
+                      className="w-full border rounded-lg px-2 py-1.5 text-xs font-mono"
+                    />
+                  </div>
                   <button
                     type="button"
-                    onClick={handleAddItem}
-                    className="text-xs font-bold text-emerald-600 hover:underline"
+                    onClick={() => handleRemoveItem(idx)}
+                    disabled={form.items.length === 1}
+                    className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-bold disabled:opacity-30"
                   >
-                    + Add Item
+                    🗑️
                   </button>
                 </div>
-
-                <div className="space-y-3 max-h-48 overflow-y-auto pr-1">
-                  {form.items.map((item: any, idx: number) => (
-                    <div key={idx} className="flex gap-3 items-end">
-                      <div className="flex-1">
-                        <label className="text-[10px] text-muted-foreground uppercase">Medicine</label>
-                        <select
-                          required
-                          value={item.medicineId}
-                          onChange={(e) => {
-                            const n = [...form.items];
-                            if (n[idx]) n[idx].medicineId = e.target.value;
-                            setForm({ ...form, items: n });
-                          }}
-                          className="w-full border rounded-lg px-2 py-1.5 text-xs bg-background"
-                        >
-                          {medicines.map((m: any) => (
-                            <option key={m.id} value={m.id}>
-                              {m.name} ({m.sku})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                      <div className="w-20">
-                        <label className="text-[10px] text-muted-foreground uppercase">Qty</label>
-                        <input
-                          type="number"
-                          required
-                          min={1}
-                          value={item.orderedQty}
-                          onChange={(e) => {
-                            const n = [...form.items];
-                            if (n[idx]) n[idx].orderedQty = Number(e.target.value);
-                            setForm({ ...form, items: n });
-                          }}
-                          className="w-full border rounded-lg px-2 py-1.5 text-xs font-mono"
-                        />
-                      </div>
-                      <div className="w-24">
-                        <label className="text-[10px] text-muted-foreground uppercase">Cost (₹)</label>
-                        <input
-                          type="text"
-                          required
-                          value={item.unitCost}
-                          onChange={(e) => {
-                            const n = [...form.items];
-                            if (n[idx]) n[idx].unitCost = e.target.value;
-                            setForm({ ...form, items: n });
-                          }}
-                          className="w-full border rounded-lg px-2 py-1.5 text-xs font-mono"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleRemoveItem(idx)}
-                        disabled={form.items.length === 1}
-                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors font-bold disabled:opacity-30"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4 border-t mt-4">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="px-4 py-2 border rounded-lg text-sm font-semibold hover:bg-muted transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-sm"
-                >
-                  {(createPOMutation.isPending || updatePOMutation.isPending) ? "Saving..." : editingPO ? "Save Changes" : "Save Draft"}
-                </button>
-              </div>
-            </form>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+
+          <div className="flex justify-end gap-3 pt-4 border-t mt-4">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-4 py-2 border rounded-lg text-sm font-semibold hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-sm"
+            >
+              {(createPOMutation.isPending || updatePOMutation.isPending) ? "Saving..." : editingPO ? "Save Changes" : "Save Draft"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

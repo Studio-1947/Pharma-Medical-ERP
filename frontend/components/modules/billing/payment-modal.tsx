@@ -40,6 +40,23 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading }: Props
     }
   }, [open, total]);
 
+  // Lock body scroll while open
+  useEffect(() => {
+    if (open) document.body.style.overflow = "hidden";
+    else document.body.style.overflow = "";
+    return () => { document.body.style.overflow = ""; };
+  }, [open]);
+
+  // Close modal on Escape key
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
   const isMulti = mode === "mixed";
   const addSplit = () => setSplits((s) => [...s, { mode: "cash", amount: "", ref: "" }]);
   const removeSplit = (i: number) => setSplits((s) => s.filter((_, idx) => idx !== i));

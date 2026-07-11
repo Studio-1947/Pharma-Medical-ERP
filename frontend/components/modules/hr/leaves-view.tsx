@@ -6,6 +6,7 @@ import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
 import { Plus, Calendar, Edit2, Trash2 } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
 
 interface LeaveRequest {
   id: string;
@@ -277,108 +278,110 @@ export function LeavesView() {
       )}
 
       {/* Draft Leave Modal */}
-      {isOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={handleClose}>
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-lg font-bold mb-4">{editingLeave ? "Edit Leave Request" : "Request Absence/Leave"}</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-semibold">Employee *</label>
-                <select
-                  required
-                  value={form.employeeId}
-                  onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none"
-                >
-                  {employees.map((e: any) => (
-                    <option key={e.id} value={e.id}>
-                      {e.firstName} {e.lastName} ({e.employeeCode})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold">Leave Type *</label>
-                <select
-                  required
-                  value={form.leaveType}
-                  onChange={(e) => setForm({ ...form, leaveType: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none"
-                >
-                  <option value="sick">Sick Leave</option>
-                  <option value="casual">Casual Leave</option>
-                  <option value="annual">Annual Leave</option>
-                  <option value="unpaid">Unpaid Leave</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Start Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={form.startDate}
-                    onChange={(e) => setForm({ ...form, startDate: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">End Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={form.endDate}
-                    onChange={(e) => setForm({ ...form, endDate: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold">Number of Days *</label>
-                <input
-                  type="number"
-                  required
-                  min={1}
-                  value={form.days}
-                  onChange={(e) => setForm({ ...form, days: Number(e.target.value) })}
-                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background font-mono"
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold">Reason *</label>
-                <textarea
-                  required
-                  rows={2}
-                  value={form.reason}
-                  onChange={(e) => setForm({ ...form, reason: e.target.value })}
-                  placeholder="Details/Note regarding this request"
-                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="px-4 py-2 border rounded-lg text-sm font-semibold hover:bg-muted transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-sm"
-                >
-                  {createMutation.isPending ? "Submitting..." : "Submit"}
-                </button>
-              </div>
-            </form>
+      <Modal
+        title={editingLeave ? "Edit Leave Request" : "Request Absence/Leave"}
+        subtitle={editingLeave ? `Editing leave request` : "Fill in the details to submit a leave request"}
+        open={isOpen}
+        onClose={handleClose}
+        size="md"
+        icon={<Calendar size={16} />}
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">Employee *</label>
+            <select
+              required
+              value={form.employeeId}
+              onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none"
+            >
+              {employees.map((e: any) => (
+                <option key={e.id} value={e.id}>
+                  {e.firstName} {e.lastName} ({e.employeeCode})
+                </option>
+              ))}
+            </select>
           </div>
-        </div>
-      )}
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">Leave Type *</label>
+            <select
+              required
+              value={form.leaveType}
+              onChange={(e) => setForm({ ...form, leaveType: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none"
+            >
+              <option value="sick">Sick Leave</option>
+              <option value="casual">Casual Leave</option>
+              <option value="annual">Annual Leave</option>
+              <option value="unpaid">Unpaid Leave</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Start Date *</label>
+              <input
+                type="date"
+                required
+                value={form.startDate}
+                onChange={(e) => setForm({ ...form, startDate: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">End Date *</label>
+              <input
+                type="date"
+                required
+                value={form.endDate}
+                onChange={(e) => setForm({ ...form, endDate: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">Number of Days *</label>
+            <input
+              type="number"
+              required
+              min={1}
+              value={form.days}
+              onChange={(e) => setForm({ ...form, days: Number(e.target.value) })}
+              className="w-full border rounded-lg px-3 py-2 text-sm bg-background font-mono"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">Reason *</label>
+            <textarea
+              required
+              rows={2}
+              value={form.reason}
+              onChange={(e) => setForm({ ...form, reason: e.target.value })}
+              placeholder="Details/Note regarding this request"
+              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-3">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-4 py-2 border rounded-lg text-sm font-semibold hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-sm"
+            >
+              {createMutation.isPending ? "Submitting..." : "Submit"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }
