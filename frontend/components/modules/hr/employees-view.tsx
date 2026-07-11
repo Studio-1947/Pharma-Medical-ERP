@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -273,8 +273,8 @@ export function EmployeesView() {
 
       {/* Employee Modal */}
       {isOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full border max-h-[90vh] overflow-y-auto p-6">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={handleClose}>
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full border max-h-[90vh] overflow-y-auto p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">
               {editingEmp ? "Edit Employee" : "Create Employee Record"}
             </h3>

@@ -180,8 +180,8 @@ export function StaffList() {
 
       {/* Edit Staff Modal */}
       {editingUser && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border p-6">
+        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setEditingUser(null)}>
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full border p-6" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-lg font-bold mb-4">Edit Staff Member</h3>
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">

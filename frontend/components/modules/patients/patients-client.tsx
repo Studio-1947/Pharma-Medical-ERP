@@ -86,6 +86,11 @@ export function PatientsClient() {
     return [];
   })();
 
+  const meta = (() => {
+    const d = rawData as any;
+    return d?.meta ?? d?.data?.meta ?? null;
+  })();
+
   const createMutation = useMutation({
     mutationFn: (data: object) => apiClient.post("/patients", data),
     onSuccess: () => {
@@ -313,10 +318,12 @@ export function PatientsClient() {
             </table>
           </div>
           <div className="flex items-center justify-between px-6 py-4 border-t text-sm text-muted-foreground">
-            <span>Page {page}</span>
+            <span>
+              {meta?.total ?? patients.length} total &bull; page {meta?.page ?? page} of {meta?.totalPages ?? "?"}
+            </span>
             <div className="flex gap-2">
               <button onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1} className="px-3 py-1 border rounded-lg hover:bg-muted transition-colors disabled:opacity-40">Previous</button>
-              <button onClick={() => setPage((p) => p + 1)} disabled={patients.length < 20} className="px-3 py-1 border rounded-lg hover:bg-muted transition-colors disabled:opacity-40">Next</button>
+              <button onClick={() => setPage((p) => p + 1)} disabled={patients.length < 20 || page >= (meta?.totalPages ?? 1)} className="px-3 py-1 border rounded-lg hover:bg-muted transition-colors disabled:opacity-40">Next</button>
             </div>
           </div>
         </div>

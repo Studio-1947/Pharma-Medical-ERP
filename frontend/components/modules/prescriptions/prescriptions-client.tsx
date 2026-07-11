@@ -236,13 +236,13 @@ function CreatePrescriptionModal({
                     <button
                       key={p.id}
                       onClick={() => {
-                        setSelectedPatient({ id: p.id, name: `${p.firstName} ${p.lastName}`, phone: p.phone });
+                        setSelectedPatient({ id: p.id, name: p.name ?? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim(), phone: p.phone });
                         setShowPatientDropdown(false);
                         setPatientSearch("");
                       }}
                       className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center justify-between"
                     >
-                      <span className="font-medium">{p.firstName} {p.lastName}</span>
+                      <span className="font-medium">{p.name ?? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim()}</span>
                       <span className="text-muted-foreground text-xs">{p.phone}</span>
                     </button>
                   ))}
