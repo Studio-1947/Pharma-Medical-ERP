@@ -66,10 +66,38 @@ jobs:
       - name: Run backend tests
         run: pnpm --filter backend test
 
+  migrate:
+    name: Run DB Migrations
+    runs-on: ubuntu-latest
+    needs: [lint-typecheck, test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Applies every pending migration in backend/drizzle/migrations to the prod
+      # DB. Idempotent: drizzle-kit skips entries already in __drizzle_migrations.
+      # Runs before the new image is deployed so additive columns exist first.
+      - name: Apply Drizzle migrations to prod
+        run: pnpm db:migrate:prod
+        env:
+          DATABASE_URL_PROD: ${{ secrets.DATABASE_URL_PROD }}
+
   deploy-backend:
     name: Deploy Backend
     runs-on: ubuntu-latest
-    needs: [lint-typecheck, test]
+    needs: [lint-typecheck, test, migrate]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     permissions:
       contents: read

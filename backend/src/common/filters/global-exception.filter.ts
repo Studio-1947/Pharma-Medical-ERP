@@ -31,16 +31,42 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       message = "Validation failed";
       errors = exception.flatten().fieldErrors;
     } else if (exception instanceof Error) {
-      // Drizzle/Postgres constraint errors
+      // Drizzle/Postgres errors expose a SQLSTATE `code` (sometimes on `cause`).
       const pg = exception as any;
-      if (pg.code === "23505") {
-        status = HttpStatus.CONFLICT;
-        message = "Resource already exists";
-      } else if (pg.code === "23503") {
-        status = HttpStatus.UNPROCESSABLE_ENTITY;
-        message = "Referenced resource does not exist";
-      } else {
-        this.logger.error(exception.message, exception.stack);
+      const pgCode: string | undefined = pg.code ?? pg.cause?.code;
+
+      switch (pgCode) {
+        case "23505": // unique_violation
+          status = HttpStatus.CONFLICT;
+          message = "Resource already exists";
+          break;
+        case "23503": // foreign_key_violation
+          status = HttpStatus.UNPROCESSABLE_ENTITY;
+          message = "Referenced resource does not exist";
+          break;
+        case "23502": // not_null_violation
+          status = HttpStatus.UNPROCESSABLE_ENTITY;
+          message = pg.column
+            ? `Required field "${pg.column}" is missing`
+            : "A required field is missing";
+          break;
+        case "42703": // undefined_column
+        case "42P01": // undefined_table
+          // Schema drift: the running code references a column/table the DB
+          // lacks — almost always a pending migration not applied to this DB.
+          status = HttpStatus.INTERNAL_SERVER_ERROR;
+          message =
+            "Database schema mismatch - a pending migration may not be applied";
+          this.logger.error(
+            `Postgres schema error ${pgCode}: ${pg.message} (table=${pg.table ?? "?"}, column=${pg.column ?? "?"})`,
+            exception.stack,
+          );
+          break;
+        default:
+          this.logger.error(
+            `Unhandled error${pgCode ? ` [pg ${pgCode}]` : ""}: ${exception.message}`,
+            exception.stack,
+          );
       }
     }
 
