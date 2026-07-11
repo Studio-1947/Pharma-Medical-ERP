@@ -38,7 +38,7 @@ export class InventoryController {
   ) {}
 
   @Get()
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @Roles("admin", "pharmacist", "inventory_manager", "cashier", "doctor")
   @ApiOperation({ summary: "List medicines with pagination and search" })
   findAll(@Query() query: unknown) {
     return this.service.findAll(queryMedicineSchema.parse(query));
@@ -66,14 +66,14 @@ export class InventoryController {
   }
 
   @Get(":id")
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @Roles("admin", "pharmacist", "inventory_manager", "cashier", "doctor")
   @ApiOperation({ summary: "Get a medicine by ID" })
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);
   }
 
   @Get(":id/batches")
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @Roles("admin", "pharmacist", "inventory_manager", "cashier", "doctor")
   @ApiOperation({ summary: "FEFO-ordered active batches for dispense" })
   getBatches(@Param("id") id: string) {
     return this.service.getBatchesForDispense(id);

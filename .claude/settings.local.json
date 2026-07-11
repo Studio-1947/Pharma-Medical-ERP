@@ -52,7 +52,21 @@
       "Bash(curl -s -X POST http://localhost:4000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"inventory@mederp.com\",\"password\":\"Inv@123\"}')",
       "Bash(python -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\('success:',d.get\\('success'\\),'| token:',bool\\(d.get\\('accessToken'\\)\\),'| msg:',d.get\\('message'\\)\\)\")",
       "Bash(awk '{print length\\($0\\), $0}')",
-      "Bash(node verify-supplier.mjs)"
+      "Bash(node verify-supplier.mjs)",
+      "Bash(pnpm --filter backend drizzle-kit generate)",
+      "Bash(pnpm vitest *)",
+      "Bash(python3 -c \"import json,sys; print\\(json.load\\(sys.stdin\\)['scripts']\\)\")",
+      "Bash(pnpm --filter backend drizzle-kit migrate)",
+      "Bash(docker start *)",
+      "Bash(node -e ' *)",
+      "Bash(curl -s -m 5 http://localhost:4000/api/v1/health)",
+      "Bash(curl -s -m 5 http://localhost:4000/health)",
+      "Bash(curl -s -m 5 -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:4000/api/v1/clinic/doctors)",
+      "Bash(powershell -Command 'Get-Process -Name node -ErrorAction SilentlyContinue | Where-Object {$_.MainWindowTitle -eq '\\\\'''\\\\''} | Select-Object Id')",
+      "Bash(timeout 180 pnpm --filter backend exec tsc --noEmit)",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(timeout 200 pnpm --filter backend exec vitest run src/modules/clinic)",
+      "Bash(timeout 300 pnpm --filter frontend exec tsc --noEmit)"
     ]
   }
 }

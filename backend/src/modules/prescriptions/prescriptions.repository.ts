@@ -62,7 +62,10 @@ export class PrescriptionsRepository {
     });
   }
 
-  async create(data: CreatePrescriptionDto) {
+  async create(
+    data: CreatePrescriptionDto,
+    opts?: { autoVerify?: boolean; verifiedBy?: string },
+  ) {
     return this.db.transaction(async (tx) => {
       const [prescription] = await tx
         .insert(schema.prescriptions)
@@ -76,7 +79,9 @@ export class PrescriptionsRepository {
           notes: data.notes,
           isControlled: data.isControlled ?? false,
           fileUrl: data.fileUrl,
-          status: "pending_verification",
+          status: opts?.autoVerify ? "verified" : "pending_verification",
+          verifiedBy: opts?.autoVerify ? opts.verifiedBy : undefined,
+          verifiedAt: opts?.autoVerify ? new Date() : undefined,
         })
         .returning();
 

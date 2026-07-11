@@ -9,6 +9,14 @@ export const userRoleEnum = pgEnum("user_role", [
   "distribution_staff",
   "hr_manager",
   "reports_analyst",
+  "doctor",
+]);
+
+export const tokenStatusEnum = pgEnum("token_status", [
+  "pending",
+  "called",
+  "completed",
+  "cancelled",
 ]);
 
 export const invoiceStatusEnum = pgEnum("invoice_status", [

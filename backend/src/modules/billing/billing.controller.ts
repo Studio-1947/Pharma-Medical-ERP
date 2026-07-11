@@ -25,11 +25,11 @@ export class BillingController {
   constructor(private readonly service: BillingService) {}
 
   @Get("invoices")
-  @Roles("admin", "pharmacist", "cashier", "reports_analyst")
+  @Roles("admin", "pharmacist", "cashier", "reports_analyst", "doctor")
   findAll(@Query() q: unknown) { return this.service.findAll(queryInvoiceSchema.parse(q)); }
 
   @Get("invoices/:id")
-  @Roles("admin", "pharmacist", "cashier")
+  @Roles("admin", "pharmacist", "cashier", "doctor")
   findOne(@Param("id") id: string) { return this.service.findOne(id); }
 
   @Post("invoices")

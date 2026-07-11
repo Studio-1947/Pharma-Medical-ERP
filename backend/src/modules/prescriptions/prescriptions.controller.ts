@@ -27,7 +27,7 @@ export class PrescriptionsController {
   ) {}
 
   @Post("upload")
-  @Roles("admin", "pharmacist")
+  @Roles("admin", "pharmacist", "doctor")
   @ApiConsumes("multipart/form-data")
   @ApiBody({
     schema: {
@@ -60,24 +60,24 @@ export class PrescriptionsController {
   }
 
   @Get()
-  @Roles("admin", "pharmacist", "cashier")
+  @Roles("admin", "pharmacist", "cashier", "doctor")
   @ApiOperation({ summary: "List prescriptions with optional filters" })
   findAll(@Query() q: unknown) {
     return this.service.findAll(queryPrescriptionSchema.parse(q));
   }
 
   @Get(":id")
-  @Roles("admin", "pharmacist", "cashier")
+  @Roles("admin", "pharmacist", "cashier", "doctor")
   @ApiOperation({ summary: "Get prescription by ID with items and patient" })
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);
   }
 
   @Post()
-  @Roles("admin", "pharmacist", "cashier")
-  @ApiOperation({ summary: "Create a new prescription" })
-  create(@Body() body: unknown) {
-    return this.service.create(createPrescriptionSchema.parse(body));
+  @Roles("admin", "pharmacist", "cashier", "doctor")
+  @ApiOperation({ summary: "Create a new prescription (auto-verified when created by a doctor)" })
+  create(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
+    return this.service.create(createPrescriptionSchema.parse(body), user);
   }
 
   @Post(":id/verify")

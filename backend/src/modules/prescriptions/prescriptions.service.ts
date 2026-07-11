@@ -41,8 +41,12 @@ export class PrescriptionsService {
     };
   }
 
-  async create(dto: CreatePrescriptionDto) {
-    const prescription = await this.repo.create(dto);
+  async create(dto: CreatePrescriptionDto, currentUser?: { sub: string; role: string }) {
+    const autoVerify = currentUser?.role === "doctor";
+    const prescription = await this.repo.create(dto, {
+      autoVerify,
+      verifiedBy: autoVerify ? currentUser?.sub : undefined,
+    });
     return { data: prescription, message: "Prescription created" };
   }
 

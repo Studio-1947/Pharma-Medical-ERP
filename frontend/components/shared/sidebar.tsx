@@ -20,6 +20,8 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   X,
+  Ticket,
+  Stethoscope,
 } from "lucide-react";
 
 type NavItem = {
@@ -36,6 +38,8 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/inventory", label: "Inventory", icon: Package, permission: "inventory.adjust" },
   { href: "/prescriptions", label: "Prescriptions", icon: FileText, permission: "prescriptions.verify" },
   { href: "/patients", label: "Patients", icon: Users, permission: "patients.write" },
+  { href: "/clinic/queue", label: "Clinic Queue", icon: Ticket, permission: "clinic.tokens" },
+  { href: "/clinic/doctor", label: "Doctor Panel", icon: Stethoscope, permission: "clinic.doctor" },
   { href: "/procurement", label: "Procurement", icon: ShoppingCart, permission: "procurement.write" },
   { href: "/hr", label: "HR Management", icon: Users, permission: "staff.write" },
   { href: "/distribution", label: "Distribution", icon: Truck, permission: "distribution.write" },

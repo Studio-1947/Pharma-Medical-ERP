@@ -19,7 +19,9 @@ type Action =
   | "reports.view"
   | "users.manage"
   | "branches.manage"
-  | "distribution.write";
+  | "distribution.write"
+  | "clinic.tokens"
+  | "clinic.doctor";
 
 const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
   [UserRole.SUPER_ADMIN]: [
@@ -28,6 +30,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
     "procurement.write", "procurement.receive", "patients.write",
     "prescriptions.verify", "staff.write", "reports.view",
     "users.manage", "branches.manage", "distribution.write",
+    "clinic.tokens",
   ],
   [UserRole.ADMIN]: [
     "billing.create", "billing.void", "billing.discount.large",
@@ -35,13 +38,17 @@ const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
     "procurement.write", "procurement.receive", "patients.write",
     "prescriptions.verify", "staff.write", "reports.view",
     "users.manage", "branches.manage", "distribution.write",
+    "clinic.tokens",
   ],
   [UserRole.PHARMACIST]: [
     "billing.create", "patients.write", "prescriptions.verify",
     "inventory.adjust", "reports.view",
   ],
   [UserRole.CASHIER]: [
-    "billing.create", "patients.write",
+    "billing.create", "patients.write", "clinic.tokens",
+  ],
+  [UserRole.DOCTOR]: [
+    "patients.write", "prescriptions.verify", "clinic.doctor",
   ],
   [UserRole.INVENTORY_MANAGER]: [
     "inventory.adjust", "inventory.write", "products.write",

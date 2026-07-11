@@ -216,4 +216,10 @@ export const queryKeys = {
     list: (params: object) => ["notifications", "list", params] as const,
     unreadCount: () => ["notifications", "unread-count"] as const,
   },
+  clinicTokens: {
+    all: () => ["clinic-tokens"] as const,
+    list: (params: object) => ["clinic-tokens", "list", params] as const,
+    detail: (id: string) => ["clinic-tokens", id] as const,
+    doctors: () => ["clinic-doctors"] as const,
+  },
 };
