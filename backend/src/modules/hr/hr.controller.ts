@@ -41,15 +41,25 @@ export class HrController {
   @Post("employees")
   @Roles("admin")
   @ApiOperation({ summary: "Create a new employee record" })
-  createEmployee(@Body() body: unknown) {
-    return this.service.createEmployee(createEmployeeSchema.parse(body));
+  createEmployee(@CurrentUser() user: JwtPayload, @Body() body: unknown) {
+    const dto = createEmployeeSchema.parse(body);
+    // Pin to the caller's branch so a branch admin cannot staff another branch.
+    const branchId = requireBranchScope(user, dto.branchId);
+    return this.service.createEmployee({ ...dto, branchId });
   }
 
   @Patch("employees/:id")
   @Roles("admin", "hr_manager")
   @ApiOperation({ summary: "Update employee details" })
-  updateEmployee(@Param("id") id: string, @Body() body: unknown) {
-    return this.service.updateEmployee(id, updateEmployeeSchema.parse(body));
+  updateEmployee(
+    @CurrentUser() user: JwtPayload,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    const dto = updateEmployeeSchema.parse(body);
+    // Reject an attempt to move an employee into a branch the caller can't touch.
+    if (dto.branchId) requireBranchScope(user, dto.branchId);
+    return this.service.updateEmployee(id, dto);
   }
 
   @Delete("employees/:id")

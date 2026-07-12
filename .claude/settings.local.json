@@ -70,7 +70,8 @@
       "PowerShell(pnpm --filter @pharmerp/types build 2>&1)",
       "PowerShell(pnpm --filter frontend typecheck 2>&1)",
       "PowerShell(\"=== BACKEND ===\")",
-      "PowerShell(\"=== FRONTEND ===\")"
+      "PowerShell(\"=== FRONTEND ===\")",
+      "Bash(grep -n \"handleSubmit\\\\|function handle\\\\|form.userId\\\\|setForm\\({ ...form, userId\\\\|createMutation.mutate\\\\|updateMutation.mutate\\\\|select\" frontend/components/modules/hr/employees-view.tsx)"
     ]
   }
 }

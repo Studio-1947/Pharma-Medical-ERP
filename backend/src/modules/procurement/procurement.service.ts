@@ -1,5 +1,6 @@
 import { ConflictException, Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import { addDays } from "date-fns";
+import Decimal from "decimal.js";
 import { DrizzleService } from "../../database/drizzle.service";
 import { ProcurementRepository } from "./procurement.repository";
 import { calculateLine } from "./procurement.pricing";
@@ -111,7 +112,7 @@ export class ProcurementService {
    * the qty * unitCost * (1 + tax) math only lives in one place.
    */
   private computeGrnBill(grn: any) {
-    let totalAmount = 0;
+    let totalAmount = new Decimal(0);
     let totalQty = 0;
 
     const items = (grn.items ?? []).map((item: any) => {
@@ -123,7 +124,7 @@ export class ProcurementService {
         discountPct: item.poItem?.discountPct ?? "0",
         qty: billedQty,
       });
-      totalAmount += lineTotal;
+      totalAmount = totalAmount.plus(lineTotal);
       totalQty += item.receivedQty;
 
       return {
@@ -157,11 +158,11 @@ export class ProcurementService {
    * units sold so far (net of returns), capped at what was billed.
    */
   private applyConsignmentDueAmounts(bill: any, soldQtyMap: Map<string, number>) {
-    let amountDue = 0;
+    let amountDue = new Decimal(0);
 
     const items = bill.items.map((item: any) => {
       if (!item.isConsignment) {
-        amountDue += parseFloat(item.lineTotal);
+        amountDue = amountDue.plus(item.lineTotal);
         return { ...item, dueAmount: item.lineTotal };
       }
 
@@ -173,8 +174,8 @@ export class ProcurementService {
         discountPct: item.discountPct,
         qty: soldQty,
       });
-      const capped = Math.min(dueForSold, parseFloat(item.lineTotal));
-      amountDue += capped;
+      const capped = Decimal.min(dueForSold, new Decimal(item.lineTotal));
+      amountDue = amountDue.plus(capped);
       return { ...item, soldQty, dueAmount: capped.toFixed(2) };
     });
 
@@ -213,33 +214,35 @@ export class ProcurementService {
     payments: Awaited<ReturnType<ProcurementRepository["getPaymentsForSupplier"]>>,
     creditDays: number,
   ) {
-    const directByGrn = new Map<string, number>();
-    let onAccountAvailable = 0;
+    const directByGrn = new Map<string, Decimal>();
+    let onAccountAvailable = new Decimal(0);
 
     for (const p of payments) {
-      const amt = parseFloat(p.amount);
+      const amt = new Decimal(p.amount);
       if (p.grnId) {
-        directByGrn.set(p.grnId, (directByGrn.get(p.grnId) ?? 0) + amt);
+        directByGrn.set(p.grnId, (directByGrn.get(p.grnId) ?? new Decimal(0)).plus(amt));
       } else {
-        onAccountAvailable += amt;
+        onAccountAvailable = onAccountAvailable.plus(amt);
       }
     }
 
     return bills.map((bill: any) => {
-      const billAmount = parseFloat(bill.amountDue);
-      const direct = directByGrn.get(bill.id) ?? 0;
+      const billAmount = new Decimal(bill.amountDue);
+      const direct = directByGrn.get(bill.id) ?? new Decimal(0);
 
-      let paidAmount = Math.min(billAmount, direct);
-      const remaining = billAmount - paidAmount;
-      if (remaining > 0 && onAccountAvailable > 0) {
-        const draw = Math.min(remaining, onAccountAvailable);
-        paidAmount += draw;
-        onAccountAvailable -= draw;
+      let paidAmount = Decimal.min(billAmount, direct);
+      const remaining = billAmount.minus(paidAmount);
+      if (remaining.greaterThan(0) && onAccountAvailable.greaterThan(0)) {
+        const draw = Decimal.min(remaining, onAccountAvailable);
+        paidAmount = paidAmount.plus(draw);
+        onAccountAvailable = onAccountAvailable.minus(draw);
       }
 
-      const balance = billAmount - paidAmount;
+      // Exact decimal math, so a settled bill lands on exactly zero — no
+      // epsilon fudge needed to decide "paid".
+      const balance = billAmount.minus(paidAmount);
       const status: "paid" | "partial" | "unpaid" =
-        balance <= 0.005 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+        balance.lessThanOrEqualTo(0) ? "paid" : paidAmount.greaterThan(0) ? "partial" : "unpaid";
 
       return {
         grnId: bill.id,
@@ -404,21 +407,21 @@ export class ProcurementService {
       date: Date;
       type: "bill" | "payment" | "credit_note";
       reference: string;
-      debit: number;
-      credit: number;
+      debit: Decimal;
+      credit: Decimal;
     };
 
     const billRows: Row[] = bills.map((bill) => ({
       date: new Date(bill.receivedAt),
       type: "bill",
       reference: bill.grnNumber,
-      debit: parseFloat(bill.amountDue),
-      credit: 0,
+      debit: new Decimal(bill.amountDue),
+      credit: new Decimal(0),
     }));
 
     const consignmentPayable = bills
       .filter((b) => b.items.some((i: any) => i.isConsignment))
-      .reduce((sum, b) => sum + parseFloat(b.balance), 0);
+      .reduce((sum, b) => sum.plus(b.balance), new Decimal(0));
 
     const paymentRows: Row[] = payments.map((p) => ({
       date: new Date(p.paidAt),
@@ -429,8 +432,8 @@ export class ProcurementService {
           : p.referenceNo
             ? `${(p.method ?? "").toUpperCase()} · ${p.referenceNo}`
             : (p.method ?? "").toUpperCase(),
-      debit: 0,
-      credit: parseFloat(p.amount),
+      debit: new Decimal(0),
+      credit: new Decimal(p.amount),
     }));
 
     const allRows = [...billRows, ...paymentRows].sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -438,12 +441,12 @@ export class ProcurementService {
     const fromDate = query.from ? new Date(`${query.from}T00:00:00.000Z`) : null;
     const toDate = query.to ? new Date(`${query.to}T23:59:59.999Z`) : null;
 
-    let runningBalance = 0;
-    let openingBalance = 0;
-    const entries: Array<Row & { balance: number }> = [];
+    let runningBalance = new Decimal(0);
+    let openingBalance = new Decimal(0);
+    const entries: Array<Row & { balance: Decimal }> = [];
 
     for (const row of allRows) {
-      runningBalance += row.debit - row.credit;
+      runningBalance = runningBalance.plus(row.debit).minus(row.credit);
       if (fromDate && row.date < fromDate) {
         openingBalance = runningBalance;
         continue;

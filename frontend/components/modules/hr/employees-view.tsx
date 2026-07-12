@@ -105,7 +105,7 @@ export function EmployeesView() {
     setEditingEmp(null);
     setForm({
       userId: users[0]?.id || "",
-      branchId: users[0]?.branchId || "00000000-0000-0000-0000-000000000000",
+      branchId: "",
       employeeCode: "",
       firstName: "",
       lastName: "",
@@ -142,8 +142,23 @@ export function EmployeesView() {
     e.preventDefault();
     if (!form.userId || !form.employeeCode || !form.firstName || !form.lastName) return;
 
+    // An employee belongs to the branch of the user account it wraps. Derive it
+    // rather than defaulting to a placeholder id: a made-up branch would only
+    // fail the foreign key at the server anyway.
+    const selectedUser = users.find((u: any) => u.id === form.userId);
+    const branchId = editingEmp?.branchId ?? selectedUser?.branchId;
+
+    if (!branchId) {
+      toastError(
+        "Cannot save employee",
+        "The selected user account has no branch assigned. Assign a branch to that user first.",
+      );
+      return;
+    }
+
     const payload = {
       ...form,
+      branchId,
       hireDate: form.hireDate || new Date().toISOString().split("T")[0] || "",
     };
 

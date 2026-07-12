@@ -1,5 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, gte, lte } from "drizzle-orm";
+import Decimal from "decimal.js";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 import { calculateLine } from "./procurement.pricing";
@@ -187,8 +188,8 @@ export class ProcurementRepository {
     return this.db.transaction(async (tx) => {
       const poNumber = `PO-${Date.now()}`;
 
-      let subtotal = 0;
-      let taxAmount = 0;
+      let subtotal = new Decimal(0);
+      let taxAmount = new Decimal(0);
 
       const lines = data.items.map((item) => {
         const { lineCost, lineTax, lineTotal } = calculateLine({
@@ -197,12 +198,12 @@ export class ProcurementRepository {
           discountPct: item.discountPct ?? "0",
           qty: item.orderedQty,
         });
-        subtotal += lineCost;
-        taxAmount += lineTax;
+        subtotal = subtotal.plus(lineCost);
+        taxAmount = taxAmount.plus(lineTax);
         return { item, lineTotal };
       });
 
-      const totalValue = subtotal + taxAmount;
+      const totalValue = subtotal.plus(taxAmount);
 
       const [po] = await tx
         .insert(schema.purchaseOrders)
@@ -295,7 +296,7 @@ export class ProcurementRepository {
       throw new Error(`No storage locations found for warehouse ${po.warehouseId}. Create one first.`);
     }
 
-    let grnTotal = 0;
+    let grnTotal = new Decimal(0);
 
     const createdBatchIds: string[] = [];
 
@@ -326,7 +327,7 @@ export class ProcurementRepository {
       });
       // Consignment items aren't owed on delivery — only once sold — so they
       // don't count toward the bill total that hits outstandingBalance.
-      if (!poItem.isConsignment) grnTotal += lineTotal;
+      if (!poItem.isConsignment) grnTotal = grnTotal.plus(lineTotal);
 
       // Create inventory batch
       const [batch] = await db

@@ -8,6 +8,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiOperation, ApiTags } from "@nestjs/swagger";
+import { Throttle } from "@nestjs/throttler";
 import { FastifyRequest } from "fastify";
 import { AuthService } from "./auth.service";
 import { Public, Roles } from "../../common/decorators/roles.decorator";
@@ -30,6 +31,11 @@ export class AuthController {
   }
 
   @Public()
+  // Credential endpoints get a far tighter budget than the global 100/min,
+  // which allows ~100 password guesses a minute per IP. Kept at 10 rather
+  // than 5 because a branch's terminals share one public IP behind NAT, so a
+  // shift change can legitimately produce several logins in a minute.
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post("login")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Login and receive JWT pair" })
