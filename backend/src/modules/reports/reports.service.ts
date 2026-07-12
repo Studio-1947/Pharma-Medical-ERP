@@ -163,7 +163,12 @@ export class ReportsService {
     return { rows };
   }
 
-  async getPurchaseSummary(from: string, to: string, warehouseId?: string) {
+  async getPurchaseSummary(
+    from: string,
+    to: string,
+    warehouseId?: string,
+    branchId?: string,
+  ) {
     const start = new Date(from);
     start.setHours(0, 0, 0, 0);
     const end = new Date(to);
@@ -174,6 +179,18 @@ export class ReportsService {
       between(schema.purchaseOrders.createdAt, start, end),
     ];
     if (warehouseId) conditions.push(eq(schema.purchaseOrders.warehouseId, warehouseId));
+    // POs have no branch of their own — they belong to a branch via warehouse.
+    if (branchId) {
+      conditions.push(
+        inArray(
+          schema.purchaseOrders.warehouseId,
+          this.db
+            .select({ id: schema.warehouses.id })
+            .from(schema.warehouses)
+            .where(eq(schema.warehouses.branchId, branchId)),
+        ),
+      );
+    }
 
     const [totals] = await this.db
       .select({

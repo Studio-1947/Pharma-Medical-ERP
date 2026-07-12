@@ -12,6 +12,8 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
+import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
+import { resolveBranchScope } from "../../common/auth/branch-scope";
 import { WarehouseRepository } from "./warehouse.repository";
 import {
   createWarehouseSchema,
@@ -29,8 +31,12 @@ export class WarehouseController {
   @Get()
   @Roles("admin", "inventory_manager", "pharmacist", "cashier")
   @ApiOperation({ summary: "List warehouses (optionally filter by branchId)" })
-  findAll(@Query("branchId") branchId?: string) {
-    return this.repo.findAll(branchId);
+  findAll(
+    @CurrentUser() user: JwtPayload,
+    @Query("branchId") branchId?: string,
+  ) {
+    const scoped = resolveBranchScope(user, branchId);
+    return this.repo.findAll(scoped);
   }
 
   @Get(":id")

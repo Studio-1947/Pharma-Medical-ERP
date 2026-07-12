@@ -15,6 +15,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
+import { resolveBranchScope } from "../../common/auth/branch-scope";
 import {
   createBatchSchema,
   updateBatchSchema,
@@ -40,8 +41,13 @@ export class BatchController {
   @Get("expiring")
   @Roles("admin", "inventory_manager", "pharmacist")
   @ApiOperation({ summary: "Batches expiring within N days (default 90)" })
-  getExpiring(@Query("days") days = "90", @Query("branchId") branchId?: string) {
-    return this.service.getExpiringBatches(parseInt(days), branchId);
+  getExpiring(
+    @CurrentUser() user: JwtPayload,
+    @Query("days") days = "90",
+    @Query("branchId") branchId?: string,
+  ) {
+    const scoped = resolveBranchScope(user, branchId);
+    return this.service.getExpiringBatches(parseInt(days), scoped);
   }
 
   @Get(":id")
