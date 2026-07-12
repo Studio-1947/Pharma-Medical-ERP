@@ -239,6 +239,67 @@ export class ProcurementRepository {
     });
   }
 
+  /**
+   * Full replace of a draft PO's header and line items. Items are swapped
+   * wholesale rather than diffed: a draft has no receipts against it yet, so
+   * nothing downstream references the old rows.
+   */
+  async updatePO(id: string, data: CreatePurchaseOrderDto) {
+    return this.db.transaction(async (tx) => {
+      let subtotal = new Decimal(0);
+      let taxAmount = new Decimal(0);
+
+      const lines = data.items.map((item) => {
+        const { lineCost, lineTax, lineTotal } = calculateLine({
+          unitCost: item.unitCost,
+          taxPct: item.taxPct ?? "0",
+          discountPct: item.discountPct ?? "0",
+          qty: item.orderedQty,
+        });
+        subtotal = subtotal.plus(lineCost);
+        taxAmount = taxAmount.plus(lineTax);
+        return { item, lineTotal };
+      });
+
+      const totalValue = subtotal.plus(taxAmount);
+
+      const [po] = await tx
+        .update(schema.purchaseOrders)
+        .set({
+          supplierId: data.supplierId,
+          warehouseId: data.warehouseId,
+          expectedDelivery: data.expectedDelivery,
+          notes: data.notes,
+          subtotal: subtotal.toFixed(2),
+          taxAmount: taxAmount.toFixed(2),
+          totalValue: totalValue.toFixed(2),
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.purchaseOrders.id, id))
+        .returning();
+
+      await tx
+        .delete(schema.purchaseOrderItems)
+        .where(eq(schema.purchaseOrderItems.poId, id));
+
+      await tx.insert(schema.purchaseOrderItems).values(
+        lines.map(({ item, lineTotal }) => ({
+          poId: id,
+          medicineId: item.medicineId,
+          orderedQty: item.orderedQty,
+          unitCost: item.unitCost,
+          taxPct: item.taxPct ?? "0",
+          schemeFreeQty: item.schemeFreeQty ?? 0,
+          discountPct: item.discountPct ?? "0",
+          isConsignment: item.isConsignment ?? false,
+          lineTotal: lineTotal.toFixed(2),
+        })),
+      );
+
+      return po!;
+    });
+  }
+
   async approvePO(id: string, approvedBy: string) {
     const [po] = await this.db
       .update(schema.purchaseOrders)

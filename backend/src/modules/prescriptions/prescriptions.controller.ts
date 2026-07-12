@@ -12,6 +12,7 @@ import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.de
 import { S3Service } from "../../common/s3/s3.service";
 import {
   createPrescriptionSchema,
+  updatePrescriptionSchema,
   verifyPrescriptionSchema,
   queryPrescriptionSchema,
 } from "@pharmerp/types";
@@ -78,6 +79,13 @@ export class PrescriptionsController {
   @ApiOperation({ summary: "Create a new prescription" })
   create(@Body() body: unknown) {
     return this.service.create(createPrescriptionSchema.parse(body));
+  }
+
+  @Patch(":id")
+  @Roles("admin", "pharmacist")
+  @ApiOperation({ summary: "Edit a prescription that is still pending verification" })
+  update(@Param("id") id: string, @Body() body: unknown) {
+    return this.service.update(id, updatePrescriptionSchema.parse(body));
   }
 
   @Post(":id/verify")

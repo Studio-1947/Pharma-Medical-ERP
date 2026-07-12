@@ -282,6 +282,21 @@ export class ProcurementService {
     return { data: po, message: "Purchase order created" };
   }
 
+  /** Only a draft is editable — once approved or sent, the PO is a commitment. */
+  async updatePO(id: string, dto: CreatePurchaseOrderDto) {
+    const existing = await this.repo.findPOById(id);
+    if (!existing) throw new NotFoundException(`Purchase order ${id} not found`);
+
+    if (existing.status !== "draft") {
+      throw new UnprocessableEntityException(
+        `Only draft purchase orders can be edited. Current status: ${existing.status}`,
+      );
+    }
+
+    const po = await this.repo.updatePO(id, dto);
+    return { data: po, message: "Purchase order updated" };
+  }
+
   async approvePO(id: string, dto: ApprovePurchaseOrderDto, userId: string) {
     const existing = await this.repo.findPOById(id);
     if (!existing) throw new NotFoundException(`Purchase order ${id} not found`);

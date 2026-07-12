@@ -103,7 +103,9 @@ export function StaffManagementClient() {
   });
 
   const deactivateMutation = useMutation({
-    mutationFn: (id: string) => apiClient.delete(`/users/${id}`),
+    // Users are deactivated, never hard-deleted — staff rows are referenced by
+    // invoices, GRNs and audit logs.
+    mutationFn: (id: string) => apiClient.patch(`/users/${id}/deactivate`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all() });
       toastSuccess("Account deactivated", "The user has lost system access.");

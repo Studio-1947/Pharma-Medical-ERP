@@ -55,7 +55,7 @@ export function StaffList() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => apiClient.delete(`/users/${id}`),
+    mutationFn: (id: string) => apiClient.patch(`/users/${id}/deactivate`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.users.all() });
       toastSuccess("Staff removed", "Staff member has been deleted.");

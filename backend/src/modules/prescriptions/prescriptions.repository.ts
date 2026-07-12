@@ -2,7 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
-import type { CreatePrescriptionDto, QueryPrescriptionDto, VerifyPrescriptionDto } from "@pharmerp/types";
+import type { CreatePrescriptionDto, UpdatePrescriptionDto, QueryPrescriptionDto, VerifyPrescriptionDto } from "@pharmerp/types";
 
 @Injectable()
 export class PrescriptionsRepository {
@@ -133,6 +133,15 @@ export class PrescriptionsRepository {
 
       return updated!;
     });
+  }
+
+  async update(id: string, data: UpdatePrescriptionDto) {
+    const [updated] = await this.db
+      .update(schema.prescriptions)
+      .set({ ...(data as any), updatedAt: new Date() })
+      .where(eq(schema.prescriptions.id, id))
+      .returning();
+    return updated!;
   }
 
   async softDelete(id: string) {

@@ -12,6 +12,7 @@ import {
   queryEmployeeSchema,
   recordAttendanceSchema,
   createLeaveRequestSchema,
+  updateLeaveRequestSchema,
   reviewLeaveSchema,
 } from "@pharmerp/types";
 
@@ -135,6 +136,13 @@ export class HrController {
   ) {
     const scoped = resolveBranchScope(user, branchId);
     return this.service.findLeaveRequests({ employeeId, status, branchId: scoped });
+  }
+
+  @Patch("leaves/:id")
+  @Roles("admin", "hr_manager")
+  @ApiOperation({ summary: "Edit a pending leave request" })
+  updateLeave(@Param("id") id: string, @Body() body: unknown) {
+    return this.service.updateLeaveRequest(id, updateLeaveRequestSchema.parse(body));
   }
 
   @Patch("leaves/:id/review")

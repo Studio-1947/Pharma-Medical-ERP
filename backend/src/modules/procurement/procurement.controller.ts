@@ -184,6 +184,13 @@ export class ProcurementController {
     return this.service.createPO(createPurchaseOrderSchema.parse(body), user.sub);
   }
 
+  @Patch("purchase-orders/:id")
+  @Roles("admin", "inventory_manager")
+  @ApiOperation({ summary: "Update a draft purchase order (replaces line items)" })
+  updatePO(@Param("id") id: string, @Body() body: unknown) {
+    return this.service.updatePO(id, createPurchaseOrderSchema.parse(body));
+  }
+
   @Post("purchase-orders/:id/approve")
   @Roles("admin")
   @ApiOperation({ summary: "Approve or reject a purchase order pending approval" })

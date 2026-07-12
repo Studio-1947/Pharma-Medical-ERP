@@ -1,7 +1,7 @@
 import { Injectable, Logger, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
 import { PrescriptionsRepository } from "./prescriptions.repository";
 import { S3Service } from "../../common/s3/s3.service";
-import type { CreatePrescriptionDto, QueryPrescriptionDto, VerifyPrescriptionDto } from "@pharmerp/types";
+import type { CreatePrescriptionDto, UpdatePrescriptionDto, QueryPrescriptionDto, VerifyPrescriptionDto } from "@pharmerp/types";
 
 @Injectable()
 export class PrescriptionsService {
@@ -44,6 +44,25 @@ export class PrescriptionsService {
   async create(dto: CreatePrescriptionDto) {
     const prescription = await this.repo.create(dto);
     return { data: prescription, message: "Prescription created" };
+  }
+
+  /**
+   * Editable only before a pharmacist has verified it. Once verified the
+   * prescription is the legal basis for what was dispensed — amending the
+   * doctor, dates or controlled flag after the fact would break that record.
+   */
+  async update(id: string, dto: UpdatePrescriptionDto) {
+    const existing = await this.repo.findById(id);
+    if (!existing) throw new NotFoundException(`Prescription ${id} not found`);
+
+    if (existing.status !== "pending_verification") {
+      throw new UnprocessableEntityException(
+        `Only prescriptions pending verification can be edited. Current status: ${existing.status}`,
+      );
+    }
+
+    const prescription = await this.repo.update(id, dto);
+    return { data: prescription, message: "Prescription updated" };
   }
 
   async verify(id: string, dto: VerifyPrescriptionDto, userId: string) {

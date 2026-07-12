@@ -353,7 +353,9 @@ export function PurchaseOrdersView() {
   });
 
   const deletePOMutation = useMutation({
-    mutationFn: (id: string) => apiClient.delete(`/procurement/purchase-orders/${id}`),
+    // A PO is a financial document: it gets cancelled, not deleted, so the
+    // record and its audit trail survive.
+    mutationFn: (id: string) => apiClient.post(`/procurement/purchase-orders/${id}/cancel`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
       toastSuccess("PO deleted", "Draft purchase order has been removed.");

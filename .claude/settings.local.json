@@ -71,7 +71,8 @@
       "PowerShell(pnpm --filter frontend typecheck 2>&1)",
       "PowerShell(\"=== BACKEND ===\")",
       "PowerShell(\"=== FRONTEND ===\")",
-      "Bash(grep -n \"handleSubmit\\\\|function handle\\\\|form.userId\\\\|setForm\\({ ...form, userId\\\\|createMutation.mutate\\\\|updateMutation.mutate\\\\|select\" frontend/components/modules/hr/employees-view.tsx)"
+      "Bash(grep -n \"handleSubmit\\\\|function handle\\\\|form.userId\\\\|setForm\\({ ...form, userId\\\\|createMutation.mutate\\\\|updateMutation.mutate\\\\|select\" frontend/components/modules/hr/employees-view.tsx)",
+      "Bash(python3 -)"
     ]
   }
 }
