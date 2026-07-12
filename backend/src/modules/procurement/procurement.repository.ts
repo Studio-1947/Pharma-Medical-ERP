@@ -1,7 +1,8 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, ilike, isNull, or, sql, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, gte, lte } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
+import { calculateLine } from "./procurement.pricing";
 import type {
   CreateSupplierDto,
   UpdateSupplierDto,
@@ -9,6 +10,8 @@ import type {
   CreatePurchaseOrderDto,
   QueryPurchaseOrderDto,
   CreateGrnDto,
+  CreateSupplierReturnDto,
+  ResolveReturnReplacementDto,
 } from "@pharmerp/types";
 
 @Injectable()
@@ -162,7 +165,20 @@ export class ProcurementRepository {
         supplier: true,
         warehouse: true,
         items: { with: { medicine: true } },
-        grns: { with: { items: true } },
+        grns: {
+          orderBy: (grns, { desc: descOp }) => [descOp(grns.receivedAt)],
+          with: {
+            user: {
+              columns: { id: true, firstName: true, lastName: true },
+            },
+            items: {
+              with: {
+                poItem: { with: { medicine: true } },
+                batch: true,
+              },
+            },
+          },
+        },
       },
     });
   }
@@ -174,15 +190,17 @@ export class ProcurementRepository {
       let subtotal = 0;
       let taxAmount = 0;
 
-      for (const item of data.items) {
-        const qty = item.orderedQty;
-        const cost = parseFloat(item.unitCost);
-        const taxPct = parseFloat(item.taxPct ?? "0");
-        const lineBase = qty * cost;
-        const lineTax = lineBase * (taxPct / 100);
-        subtotal += lineBase;
+      const lines = data.items.map((item) => {
+        const { lineCost, lineTax, lineTotal } = calculateLine({
+          unitCost: item.unitCost,
+          taxPct: item.taxPct ?? "0",
+          discountPct: item.discountPct ?? "0",
+          qty: item.orderedQty,
+        });
+        subtotal += lineCost;
         taxAmount += lineTax;
-      }
+        return { item, lineTotal };
+      });
 
       const totalValue = subtotal + taxAmount;
 
@@ -203,18 +221,17 @@ export class ProcurementRepository {
         .returning();
 
       await tx.insert(schema.purchaseOrderItems).values(
-        data.items.map((item) => {
-          const lineBase = item.orderedQty * parseFloat(item.unitCost);
-          const lineTax = lineBase * (parseFloat(item.taxPct ?? "0") / 100);
-          return {
-            poId: po!.id,
-            medicineId: item.medicineId,
-            orderedQty: item.orderedQty,
-            unitCost: item.unitCost,
-            taxPct: item.taxPct ?? "0",
-            lineTotal: (lineBase + lineTax).toFixed(2),
-          };
-        }),
+        lines.map(({ item, lineTotal }) => ({
+          poId: po!.id,
+          medicineId: item.medicineId,
+          orderedQty: item.orderedQty,
+          unitCost: item.unitCost,
+          taxPct: item.taxPct ?? "0",
+          schemeFreeQty: item.schemeFreeQty ?? 0,
+          discountPct: item.discountPct ?? "0",
+          isConsignment: item.isConsignment ?? false,
+          lineTotal: lineTotal.toFixed(2),
+        })),
       );
 
       return po!;
@@ -299,9 +316,17 @@ export class ProcurementRepository {
       const poItem = po.items.find((i: any) => i.id === item.poItemId);
       if (!poItem) continue;
 
-      const lineCost = parseFloat(poItem.unitCost) * item.receivedQty;
-      const lineTax = lineCost * (parseFloat(poItem.taxPct) / 100);
-      grnTotal += lineCost + lineTax;
+      const freeQty = item.freeQty ?? 0;
+      const billedQty = Math.max(0, item.receivedQty - freeQty);
+      const { lineTotal } = calculateLine({
+        unitCost: poItem.unitCost,
+        taxPct: poItem.taxPct,
+        discountPct: poItem.discountPct,
+        qty: billedQty,
+      });
+      // Consignment items aren't owed on delivery — only once sold — so they
+      // don't count toward the bill total that hits outstandingBalance.
+      if (!poItem.isConsignment) grnTotal += lineTotal;
 
       // Create inventory batch
       const [batch] = await db
@@ -317,6 +342,7 @@ export class ProcurementRepository {
           status: "active",
           poId: dto.poId,
           grnId: grn!.id,
+          isConsignment: poItem.isConsignment ?? false,
         })
         .returning();
 
@@ -340,6 +366,7 @@ export class ProcurementRepository {
         batchId: batch!.id,
         receivedQty: item.receivedQty,
         rejectedQty: item.rejectedQty ?? 0,
+        freeQty,
         batchNo: item.batchNo,
         expiryDate: item.expiryDate,
       });
@@ -387,5 +414,361 @@ export class ProcurementRepository {
       .update(schema.purchaseOrders)
       .set({ status, updatedAt: new Date() })
       .where(eq(schema.purchaseOrders.id, poId));
+  }
+
+  // ─── Supplier bills & ledger ────────────────────────────────────────────────
+
+  /** GRNs (bills) for every PO raised against this supplier, oldest first. */
+  async getGRNsForSupplier(supplierId: string) {
+    const poRows = await this.db
+      .select({ id: schema.purchaseOrders.id })
+      .from(schema.purchaseOrders)
+      .where(eq(schema.purchaseOrders.supplierId, supplierId));
+    const poIds = poRows.map((r) => r.id);
+    if (poIds.length === 0) return [];
+
+    return this.db.query.goodsReceivedNotes.findMany({
+      where: inArray(schema.goodsReceivedNotes.poId, poIds),
+      orderBy: [asc(schema.goodsReceivedNotes.receivedAt)],
+      with: {
+        items: { with: { poItem: { with: { medicine: true } } } },
+      },
+    });
+  }
+
+  /** Single GRN (bill) with its parent PO, scoped for supplier-ownership checks. */
+  async getGRNById(grnId: string) {
+    return this.db.query.goodsReceivedNotes.findFirst({
+      where: eq(schema.goodsReceivedNotes.id, grnId),
+      with: {
+        items: { with: { poItem: { with: { medicine: true } } } },
+        purchaseOrder: { columns: { id: true, poNumber: true, supplierId: true } },
+      },
+    });
+  }
+
+  async getPaymentsForSupplier(supplierId: string) {
+    return this.db
+      .select()
+      .from(schema.supplierPayments)
+      .where(eq(schema.supplierPayments.supplierId, supplierId))
+      .orderBy(asc(schema.supplierPayments.paidAt));
+  }
+
+  /** Resolves the owning supplier of a GRN, for cross-supplier payment checks. */
+  async getGRNSupplierId(grnId: string): Promise<string | null> {
+    const [row] = await this.db
+      .select({ supplierId: schema.purchaseOrders.supplierId })
+      .from(schema.goodsReceivedNotes)
+      .innerJoin(
+        schema.purchaseOrders,
+        eq(schema.goodsReceivedNotes.poId, schema.purchaseOrders.id),
+      )
+      .where(eq(schema.goodsReceivedNotes.id, grnId))
+      .limit(1);
+    return row?.supplierId ?? null;
+  }
+
+  async createSupplierPayment(
+    params: {
+      supplierId: string;
+      grnId?: string | null;
+      amount: string;
+      method?: string;
+      referenceNo?: string;
+      paidAt?: string;
+      notes?: string;
+      paidBy: string;
+      type?: "payment" | "credit_note";
+    },
+    tx?: any,
+    skipBalanceUpdate = false,
+  ) {
+    const db = tx ?? this.db;
+
+    const [payment] = await db
+      .insert(schema.supplierPayments)
+      .values({
+        supplierId: params.supplierId,
+        grnId: params.grnId,
+        amount: params.amount,
+        method: params.method,
+        type: params.type ?? "payment",
+        referenceNo: params.referenceNo,
+        paidAt: params.paidAt ? new Date(params.paidAt) : undefined,
+        paidBy: params.paidBy,
+        notes: params.notes,
+      })
+      .returning();
+
+    if (!skipBalanceUpdate) {
+      await db
+        .update(schema.suppliers)
+        .set({
+          outstandingBalance: sql`${schema.suppliers.outstandingBalance} - ${params.amount}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.suppliers.id, params.supplierId));
+    }
+
+    return payment!;
+  }
+
+  /** True only if every item on this GRN came from a consignment PO line. */
+  async isGRNPureConsignment(grnId: string): Promise<boolean> {
+    const rows = await this.db
+      .select({ isConsignment: schema.purchaseOrderItems.isConsignment })
+      .from(schema.grnItems)
+      .innerJoin(
+        schema.purchaseOrderItems,
+        eq(schema.grnItems.poItemId, schema.purchaseOrderItems.id),
+      )
+      .where(eq(schema.grnItems.grnId, grnId));
+    return rows.length > 0 && rows.every((r) => r.isConsignment);
+  }
+
+  /**
+   * Net quantity sold per batch (gross sold minus customer returns), for
+   * computing how much of a consignment bill is actually payable so far.
+   * Modeled on billing.repository.ts's findReturnedQuantities pattern.
+   */
+  async getSoldQuantitiesForBatches(batchIds: string[]): Promise<Map<string, number>> {
+    if (batchIds.length === 0) return new Map();
+
+    const [soldRows, returnedRows] = await Promise.all([
+      this.db
+        .select({
+          batchId: schema.salesInvoiceItems.batchId,
+          qty: sql<number>`sum(${schema.salesInvoiceItems.quantity})::int`,
+        })
+        .from(schema.salesInvoiceItems)
+        .innerJoin(
+          schema.salesInvoices,
+          eq(schema.salesInvoiceItems.invoiceId, schema.salesInvoices.id),
+        )
+        .where(
+          and(
+            inArray(schema.salesInvoiceItems.batchId, batchIds),
+            eq(schema.salesInvoices.isReturn, false),
+            sql`${schema.salesInvoices.status} NOT IN ('draft', 'cancelled')`,
+          ),
+        )
+        .groupBy(schema.salesInvoiceItems.batchId),
+      this.db
+        .select({
+          batchId: schema.salesInvoiceItems.batchId,
+          qty: sql<number>`sum(${schema.salesInvoiceItems.quantity})::int`,
+        })
+        .from(schema.salesInvoiceItems)
+        .innerJoin(
+          schema.salesInvoices,
+          eq(schema.salesInvoiceItems.invoiceId, schema.salesInvoices.id),
+        )
+        .where(
+          and(
+            inArray(schema.salesInvoiceItems.batchId, batchIds),
+            eq(schema.salesInvoices.isReturn, true),
+          ),
+        )
+        .groupBy(schema.salesInvoiceItems.batchId),
+    ]);
+
+    const net = new Map<string, number>();
+    for (const row of soldRows) net.set(row.batchId, (net.get(row.batchId) ?? 0) + (row.qty ?? 0));
+    for (const row of returnedRows) net.set(row.batchId, (net.get(row.batchId) ?? 0) - (row.qty ?? 0));
+    return net;
+  }
+
+  // ─── Supplier returns (expiry/damage) ──────────────────────────────────────────
+
+  /**
+   * Decrements the returned quantity from its batch (same atomic guarded
+   * idiom used for sale deduction in billing.service.ts), logs a stock
+   * movement, and records the return. Returns null if the batch doesn't have
+   * enough quantity available.
+   */
+  async recordSupplierReturn(dto: CreateSupplierReturnDto, recordedBy: string, tx?: any) {
+    const db = tx ?? this.db;
+
+    const [batch] = await db
+      .select({ id: schema.inventoryBatches.id, medicineId: schema.inventoryBatches.medicineId })
+      .from(schema.inventoryBatches)
+      .where(eq(schema.inventoryBatches.id, dto.batchId))
+      .limit(1);
+    if (!batch) throw new Error(`Batch ${dto.batchId} not found`);
+
+    const [updated] = await db
+      .update(schema.inventoryBatches)
+      .set({
+        quantity: sql`${schema.inventoryBatches.quantity} - ${dto.quantity}`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.inventoryBatches.id, dto.batchId),
+          gte(schema.inventoryBatches.quantity, dto.quantity),
+        ),
+      )
+      .returning({ id: schema.inventoryBatches.id });
+    if (!updated) return null;
+
+    await db.insert(schema.stockMovements).values({
+      batchId: dto.batchId,
+      medicineId: batch.medicineId,
+      movementType: "expiry_write_off",
+      quantity: -dto.quantity,
+      performedBy: recordedBy,
+      referenceType: "supplier_return",
+      notes: dto.reason,
+    });
+
+    const [ret] = await db
+      .insert(schema.supplierReturns)
+      .values({
+        batchId: dto.batchId,
+        quantity: dto.quantity,
+        reason: dto.reason,
+        notes: dto.notes,
+        recordedBy,
+      })
+      .returning();
+
+    return ret!;
+  }
+
+  async getReturnById(id: string) {
+    return this.db.query.supplierReturns.findFirst({
+      where: eq(schema.supplierReturns.id, id),
+    });
+  }
+
+  /** Resolves the supplier a batch was delivered by, via its GRN → PO chain. */
+  async getSupplierIdForBatch(batchId: string): Promise<string | null> {
+    const [batch] = await this.db
+      .select({ grnId: schema.inventoryBatches.grnId })
+      .from(schema.inventoryBatches)
+      .where(eq(schema.inventoryBatches.id, batchId))
+      .limit(1);
+    if (!batch?.grnId) return null;
+
+    const [row] = await this.db
+      .select({ supplierId: schema.purchaseOrders.supplierId })
+      .from(schema.goodsReceivedNotes)
+      .innerJoin(
+        schema.purchaseOrders,
+        eq(schema.goodsReceivedNotes.poId, schema.purchaseOrders.id),
+      )
+      .where(eq(schema.goodsReceivedNotes.id, batch.grnId))
+      .limit(1);
+    return row?.supplierId ?? null;
+  }
+
+  async resolveReturnAsReplacement(
+    returnId: string,
+    dto: ResolveReturnReplacementDto,
+    resolvedBy: string,
+    tx?: any,
+  ) {
+    const db = tx ?? this.db;
+
+    const ret = await db.query.supplierReturns.findFirst({
+      where: eq(schema.supplierReturns.id, returnId),
+    });
+    if (!ret) throw new Error(`Return ${returnId} not found`);
+
+    const [originalBatch] = await db
+      .select()
+      .from(schema.inventoryBatches)
+      .where(eq(schema.inventoryBatches.id, ret.batchId))
+      .limit(1);
+    if (!originalBatch) throw new Error(`Batch ${ret.batchId} not found`);
+
+    const [replacement] = await db
+      .insert(schema.inventoryBatches)
+      .values({
+        medicineId: originalBatch.medicineId,
+        locationId: originalBatch.locationId,
+        batchNo: dto.batchNo,
+        expiryDate: dto.expiryDate,
+        quantity: ret.quantity,
+        costPrice: "0",
+        mrpAtEntry: originalBatch.mrpAtEntry,
+        status: "active",
+      })
+      .returning();
+
+    await db.insert(schema.stockMovements).values({
+      batchId: replacement!.id,
+      medicineId: originalBatch.medicineId,
+      movementType: "purchase",
+      quantity: ret.quantity,
+      performedBy: resolvedBy,
+      referenceType: "supplier_return_replacement",
+      referenceId: ret.id,
+    });
+
+    const [updated] = await db
+      .update(schema.supplierReturns)
+      .set({
+        outcome: "replacement",
+        replacementBatchId: replacement!.id,
+        resolvedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.supplierReturns.id, returnId))
+      .returning();
+
+    return updated!;
+  }
+
+  async resolveReturnAsCreditNote(
+    returnId: string,
+    amount: string,
+    supplierPaymentId: string,
+    tx?: any,
+  ) {
+    const db = tx ?? this.db;
+    const [updated] = await db
+      .update(schema.supplierReturns)
+      .set({
+        outcome: "credit_note",
+        creditNoteAmount: amount,
+        supplierPaymentId,
+        resolvedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.supplierReturns.id, returnId))
+      .returning();
+    return updated!;
+  }
+
+  /** Returns for every batch that was ever delivered by this supplier. */
+  async listReturnsForSupplier(supplierId: string) {
+    const poRows = await this.db
+      .select({ id: schema.purchaseOrders.id })
+      .from(schema.purchaseOrders)
+      .where(eq(schema.purchaseOrders.supplierId, supplierId));
+    const poIds = poRows.map((r) => r.id);
+    if (poIds.length === 0) return [];
+
+    const grnRows = await this.db
+      .select({ id: schema.goodsReceivedNotes.id })
+      .from(schema.goodsReceivedNotes)
+      .where(inArray(schema.goodsReceivedNotes.poId, poIds));
+    const grnIds = grnRows.map((r) => r.id);
+    if (grnIds.length === 0) return [];
+
+    const batchRows = await this.db
+      .select({ id: schema.inventoryBatches.id })
+      .from(schema.inventoryBatches)
+      .where(inArray(schema.inventoryBatches.grnId, grnIds));
+    const batchIds = batchRows.map((r) => r.id);
+    if (batchIds.length === 0) return [];
+
+    return this.db.query.supplierReturns.findMany({
+      where: inArray(schema.supplierReturns.batchId, batchIds),
+      orderBy: [desc(schema.supplierReturns.createdAt)],
+      with: { batch: { with: { medicine: true } } },
+    });
   }
 }

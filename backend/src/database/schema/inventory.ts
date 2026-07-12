@@ -120,6 +120,9 @@ export const inventoryBatches = pgTable(
     status: batchStatusEnum("status").notNull().default("active"),
     poId: uuid("po_id"),
     grnId: uuid("grn_id"),
+    // Copied from the PO item at receipt time so consignment queries never
+    // need to re-join through the PO.
+    isConsignment: boolean("is_consignment").notNull().default(false),
     createdAt: timestamp("created_at", { withTimezone: true })
       .defaultNow()
       .notNull(),

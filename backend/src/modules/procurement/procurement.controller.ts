@@ -1,5 +1,7 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, Res, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import type { FastifyReply } from "fastify";
+import { parse } from "json2csv";
 import { ProcurementService } from "./procurement.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
@@ -13,6 +15,12 @@ import {
   approvePurchaseOrderSchema,
   createGrnSchema,
   queryPurchaseOrderSchema,
+  createSupplierPaymentSchema,
+  querySupplierBillsSchema,
+  querySupplierLedgerSchema,
+  createSupplierReturnSchema,
+  resolveReturnReplacementSchema,
+  resolveReturnCreditNoteSchema,
 } from "@pharmerp/types";
 
 @ApiTags("procurement")
@@ -57,6 +65,100 @@ export class ProcurementController {
   @ApiOperation({ summary: "Soft delete a supplier" })
   removeSupplier(@Param("id") id: string) {
     return this.service.removeSupplier(id);
+  }
+
+  // ─── Supplier bills, payments & ledger ─────────────────────────────────────────
+
+  @Get("suppliers/:id/bills")
+  @Roles("admin", "pharmacist", "inventory_manager")
+  @ApiOperation({ summary: "List a supplier's bills (one per delivery), with paid/unpaid status" })
+  listSupplierBills(@Param("id") id: string, @Query() q: unknown) {
+    return this.service.listSupplierBills(id, querySupplierBillsSchema.parse(q));
+  }
+
+  @Get("suppliers/:id/bills/:grnId")
+  @Roles("admin", "pharmacist", "inventory_manager")
+  @ApiOperation({ summary: "Get a single supplier bill with itemized medicines and payment status" })
+  getSupplierBill(@Param("id") id: string, @Param("grnId") grnId: string) {
+    return this.service.getSupplierBill(id, grnId);
+  }
+
+  @Post("suppliers/:id/payments")
+  @Roles("admin", "inventory_manager")
+  @ApiOperation({ summary: "Record a payment made to a supplier, optionally against a specific bill" })
+  recordSupplierPayment(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.recordSupplierPayment(id, createSupplierPaymentSchema.parse(body), user.sub);
+  }
+
+  @Get("suppliers/:id/ledger")
+  @Roles("admin", "pharmacist", "inventory_manager")
+  @ApiOperation({ summary: "Supplier account statement — bills and payments with running balance" })
+  async getSupplierLedger(
+    @Param("id") id: string,
+    @Query() q: unknown,
+    @Res() res: FastifyReply,
+  ) {
+    const query = querySupplierLedgerSchema.parse(q);
+    const ledger = await this.service.getSupplierLedger(id, query);
+
+    if (query.format === "csv") {
+      const csv = parse(ledger.entries);
+      res.header("Content-Type", "text/csv");
+      res.header("Content-Disposition", `attachment; filename="ledger-${id}.csv"`);
+      return res.send(csv);
+    }
+
+    return res.send({ data: ledger });
+  }
+
+  @Get("suppliers/:id/returns")
+  @Roles("admin", "pharmacist", "inventory_manager")
+  @ApiOperation({ summary: "List expiry/damage returns for every batch delivered by this supplier" })
+  listSupplierReturns(@Param("id") id: string) {
+    return this.service.listSupplierReturns(id);
+  }
+
+  // ─── Supplier returns (expiry/damage) ──────────────────────────────────────────
+
+  @Post("returns")
+  @Roles("admin", "pharmacist", "inventory_manager")
+  @ApiOperation({ summary: "Record expired/damaged stock being returned to its supplier" })
+  recordSupplierReturn(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
+    return this.service.recordSupplierReturn(createSupplierReturnSchema.parse(body), user.sub);
+  }
+
+  @Post("returns/:id/replace")
+  @Roles("admin", "inventory_manager")
+  @ApiOperation({ summary: "Resolve a return: supplier sent replacement stock" })
+  resolveReturnReplacement(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.resolveReturnAsReplacement(
+      id,
+      resolveReturnReplacementSchema.parse(body),
+      user.sub,
+    );
+  }
+
+  @Post("returns/:id/credit-note")
+  @Roles("admin", "inventory_manager")
+  @ApiOperation({ summary: "Resolve a return: supplier issued a credit note" })
+  resolveReturnCreditNote(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.resolveReturnAsCreditNote(
+      id,
+      resolveReturnCreditNoteSchema.parse(body),
+      user.sub,
+    );
   }
 
   // ─── Purchase Orders ──────────────────────────────────────────────────────────

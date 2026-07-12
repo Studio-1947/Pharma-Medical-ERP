@@ -14,6 +14,9 @@ interface POItem {
   orderedQty: number;
   unitCost: string;
   taxPct: string;
+  schemeFreeQty?: number;
+  discountPct?: string;
+  isConsignment?: boolean;
 }
 
 interface PO {
@@ -38,6 +41,7 @@ interface GrnLineItem {
   expiryDate: string;
   receivedQty: number;
   unitCost: string;
+  freeQty: number;
 }
 
 function GrnModal({
@@ -75,8 +79,9 @@ function GrnModal({
           poItemId: item.id,
           batchNo: "",
           expiryDate: "",
-          receivedQty: item.orderedQty,
+          receivedQty: item.orderedQty + (item.schemeFreeQty ?? 0),
           unitCost: item.unitCost,
+          freeQty: item.schemeFreeQty ?? 0,
         }))
       );
     }
@@ -138,6 +143,7 @@ function GrnModal({
                 <th className="text-left py-2 pr-3">Batch No <span className="text-red-500">*</span></th>
                 <th className="text-left py-2 pr-3">Expiry Date <span className="text-red-500">*</span></th>
                 <th className="text-right py-2 pr-3">Rcvd Qty <span className="text-red-500">*</span></th>
+                <th className="text-right py-2 pr-3">Free Qty</th>
                 <th className="text-right py-2">Unit Cost (₹)</th>
               </tr>
             </thead>
@@ -150,6 +156,8 @@ function GrnModal({
                     </span>
                     <div className="text-[10px] text-muted-foreground">
                       Ordered: {poDetail?.items[idx]?.orderedQty}
+                      {!!(poDetail?.items[idx] as any)?.schemeFreeQty &&
+                        ` (+${(poDetail?.items[idx] as any)?.schemeFreeQty} free)`}
                     </div>
                   </td>
                   <td className="py-2 pr-3">
@@ -178,6 +186,15 @@ function GrnModal({
                       value={line.receivedQty}
                       onChange={(e) => updateLine(idx, "receivedQty", Number(e.target.value))}
                       className="w-20 border rounded px-2 py-1 text-xs text-right font-mono focus:outline-none focus:ring-1 focus:ring-emerald-400 ml-auto block"
+                    />
+                  </td>
+                  <td className="py-2 pr-3">
+                    <input
+                      type="number"
+                      min="0"
+                      value={line.freeQty}
+                      onChange={(e) => updateLine(idx, "freeQty", Number(e.target.value))}
+                      className="w-16 border rounded px-2 py-1 text-xs text-right font-mono focus:outline-none focus:ring-1 focus:ring-emerald-400 ml-auto block"
                     />
                   </td>
                   <td className="py-2">
@@ -251,7 +268,7 @@ export function PurchaseOrdersView() {
     warehouseId: "",
     expectedDelivery: "",
     notes: "",
-    items: [{ medicineId: "", orderedQty: 1, unitCost: "0", taxPct: "0" }],
+    items: [{ medicineId: "", orderedQty: 1, unitCost: "0", taxPct: "0", schemeFreeQty: 0, discountPct: "0", isConsignment: false }],
   });
 
   const { data: rawPOs, isLoading } = useQuery({
@@ -377,7 +394,7 @@ export function PurchaseOrdersView() {
       warehouseId: warehouses[0]?.id || "",
       expectedDelivery: "",
       notes: "",
-      items: [{ medicineId: medicines[0]?.id || "", orderedQty: 1, unitCost: "0", taxPct: "0" }],
+      items: [{ medicineId: medicines[0]?.id || "", orderedQty: 1, unitCost: "0", taxPct: "0", schemeFreeQty: 0, discountPct: "0", isConsignment: false }],
     });
     setIsOpen(true);
   }
@@ -395,8 +412,11 @@ export function PurchaseOrdersView() {
             orderedQty: i.orderedQty,
             unitCost: i.unitCost,
             taxPct: i.taxPct,
+            schemeFreeQty: i.schemeFreeQty ?? 0,
+            discountPct: i.discountPct ?? "0",
+            isConsignment: i.isConsignment ?? false,
           }))
-        : [{ medicineId: medicines[0]?.id || "", orderedQty: 1, unitCost: "0", taxPct: "0" }],
+        : [{ medicineId: medicines[0]?.id || "", orderedQty: 1, unitCost: "0", taxPct: "0", schemeFreeQty: 0, discountPct: "0", isConsignment: false }],
     });
     setIsOpen(true);
   }
@@ -409,7 +429,7 @@ export function PurchaseOrdersView() {
   function handleAddItem() {
     setForm({
       ...form,
-      items: [...form.items, { medicineId: medicines[0]?.id || "", orderedQty: 1, unitCost: "0", taxPct: "0" }],
+      items: [...form.items, { medicineId: medicines[0]?.id || "", orderedQty: 1, unitCost: "0", taxPct: "0", schemeFreeQty: 0, discountPct: "0", isConsignment: false }],
     });
   }
 
@@ -724,6 +744,49 @@ export function PurchaseOrdersView() {
                         setForm({ ...form, items: n });
                       }}
                       className="w-full border rounded-lg px-2 py-1.5 text-xs font-mono"
+                    />
+                  </div>
+                  <div className="w-20">
+                    <label className="text-[10px] text-muted-foreground uppercase">Free Qty</label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={item.schemeFreeQty}
+                      title="Scheme, e.g. 10+1 = order 10, enter 1 here"
+                      onChange={(e) => {
+                        const n = [...form.items];
+                        if (n[idx]) n[idx].schemeFreeQty = Number(e.target.value);
+                        setForm({ ...form, items: n });
+                      }}
+                      className="w-full border rounded-lg px-2 py-1.5 text-xs font-mono"
+                    />
+                  </div>
+                  <div className="w-20">
+                    <label className="text-[10px] text-muted-foreground uppercase">Disc %</label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={item.discountPct}
+                      onChange={(e) => {
+                        const n = [...form.items];
+                        if (n[idx]) n[idx].discountPct = e.target.value;
+                        setForm({ ...form, items: n });
+                      }}
+                      className="w-full border rounded-lg px-2 py-1.5 text-xs font-mono"
+                    />
+                  </div>
+                  <div className="flex flex-col items-center justify-end pb-2">
+                    <label className="text-[10px] text-muted-foreground uppercase">Consign.</label>
+                    <input
+                      type="checkbox"
+                      checked={!!item.isConsignment}
+                      title="Pay supplier only as units sell, not on delivery"
+                      onChange={(e) => {
+                        const n = [...form.items];
+                        if (n[idx]) n[idx].isConsignment = e.target.checked;
+                        setForm({ ...form, items: n });
+                      }}
+                      className="w-4 h-4 mt-1"
                     />
                   </div>
                   <button

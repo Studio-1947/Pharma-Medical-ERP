@@ -5,8 +5,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
-import { Plus, Search, Edit2, Phone, Mail, FileText, Trash2 } from "lucide-react";
+import { Plus, Search, Edit2, Phone, Mail, FileText, Trash2, BookOpen } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
+import { SupplierLedgerModal } from "./supplier-ledger-modal";
 
 interface Supplier {
   id: string;
@@ -22,6 +23,7 @@ interface Supplier {
   drugLicenseExpiry?: string;
   creditDays?: number;
   creditLimit?: string;
+  outstandingBalance?: string;
   rating: number;
 }
 
@@ -48,6 +50,7 @@ export function SuppliersView() {
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [ledgerSupplier, setLedgerSupplier] = useState<Supplier | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
 
@@ -269,10 +272,29 @@ export function SuppliersView() {
                       )}
                     </p>
                   )}
+                  <p className="flex items-center justify-between pt-1">
+                    <span className="font-semibold text-xs text-slate-400">Outstanding:</span>
+                    <span
+                      className={`text-sm font-bold ${
+                        parseFloat(sup.outstandingBalance ?? "0") > 0
+                          ? "text-red-600"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      ₹{parseFloat(sup.outstandingBalance ?? "0").toFixed(2)}
+                    </span>
+                  </p>
                 </div>
               </div>
 
               <div className="flex items-center justify-end gap-1 pt-4 border-t mt-4">
+                <button
+                  onClick={() => setLedgerSupplier(sup)}
+                  className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors rounded-lg"
+                  title="View ledger"
+                >
+                  <BookOpen className="w-4 h-4" />
+                </button>
                 <button
                   onClick={() => openEdit(sup)}
                   className="p-2 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors rounded-lg"
@@ -494,6 +516,14 @@ export function SuppliersView() {
           </div>
         </form>
       </Modal>
+
+      {ledgerSupplier && (
+        <SupplierLedgerModal
+          supplier={ledgerSupplier}
+          open={!!ledgerSupplier}
+          onClose={() => setLedgerSupplier(null)}
+        />
+      )}
     </div>
   );
 }

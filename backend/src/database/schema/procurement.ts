@@ -10,7 +10,13 @@ import {
   boolean,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
-import { poStatusEnum } from "./enums";
+import {
+  poStatusEnum,
+  supplierPaymentMethodEnum,
+  supplierPaymentTypeEnum,
+  supplierReturnReasonEnum,
+  supplierReturnOutcomeEnum,
+} from "./enums";
 import { medicines, inventoryBatches, warehouses } from "./inventory";
 import { users } from "./auth";
 
@@ -95,6 +101,15 @@ export const purchaseOrderItems = pgTable("purchase_order_items", {
   receivedQty: integer("received_qty").notNull().default(0),
   unitCost: numeric("unit_cost", { precision: 12, scale: 2 }).notNull(),
   taxPct: numeric("tax_pct", { precision: 5, scale: 2 }).notNull().default("0"),
+  // Free units the supplier throws in on top of orderedQty for a scheme like
+  // "10+1" (order 10, get an 11th free) — not billed.
+  schemeFreeQty: integer("scheme_free_qty").notNull().default(0),
+  // Straight rate discount off unitCost, e.g. 0 / 3 / 5 (%).
+  discountPct: numeric("discount_pct", { precision: 5, scale: 2 })
+    .notNull()
+    .default("0"),
+  // Consignment: only payable once actually sold, not on delivery.
+  isConsignment: boolean("is_consignment").notNull().default(false),
   lineTotal: numeric("line_total", { precision: 12, scale: 2 }).notNull(),
 });
 
@@ -131,13 +146,73 @@ export const grnItems = pgTable("grn_items", {
   }),
   receivedQty: integer("received_qty").notNull(),
   rejectedQty: integer("rejected_qty").notNull().default(0),
+  // How many of receivedQty on THIS delivery were free (scheme), not billed.
+  freeQty: integer("free_qty").notNull().default(0),
   batchNo: varchar("batch_no", { length: 100 }).notNull(),
   expiryDate: date("expiry_date").notNull(),
+});
+
+export const supplierPayments = pgTable("supplier_payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  supplierId: uuid("supplier_id")
+    .notNull()
+    .references(() => suppliers.id, { onDelete: "restrict" }),
+  // Bill this payment settles; null = general "on account" payment not tied
+  // to one delivery.
+  grnId: uuid("grn_id").references(() => goodsReceivedNotes.id, {
+    onDelete: "set null",
+  }),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  // Nullable: a credit note has no cash payment method.
+  method: supplierPaymentMethodEnum("method"),
+  type: supplierPaymentTypeEnum("type").notNull().default("payment"),
+  referenceNo: varchar("reference_no", { length: 100 }),
+  paidAt: timestamp("paid_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  paidBy: uuid("paid_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+});
+
+export const supplierReturns = pgTable("supplier_returns", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // The expired/damaged batch — already carries its own grnId/poId, so the
+  // batch alone is enough to trace back to the exact supplier and bill.
+  batchId: uuid("batch_id")
+    .notNull()
+    .references(() => inventoryBatches.id, { onDelete: "restrict" }),
+  quantity: integer("quantity").notNull(),
+  reason: supplierReturnReasonEnum("reason").notNull().default("expiry"),
+  outcome: supplierReturnOutcomeEnum("outcome").notNull().default("pending"),
+  creditNoteAmount: numeric("credit_note_amount", { precision: 12, scale: 2 }),
+  supplierPaymentId: uuid("supplier_payment_id").references(() => supplierPayments.id, {
+    onDelete: "set null",
+  }),
+  replacementBatchId: uuid("replacement_batch_id").references(() => inventoryBatches.id, {
+    onDelete: "set null",
+  }),
+  notes: text("notes"),
+  recordedBy: uuid("recorded_by")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .defaultNow()
+    .notNull(),
 });
 
 // Relations
 export const suppliersRelations = relations(suppliers, ({ many }) => ({
   purchaseOrders: many(purchaseOrders),
+  payments: many(supplierPayments),
 }));
 
 export const purchaseOrdersRelations = relations(
@@ -181,6 +256,7 @@ export const goodsReceivedNotesRelations = relations(
       references: [users.id],
     }),
     items: many(grnItems),
+    payments: many(supplierPayments),
   }),
 );
 
@@ -196,5 +272,44 @@ export const grnItemsRelations = relations(grnItems, ({ one }) => ({
   batch: one(inventoryBatches, {
     fields: [grnItems.batchId],
     references: [inventoryBatches.id],
+  }),
+}));
+
+export const supplierPaymentsRelations = relations(
+  supplierPayments,
+  ({ one }) => ({
+    supplier: one(suppliers, {
+      fields: [supplierPayments.supplierId],
+      references: [suppliers.id],
+    }),
+    grn: one(goodsReceivedNotes, {
+      fields: [supplierPayments.grnId],
+      references: [goodsReceivedNotes.id],
+    }),
+    paidByUser: one(users, {
+      fields: [supplierPayments.paidBy],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const supplierReturnsRelations = relations(supplierReturns, ({ one }) => ({
+  batch: one(inventoryBatches, {
+    fields: [supplierReturns.batchId],
+    references: [inventoryBatches.id],
+    relationName: "returnedBatch",
+  }),
+  replacementBatch: one(inventoryBatches, {
+    fields: [supplierReturns.replacementBatchId],
+    references: [inventoryBatches.id],
+    relationName: "replacementBatch",
+  }),
+  supplierPayment: one(supplierPayments, {
+    fields: [supplierReturns.supplierPaymentId],
+    references: [supplierPayments.id],
+  }),
+  recordedByUser: one(users, {
+    fields: [supplierReturns.recordedBy],
+    references: [users.id],
   }),
 }));
