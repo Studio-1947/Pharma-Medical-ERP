@@ -72,7 +72,8 @@
       "PowerShell(\"=== BACKEND ===\")",
       "PowerShell(\"=== FRONTEND ===\")",
       "Bash(grep -n \"handleSubmit\\\\|function handle\\\\|form.userId\\\\|setForm\\({ ...form, userId\\\\|createMutation.mutate\\\\|updateMutation.mutate\\\\|select\" frontend/components/modules/hr/employees-view.tsx)",
-      "Bash(python3 -)"
+      "Bash(python3 -)",
+      "Bash(git checkout *)"
     ]
   }
 }

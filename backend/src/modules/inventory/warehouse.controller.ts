@@ -13,7 +13,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
-import { resolveBranchScope } from "../../common/auth/branch-scope";
+import { resolveBranchScope, requireBranchScope } from "../../common/auth/branch-scope";
 import { WarehouseRepository } from "./warehouse.repository";
 import {
   createWarehouseSchema,
@@ -55,8 +55,12 @@ export class WarehouseController {
   @Post()
   @Roles("admin")
   @ApiOperation({ summary: "Create a warehouse" })
-  create(@Body() body: unknown) {
-    return this.repo.create(createWarehouseSchema.parse(body));
+  create(@CurrentUser() user: JwtPayload, @Body() body: unknown) {
+    const dto = createWarehouseSchema.parse(body);
+    // Pin to the caller's branch so a branch admin cannot plant a warehouse
+    // inside another branch.
+    const branchId = requireBranchScope(user, dto.branchId);
+    return this.repo.create({ ...dto, branchId });
   }
 
   @Patch(":id")
