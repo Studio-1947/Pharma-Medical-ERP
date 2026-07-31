@@ -52,6 +52,12 @@ export const createPurchaseOrderSchema = z.object({
     orderedQty: z.number().int().min(1),
     unitCost: z.string().regex(/^\d+(\.\d{1,2})?$/),
     taxPct: z.enum(["0", "5", "12", "18"]).optional().default("0"),
+    // Free units the supplier throws in on top of orderedQty, e.g. 1 for "10+1".
+    schemeFreeQty: z.number().int().min(0).optional().default(0),
+    // Straight rate discount off unitCost (e.g. 0 / 3 / 5).
+    discountPct: z.string().regex(/^\d+(\.\d{1,2})?$/).optional().default("0"),
+    // Consignment: only payable once actually sold, not on delivery.
+    isConsignment: z.boolean().optional().default(false),
   })).min(1),
 });
 
@@ -69,6 +75,8 @@ export const createGrnSchema = z.object({
     poItemId: z.string().uuid(),
     receivedQty: z.number().int().min(0),
     rejectedQty: z.number().int().min(0).default(0),
+    // How many of receivedQty on this delivery were free (scheme), not billed.
+    freeQty: z.number().int().min(0).optional().default(0),
     batchNo: z.string().min(1).max(100),
     expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   })).min(1),
@@ -83,6 +91,45 @@ export const queryPurchaseOrderSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+export const createSupplierPaymentSchema = z.object({
+  grnId: z.string().uuid().optional(),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Must be a valid amount"),
+  method: z.enum(["cash", "bank_transfer", "cheque", "upi", "other"]),
+  referenceNo: optionalField(z.string().max(100)),
+  paidAt: optionalField(z.string().regex(DATE_RE, "Use YYYY-MM-DD")),
+  notes: optionalField(z.string().max(500)),
+});
+
+export const querySupplierBillsSchema = z.object({
+  status: z.enum(["paid", "partial", "unpaid"]).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const querySupplierLedgerSchema = z.object({
+  from: z.string().regex(DATE_RE, "Use YYYY-MM-DD").optional(),
+  to: z.string().regex(DATE_RE, "Use YYYY-MM-DD").optional(),
+  format: z.enum(["json", "csv"]).default("json"),
+});
+
+export const createSupplierReturnSchema = z.object({
+  batchId: z.string().uuid(),
+  quantity: z.number().int().min(1),
+  reason: z.enum(["expiry", "damage", "other"]).optional().default("expiry"),
+  notes: optionalField(z.string().max(500)),
+});
+
+export const resolveReturnReplacementSchema = z.object({
+  batchNo: z.string().min(1).max(100),
+  expiryDate: z.string().regex(DATE_RE, "Use YYYY-MM-DD"),
+});
+
+export const resolveReturnCreditNoteSchema = z.object({
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Must be a valid amount"),
+  grnId: z.string().uuid().optional(),
+  notes: optionalField(z.string().max(500)),
+});
+
 export type CreateSupplierDto = z.infer<typeof createSupplierSchema>;
 export type UpdateSupplierDto = z.infer<typeof updateSupplierSchema>;
 export type QuerySupplierDto = z.infer<typeof querySupplierSchema>;
@@ -90,3 +137,9 @@ export type CreatePurchaseOrderDto = z.infer<typeof createPurchaseOrderSchema>;
 export type ApprovePurchaseOrderDto = z.infer<typeof approvePurchaseOrderSchema>;
 export type CreateGrnDto = z.infer<typeof createGrnSchema>;
 export type QueryPurchaseOrderDto = z.infer<typeof queryPurchaseOrderSchema>;
+export type CreateSupplierPaymentDto = z.infer<typeof createSupplierPaymentSchema>;
+export type QuerySupplierBillsDto = z.infer<typeof querySupplierBillsSchema>;
+export type QuerySupplierLedgerDto = z.infer<typeof querySupplierLedgerSchema>;
+export type CreateSupplierReturnDto = z.infer<typeof createSupplierReturnSchema>;
+export type ResolveReturnReplacementDto = z.infer<typeof resolveReturnReplacementSchema>;
+export type ResolveReturnCreditNoteDto = z.infer<typeof resolveReturnCreditNoteSchema>;

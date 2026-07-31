@@ -20,6 +20,13 @@ export const createPrescriptionSchema = z.object({
   })).optional(),
 });
 
+// Header-only edit. patientId and items are deliberately excluded: a
+// prescription cannot be re-parented to another patient, and its dispensed
+// items must not be silently swapped out from under the dispensing record.
+export const updatePrescriptionSchema = createPrescriptionSchema
+  .omit({ patientId: true, items: true })
+  .partial();
+
 export const verifyPrescriptionSchema = z.object({
   action: z.enum(["verify", "reject"]),
   rejectionReason: z.string().optional(),
@@ -45,5 +52,6 @@ export const queryPrescriptionSchema = z.object({
 });
 
 export type CreatePrescriptionDto = z.infer<typeof createPrescriptionSchema>;
+export type UpdatePrescriptionDto = z.infer<typeof updatePrescriptionSchema>;
 export type VerifyPrescriptionDto = z.infer<typeof verifyPrescriptionSchema>;
 export type QueryPrescriptionDto = z.infer<typeof queryPrescriptionSchema>;

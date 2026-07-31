@@ -5,8 +5,9 @@ import { StockDashboard } from "@/components/modules/inventory/stock-dashboard";
 import { MedicineList } from "@/components/modules/inventory/medicine-list";
 import { BatchList } from "@/components/modules/inventory/batch-list";
 import { StockValuation } from "@/components/modules/inventory/stock-valuation";
+import { WarehouseList } from "@/components/modules/inventory/warehouse-list";
 
-const tabs = ["Medicines", "Batches", "Valuation"] as const;
+const tabs = ["Medicines", "Batches", "Warehouses", "Valuation"] as const;
 type Tab = (typeof tabs)[number];
 
 export default function InventoryPage() {
@@ -37,6 +38,7 @@ export default function InventoryPage() {
 
       {active === "Medicines" && <MedicineList />}
       {active === "Batches" && <BatchList />}
+      {active === "Warehouses" && <WarehouseList />}
       {active === "Valuation" && <StockValuation />}
     </div>
   );

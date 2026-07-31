@@ -8,6 +8,7 @@ import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
 import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
 import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
+import { Modal } from "@/components/ui/modal";
 
 interface Batch {
   id: string;
@@ -162,164 +163,162 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h3 className="text-base font-semibold">Add Stock Batch</h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-            <X size={18} />
-          </button>
+    <Modal
+      title="Add Stock Batch"
+      subtitle={selectedMedicine ? `Adding batch for ${selectedMedicine.name}` : "Search medicine and fill details"}
+      open={true}
+      onClose={onClose}
+      size="lg"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Medicine search */}
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-gray-700">Medicine *</label>
+          {selectedMedicine ? (
+            <div className="flex items-center justify-between border rounded-lg px-3 py-2 bg-emerald-50 border-emerald-200">
+              <div>
+                <span className="text-sm font-medium text-slate-900">{selectedMedicine.name}</span>
+                <span className="text-xs text-emerald-600 ml-2">{selectedMedicine.sku}</span>
+              </div>
+              <button type="button" onClick={() => { setSelectedMedicine(null); setMedicineSearch(""); form.mrpAtEntry = ""; }}
+                className="text-emerald-400 hover:text-emerald-700">
+                <X size={14} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  placeholder="Type name, SKU, or scan barcode..."
+                  value={medicineSearch}
+                  onChange={(e) => setMedicineSearch(e.target.value)}
+                  data-barcode-capture="true"
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+                />
+                {medicines.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {medicines.map((m) => (
+                      <button key={m.id} type="button"
+                        onClick={() => {
+                          setSelectedMedicine(m);
+                          setForm((f) => ({ ...f, mrpAtEntry: parseFloat(m.priceMrp).toFixed(2) }));
+                          setMedicineSearch("");
+                        }}
+                        className="w-full text-left px-4 py-2.5 hover:bg-muted/50 text-sm border-b last:border-b-0">
+                        <span className="font-medium">{m.name}</span>
+                        <span className="text-muted-foreground ml-2 text-xs">{m.sku} — MRP ₹{parseFloat(m.priceMrp).toFixed(2)}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setCameraOpen(true)}
+                className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition text-slate-600 hover:text-slate-900 bg-white flex items-center justify-center shadow-sm"
+                title="Scan Medicine Barcode"
+              >
+                <Camera size={16} />
+              </button>
+            </div>
+          )}
         </div>
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          {/* Medicine search */}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-700">Medicine *</label>
-            {selectedMedicine ? (
-              <div className="flex items-center justify-between border rounded-lg px-3 py-2 bg-emerald-50 border-emerald-200">
-                <div>
-                  <span className="text-sm font-medium text-slate-900">{selectedMedicine.name}</span>
-                  <span className="text-xs text-emerald-600 ml-2">{selectedMedicine.sku}</span>
-                </div>
-                <button type="button" onClick={() => { setSelectedMedicine(null); setMedicineSearch(""); form.mrpAtEntry = ""; }}
-                  className="text-emerald-400 hover:text-emerald-700">
-                  <X size={14} />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1">
-                  <input
-                    type="text"
-                    placeholder="Type name, SKU, or scan barcode..."
-                    value={medicineSearch}
-                    onChange={(e) => setMedicineSearch(e.target.value)}
-                    data-barcode-capture="true"
-                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
-                  />
-                  {medicines.length > 0 && (
-                    <div className="absolute top-full left-0 right-0 z-10 mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      {medicines.map((m) => (
-                        <button key={m.id} type="button"
-                          onClick={() => {
-                            setSelectedMedicine(m);
-                            setForm((f) => ({ ...f, mrpAtEntry: parseFloat(m.priceMrp).toFixed(2) }));
-                            setMedicineSearch("");
-                          }}
-                          className="w-full text-left px-4 py-2.5 hover:bg-muted/50 text-sm border-b last:border-b-0">
-                          <span className="font-medium">{m.name}</span>
-                          <span className="text-muted-foreground ml-2 text-xs">{m.sku} — MRP ₹{parseFloat(m.priceMrp).toFixed(2)}</span>
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setCameraOpen(true)}
-                  className="p-2 border border-slate-200 rounded-lg hover:bg-slate-50 transition text-slate-600 hover:text-slate-900 bg-white flex items-center justify-center shadow-sm"
-                  title="Scan Medicine Barcode"
-                >
-                  <Camera size={16} />
-                </button>
-              </div>
+            <label className="text-sm font-medium text-gray-700">Batch Number *</label>
+            <input
+              type="text"
+              placeholder="e.g. B2024001"
+              value={form.batchNo}
+              onChange={(e) => setForm((f) => ({ ...f, batchNo: e.target.value }))}
+              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 font-mono ${
+                isDuplicate
+                  ? "border-red-400 focus:ring-red-200 bg-red-50"
+                  : "focus:ring-primary"
+              }`}
+            />
+            {isDuplicate && (
+              <p className="text-xs text-red-600 flex items-center gap-1 mt-1">
+                <AlertTriangle size={11} />
+                This batch number already exists for the selected medicine.
+              </p>
             )}
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Batch Number *</label>
-              <input
-                type="text"
-                placeholder="e.g. B2024001"
-                value={form.batchNo}
-                onChange={(e) => setForm((f) => ({ ...f, batchNo: e.target.value }))}
-                className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 font-mono ${
-                  isDuplicate
-                    ? "border-red-400 focus:ring-red-200 bg-red-50"
-                    : "focus:ring-primary"
-                }`}
-              />
-              {isDuplicate && (
-                <p className="text-xs text-red-600 flex items-center gap-1 mt-1">
-                  <AlertTriangle size={11} />
-                  This batch number already exists for the selected medicine.
-                </p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Expiry Date *</label>
-              <input
-                type="date"
-                value={form.expiryDate}
-                onChange={(e) => setForm((f) => ({ ...f, expiryDate: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Expiry Date *</label>
+            <input
+              type="date"
+              value={form.expiryDate}
+              onChange={(e) => setForm((f) => ({ ...f, expiryDate: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Quantity *</label>
-              <input
-                type="number"
-                min={1}
-                placeholder="100"
-                value={form.quantity}
-                onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Cost Price (₹) *</label>
-              <input
-                type="number"
-                step="0.01"
-                min={0}
-                placeholder="6.50"
-                value={form.costPrice}
-                onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">MRP (₹) *</label>
-              <input
-                type="number"
-                step="0.01"
-                min={0}
-                placeholder="8.00"
-                value={form.mrpAtEntry}
-                onChange={(e) => setForm((f) => ({ ...f, mrpAtEntry: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Quantity *</label>
+            <input
+              type="number"
+              min={1}
+              placeholder="100"
+              value={form.quantity}
+              onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
           </div>
-
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
-          )}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose}
-              className="px-4 py-2 text-sm border rounded-lg hover:bg-muted transition-colors">
-              Cancel
-            </button>
-            <button type="submit" disabled={mutation.isPending}
-              className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50 transition-opacity">
-              {mutation.isPending ? "Adding..." : "Add Stock"}
-            </button>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Cost Price (₹) *</label>
+            <input
+              type="number"
+              step="0.01"
+              min={0}
+              placeholder="6.50"
+              value={form.costPrice}
+              onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
           </div>
-        </form>
-        <BarcodeScannerDialog
-          open={cameraOpen}
-          onClose={() => setCameraOpen(false)}
-          onScan={(code) => {
-            handleBarcodeScan(code);
-            setCameraOpen(false);
-          }}
-        />
-      </div>
-    </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">MRP (₹) *</label>
+            <input
+              type="number"
+              step="0.01"
+              min={0}
+              placeholder="8.00"
+              value={form.mrpAtEntry}
+              onChange={(e) => setForm((f) => ({ ...f, mrpAtEntry: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+        )}
+
+        <div className="flex justify-end gap-3 pt-2">
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-sm border rounded-lg hover:bg-muted transition-colors">
+            Cancel
+          </button>
+          <button type="submit" disabled={mutation.isPending}
+            className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50 transition-opacity">
+            {mutation.isPending ? "Adding..." : "Add Stock"}
+          </button>
+        </div>
+      </form>
+      <BarcodeScannerDialog
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onScan={(code) => {
+          handleBarcodeScan(code);
+          setCameraOpen(false);
+        }}
+      />
+    </Modal>
   );
 }
 
@@ -383,103 +382,98 @@ function EditBatchForm({ batch, onClose, onSuccess }: EditBatchFormProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <div>
-            <h3 className="text-base font-semibold">Edit Batch</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Updating batch for medicine ID: <span className="font-mono">{batch.medicineId.slice(0, 8)}…</span></p>
+    <Modal
+      title="Edit Batch"
+      subtitle={`Updating batch for medicine ID: ${batch.medicineId.slice(0, 8)}…`}
+      open={true}
+      onClose={onClose}
+      size="md"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Batch Number *</label>
+            <input
+              type="text"
+              value={form.batchNo}
+              onChange={(e) => setForm((f) => ({ ...f, batchNo: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary font-mono"
+            />
           </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground">
-            <X size={18} />
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Expiry Date *</label>
+            <input
+              type="date"
+              value={form.expiryDate}
+              onChange={(e) => setForm((f) => ({ ...f, expiryDate: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Cost Price (₹) *</label>
+            <input
+              type="number"
+              step="0.01"
+              min={0}
+              value={form.costPrice}
+              onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">MRP (₹) *</label>
+            <input
+              type="number"
+              step="0.01"
+              min={0}
+              value={form.mrpAtEntry}
+              onChange={(e) => setForm((f) => ({ ...f, mrpAtEntry: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-gray-700">Status</label>
+          <select
+            value={form.status}
+            onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            {STATUS_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label} — {o.desc}</option>
+            ))}
+          </select>
+          {(form.status === "recalled" || form.status === "depleted" || form.status === "expired") && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-1">
+              Setting status to <strong>{form.status}</strong> will hide this batch from active dispensing. The batch history and audit trail are preserved.
+            </p>
+          )}
+        </div>
+
+        <p className="text-xs text-muted-foreground bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
+          To adjust quantity, use the stock adjustment feature — changes are logged in the audit trail.
+        </p>
+
+        {error && (
+          <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
+        )}
+
+        <div className="flex justify-end gap-3 pt-2">
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-sm border rounded-lg hover:bg-muted transition-colors">
+            Cancel
+          </button>
+          <button type="submit" disabled={mutation.isPending}
+            className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50 transition-opacity">
+            {mutation.isPending ? "Saving..." : "Save Changes"}
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Batch Number *</label>
-              <input
-                type="text"
-                value={form.batchNo}
-                onChange={(e) => setForm((f) => ({ ...f, batchNo: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary font-mono"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Expiry Date *</label>
-              <input
-                type="date"
-                value={form.expiryDate}
-                onChange={(e) => setForm((f) => ({ ...f, expiryDate: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Cost Price (₹) *</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.costPrice}
-                onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">MRP (₹) *</label>
-              <input
-                type="number"
-                step="0.01"
-                min="0"
-                value={form.mrpAtEntry}
-                onChange={(e) => setForm((f) => ({ ...f, mrpAtEntry: e.target.value }))}
-                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-700">Status</label>
-            <select
-              value={form.status}
-              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              {STATUS_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label} — {o.desc}</option>
-              ))}
-            </select>
-            {(form.status === "recalled" || form.status === "depleted" || form.status === "expired") && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-1">
-                Setting status to <strong>{form.status}</strong> will hide this batch from active dispensing. The batch history and audit trail are preserved.
-              </p>
-            )}
-          </div>
-
-          <p className="text-xs text-muted-foreground bg-slate-50 border border-slate-100 rounded-lg px-3 py-2">
-            To adjust quantity, use the stock adjustment feature — changes are logged in the audit trail.
-          </p>
-
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2">{error}</p>
-          )}
-
-          <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose}
-              className="px-4 py-2 text-sm border rounded-lg hover:bg-muted transition-colors">
-              Cancel
-            </button>
-            <button type="submit" disabled={mutation.isPending}
-              className="px-4 py-2 text-sm bg-primary text-primary-foreground rounded-lg font-medium hover:opacity-90 disabled:opacity-50 transition-opacity">
-              {mutation.isPending ? "Saving..." : "Save Changes"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   );
 }
 

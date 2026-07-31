@@ -46,6 +46,8 @@ export const createLeaveRequestSchema = z.object({
   reason: z.string().min(1),
 });
 
+export const updateLeaveRequestSchema = createLeaveRequestSchema.partial();
+
 export const reviewLeaveSchema = z.object({
   status: z.enum(["approved", "rejected", "cancelled"]),
   reviewNote: z.string().optional(),
@@ -56,4 +58,5 @@ export type UpdateEmployeeDto = z.infer<typeof updateEmployeeSchema>;
 export type QueryEmployeeDto = z.infer<typeof queryEmployeeSchema>;
 export type RecordAttendanceDto = z.infer<typeof recordAttendanceSchema>;
 export type CreateLeaveRequestDto = z.infer<typeof createLeaveRequestSchema>;
+export type UpdateLeaveRequestDto = z.infer<typeof updateLeaveRequestSchema>;
 export type ReviewLeaveDto = z.infer<typeof reviewLeaveSchema>;

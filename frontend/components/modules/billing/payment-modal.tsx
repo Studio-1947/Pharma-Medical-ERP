@@ -40,6 +40,23 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading }: Props
     }
   }, [open, total]);
 
+  // Lock body scroll while open
+  useEffect(() => {
+    if (open) document.body.style.overflow = "hidden";
+    else document.body.style.overflow = "";
+    return () => { document.body.style.overflow = ""; };
+  }, [open]);
+
+  // Close modal on Escape key
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [open, onClose]);
+
   const isMulti = mode === "mixed";
   const addSplit = () => setSplits((s) => [...s, { mode: "cash", amount: "", ref: "" }]);
   const removeSplit = (i: number) => setSplits((s) => s.filter((_, idx) => idx !== i));
@@ -80,8 +97,8 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading }: Props
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-md sm:mx-4 max-h-[94dvh] overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-md sm:mx-4 max-h-[94dvh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b">

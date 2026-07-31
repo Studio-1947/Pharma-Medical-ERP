@@ -1,12 +1,13 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
-import { Plus, Search, Edit2, Phone, Mail, FileText, Trash2 } from "lucide-react";
+import { Plus, Search, Edit2, Phone, Mail, FileText, Trash2, BookOpen } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
+import { SupplierLedgerModal } from "./supplier-ledger-modal";
 
 interface Supplier {
   id: string;
@@ -22,6 +23,7 @@ interface Supplier {
   drugLicenseExpiry?: string;
   creditDays?: number;
   creditLimit?: string;
+  outstandingBalance?: string;
   rating: number;
 }
 
@@ -48,6 +50,7 @@ export function SuppliersView() {
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [ledgerSupplier, setLedgerSupplier] = useState<Supplier | null>(null);
   const [isOpen, setIsOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
 
@@ -269,10 +272,29 @@ export function SuppliersView() {
                       )}
                     </p>
                   )}
+                  <p className="flex items-center justify-between pt-1">
+                    <span className="font-semibold text-xs text-slate-400">Outstanding:</span>
+                    <span
+                      className={`text-sm font-bold ${
+                        parseFloat(sup.outstandingBalance ?? "0") > 0
+                          ? "text-red-600"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      ₹{parseFloat(sup.outstandingBalance ?? "0").toFixed(2)}
+                    </span>
+                  </p>
                 </div>
               </div>
 
               <div className="flex items-center justify-end gap-1 pt-4 border-t mt-4">
+                <button
+                  onClick={() => setLedgerSupplier(sup)}
+                  className="p-2 text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-colors rounded-lg"
+                  title="View ledger"
+                >
+                  <BookOpen className="w-4 h-4" />
+                </button>
                 <button
                   onClick={() => openEdit(sup)}
                   className="p-2 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 transition-colors rounded-lg"
@@ -312,188 +334,195 @@ export function SuppliersView() {
       )}
 
       {/* Supplier Modal */}
-      {isOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full border max-h-[90vh] overflow-y-auto p-6">
-            <h3 className="text-lg font-bold mb-4">
-              {editingSupplier ? "Edit Supplier" : "Register Supplier"}
-            </h3>
-            {formError && (
-              <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
-                {formError}
-              </div>
-            )}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Code (Supplier ID) *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="SUP-001"
-                    value={form.code}
-                    onChange={(e) => setForm({ ...form, code: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30 font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Phone *</label>
-                  <input
-                    type="tel"
-                    required
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Email</label>
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Contact Person</label>
-                  <input
-                    type="text"
-                    value={form.contactPerson}
-                    onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Rating (1-5)</label>
-                  <select
-                    value={form.rating}
-                    onChange={(e) => setForm({ ...form, rating: Number(e.target.value) })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  >
-                    {[1, 2, 3, 4, 5].map((r) => (
-                      <option key={r} value={r}>
-                        {"★".repeat(r)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">GSTIN</label>
-                  <input
-                    type="text"
-                    value={form.gstNo}
-                    onChange={(e) => setForm({ ...form, gstNo: e.target.value.toUpperCase() })}
-                    placeholder="22ABCDE1234F1Z5"
-                    className="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">PAN</label>
-                  <input
-                    type="text"
-                    value={form.panNo}
-                    onChange={(e) => setForm({ ...form, panNo: e.target.value.toUpperCase() })}
-                    placeholder="ABCDE1234F"
-                    className="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Drug License No.</label>
-                  <input
-                    type="text"
-                    value={form.drugLicenseNo}
-                    onChange={(e) => setForm({ ...form, drugLicenseNo: e.target.value })}
-                    placeholder="20B / 21B licence"
-                    className="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">License Expiry</label>
-                  <input
-                    type="date"
-                    value={form.drugLicenseExpiry}
-                    onChange={(e) => setForm({ ...form, drugLicenseExpiry: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Credit Days</label>
-                  <input
-                    type="number"
-                    min={0}
-                    max={365}
-                    value={form.creditDays}
-                    onChange={(e) => setForm({ ...form, creditDays: Number(e.target.value) })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Credit Limit (₹)</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={form.creditLimit}
-                    onChange={(e) => setForm({ ...form, creditLimit: e.target.value })}
-                    placeholder="0.00"
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold">Address</label>
-                <textarea
-                  value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-                  rows={2}
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="px-4 py-2 border rounded-lg text-sm font-semibold hover:bg-muted transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-sm"
-                >
-                  {createMutation.isPending || updateMutation.isPending ? "Saving..." : editingSupplier ? "Update" : "Create"}
-                </button>
-              </div>
-            </form>
+      <Modal
+        title={editingSupplier ? "Edit Supplier" : "Register Supplier"}
+        subtitle={editingSupplier ? `Editing supplier: ${editingSupplier.code}` : "Register a new supplier to the procurement catalog"}
+        open={isOpen}
+        onClose={handleClose}
+        size="lg"
+      >
+        {formError && (
+          <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-medium text-red-700 animate-in fade-in">
+            {formError}
           </div>
-        </div>
+        )}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Name *</label>
+              <input
+                type="text"
+                required
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Code (Supplier ID) *</label>
+              <input
+                type="text"
+                required
+                placeholder="SUP-001"
+                value={form.code}
+                onChange={(e) => setForm({ ...form, code: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30 font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Phone *</label>
+              <input
+                type="tel"
+                required
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Email</label>
+              <input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Contact Person</label>
+              <input
+                type="text"
+                value={form.contactPerson}
+                onChange={(e) => setForm({ ...form, contactPerson: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Rating (1-5)</label>
+              <select
+                value={form.rating}
+                onChange={(e) => setForm({ ...form, rating: Number(e.target.value) })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              >
+                {[1, 2, 3, 4, 5].map((r) => (
+                  <option key={r} value={r}>
+                    {"★".repeat(r)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">GSTIN</label>
+              <input
+                type="text"
+                value={form.gstNo}
+                onChange={(e) => setForm({ ...form, gstNo: e.target.value.toUpperCase() })}
+                placeholder="22ABCDE1234F1Z5"
+                className="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">PAN</label>
+              <input
+                type="text"
+                value={form.panNo}
+                onChange={(e) => setForm({ ...form, panNo: e.target.value.toUpperCase() })}
+                placeholder="ABCDE1234F"
+                className="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Drug License No.</label>
+              <input
+                type="text"
+                value={form.drugLicenseNo}
+                onChange={(e) => setForm({ ...form, drugLicenseNo: e.target.value })}
+                placeholder="20B / 21B licence"
+                className="w-full border rounded-lg px-3 py-2 text-sm font-mono bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">License Expiry</label>
+              <input
+                type="date"
+                value={form.drugLicenseExpiry}
+                onChange={(e) => setForm({ ...form, drugLicenseExpiry: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Credit Days</label>
+              <input
+                type="number"
+                min={0}
+                max={365}
+                value={form.creditDays}
+                onChange={(e) => setForm({ ...form, creditDays: Number(e.target.value) })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Credit Limit (₹)</label>
+              <input
+                type="text"
+                inputMode="decimal"
+                value={form.creditLimit}
+                onChange={(e) => setForm({ ...form, creditLimit: e.target.value })}
+                placeholder="0.00"
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">Address</label>
+            <textarea
+              value={form.address}
+              onChange={(e) => setForm({ ...form, address: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              rows={2}
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-3">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-4 py-2 border rounded-lg text-sm font-semibold hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-sm"
+            >
+              {createMutation.isPending || updateMutation.isPending ? "Saving..." : editingSupplier ? "Update" : "Create"}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {ledgerSupplier && (
+        <SupplierLedgerModal
+          supplier={ledgerSupplier}
+          open={!!ledgerSupplier}
+          onClose={() => setLedgerSupplier(null)}
+        />
       )}
     </div>
   );

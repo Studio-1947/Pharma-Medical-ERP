@@ -66,6 +66,10 @@ jobs:
       - name: Run backend tests
         run: pnpm --filter backend test
 
+  # NOTE: migrations are NOT run here. The prod DB has a private IP (VPC-only),
+  # so no GitHub-hosted runner can reach it. Migrations run on container boot
+  # via runMigrations() in backend/src/main.ts, which executes inside the VPC.
+
   deploy-backend:
     name: Deploy Backend
     runs-on: ubuntu-latest

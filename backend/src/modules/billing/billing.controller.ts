@@ -5,8 +5,9 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
-import { 
-  CreateInvoiceDto, 
+import { resolveBranchScope } from "../../common/auth/branch-scope";
+import {
+  CreateInvoiceDto,
   QueryInvoiceDto, 
   VoidInvoiceDto, 
   ReturnInvoiceDto,
@@ -74,7 +75,12 @@ export class BillingController {
   @Get("reports/end-of-day")
   @Roles("admin", "reports_analyst")
   @ApiOperation({ summary: "End-of-day sales summary for a branch" })
-  eod(@Query("branchId") branchId?: string, @Query("date") date?: string) {
-    return this.service.endOfDaySummary(branchId, date);
+  eod(
+    @CurrentUser() user: JwtPayload,
+    @Query("branchId") branchId?: string,
+    @Query("date") date?: string,
+  ) {
+    const scoped = resolveBranchScope(user, branchId);
+    return this.service.endOfDaySummary(scoped, date);
   }
 }

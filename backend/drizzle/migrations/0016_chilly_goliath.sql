@@ -1,0 +1,2 @@
+ALTER TABLE "inventory_batches" ADD COLUMN "is_consignment" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+ALTER TABLE "purchase_order_items" ADD COLUMN "is_consignment" boolean DEFAULT false NOT NULL;

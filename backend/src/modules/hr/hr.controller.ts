@@ -5,12 +5,14 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
+import { resolveBranchScope, requireBranchScope } from "../../common/auth/branch-scope";
 import {
   createEmployeeSchema,
   updateEmployeeSchema,
   queryEmployeeSchema,
   recordAttendanceSchema,
   createLeaveRequestSchema,
+  updateLeaveRequestSchema,
   reviewLeaveSchema,
 } from "@pharmerp/types";
 
@@ -40,15 +42,25 @@ export class HrController {
   @Post("employees")
   @Roles("admin")
   @ApiOperation({ summary: "Create a new employee record" })
-  createEmployee(@Body() body: unknown) {
-    return this.service.createEmployee(createEmployeeSchema.parse(body));
+  createEmployee(@CurrentUser() user: JwtPayload, @Body() body: unknown) {
+    const dto = createEmployeeSchema.parse(body);
+    // Pin to the caller's branch so a branch admin cannot staff another branch.
+    const branchId = requireBranchScope(user, dto.branchId);
+    return this.service.createEmployee({ ...dto, branchId });
   }
 
   @Patch("employees/:id")
   @Roles("admin", "hr_manager")
   @ApiOperation({ summary: "Update employee details" })
-  updateEmployee(@Param("id") id: string, @Body() body: unknown) {
-    return this.service.updateEmployee(id, updateEmployeeSchema.parse(body));
+  updateEmployee(
+    @CurrentUser() user: JwtPayload,
+    @Param("id") id: string,
+    @Body() body: unknown,
+  ) {
+    const dto = updateEmployeeSchema.parse(body);
+    // Reject an attempt to move an employee into a branch the caller can't touch.
+    if (dto.branchId) requireBranchScope(user, dto.branchId);
+    return this.service.updateEmployee(id, dto);
   }
 
   @Delete("employees/:id")
@@ -63,15 +75,25 @@ export class HrController {
   @Get("departments")
   @Roles("admin", "hr_manager", "pharmacist")
   @ApiOperation({ summary: "List departments, optionally filtered by branch" })
-  findAllDepartments(@Query("branchId") branchId?: string) {
-    return this.service.findAllDepartments(branchId);
+  findAllDepartments(
+    @CurrentUser() user: JwtPayload,
+    @Query("branchId") branchId?: string,
+  ) {
+    const scoped = resolveBranchScope(user, branchId);
+    return this.service.findAllDepartments(scoped);
   }
 
   @Post("departments")
   @Roles("admin", "hr_manager")
   @ApiOperation({ summary: "Create a department" })
-  createDepartment(@Body() body: { name: string; branchId: string; managerId?: string }) {
-    return this.service.createDepartment(body);
+  createDepartment(
+    @CurrentUser() user: JwtPayload,
+    @Body() body: { name: string; branchId: string; managerId?: string },
+  ) {
+    // Pin the department to the caller's branch so an hr_manager cannot create
+    // one inside another branch by posting a foreign branchId.
+    const branchId = requireBranchScope(user, body.branchId);
+    return this.service.createDepartment({ ...body, branchId });
   }
 
   // ─── Attendance ───────────────────────────────────────────────────────────────
@@ -107,11 +129,20 @@ export class HrController {
   @Roles("admin", "hr_manager")
   @ApiOperation({ summary: "List leave requests with optional filters" })
   findLeaveRequests(
+    @CurrentUser() user: JwtPayload,
     @Query("employeeId") employeeId?: string,
     @Query("status") status?: string,
     @Query("branchId") branchId?: string,
   ) {
-    return this.service.findLeaveRequests({ employeeId, status, branchId });
+    const scoped = resolveBranchScope(user, branchId);
+    return this.service.findLeaveRequests({ employeeId, status, branchId: scoped });
+  }
+
+  @Patch("leaves/:id")
+  @Roles("admin", "hr_manager")
+  @ApiOperation({ summary: "Edit a pending leave request" })
+  updateLeave(@Param("id") id: string, @Body() body: unknown) {
+    return this.service.updateLeaveRequest(id, updateLeaveRequestSchema.parse(body));
   }
 
   @Patch("leaves/:id/review")

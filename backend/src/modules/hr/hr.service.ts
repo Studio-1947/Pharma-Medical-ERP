@@ -6,6 +6,7 @@ import type {
   QueryEmployeeDto,
   RecordAttendanceDto,
   CreateLeaveRequestDto,
+  UpdateLeaveRequestDto,
   ReviewLeaveDto,
 } from "@pharmerp/types";
 
@@ -90,6 +91,21 @@ export class HrService {
     if (!leave) throw new NotFoundException(`Leave request ${id} not found`);
     await this.repo.deleteLeaveRequest(id);
     return { message: "Leave request deleted" };
+  }
+
+  /** Editable only while still pending — an approved leave is a commitment. */
+  async updateLeaveRequest(id: string, dto: UpdateLeaveRequestDto) {
+    const leave = await this.repo.findLeaveById(id);
+    if (!leave) throw new NotFoundException(`Leave request ${id} not found`);
+
+    if (leave.status !== "pending") {
+      throw new UnprocessableEntityException(
+        `Only pending leave requests can be edited. Current status: ${leave.status}`,
+      );
+    }
+
+    const updated = await this.repo.updateLeaveRequest(id, dto);
+    return { data: updated, message: "Leave request updated" };
   }
 
   async reviewLeave(id: string, dto: ReviewLeaveDto, reviewedBy: string) {

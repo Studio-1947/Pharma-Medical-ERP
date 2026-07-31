@@ -106,6 +106,16 @@ export function PosTerminal() {
     useCartStore.persist.rehydrate();
   }, []);
 
+  // Close print preview on Escape key
+  useEffect(() => {
+    if (!printOpen) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setPrintOpen(false); setLastInvoice(null); }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [printOpen]);
+
 
   const {
     items, addItem, updateQty, toggleUnit, removeItem, clear, totals,
@@ -981,8 +991,8 @@ export function PosTerminal() {
 
       {/* Invoice print preview */}
       {printOpen && lastInvoice && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 print:bg-white print:p-0 print:items-start print:justify-start">
-          <div className="bg-white rounded-xl w-full max-w-xl shadow-2xl max-h-[90vh] flex flex-col print:max-h-none print:shadow-none print:rounded-none">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 print:bg-white print:p-0 print:items-start print:justify-start" onClick={() => { setPrintOpen(false); setLastInvoice(null); }}>
+          <div className="bg-white rounded-xl w-full max-w-xl shadow-2xl max-h-[90vh] flex flex-col print:max-h-none print:shadow-none print:rounded-none" onClick={(e) => e.stopPropagation()}>
 
             {/* Non-print header */}
             <div className="flex items-center justify-between px-6 py-4 border-b print:hidden">

@@ -1,6 +1,6 @@
 {
-  "id": "8a260bb8-2a01-4efe-befb-5def37b582f0",
-  "prevId": "348d049e-2888-40fa-967f-d05b254d1712",
+  "id": "a98aaddf-29cc-4d75-b0e3-e752336b272b",
+  "prevId": "9c971072-2e42-43a7-85c7-cea8e41987ab",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2152,6 +2152,13 @@
           "notNull": true,
           "default": 0
         },
+        "free_qty": {
+          "name": "free_qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "batch_no": {
           "name": "batch_no",
           "type": "varchar(100)",
@@ -2254,6 +2261,20 @@
         },
         "tax_pct": {
           "name": "tax_pct",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "scheme_free_qty": {
+          "name": "scheme_free_qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "discount_pct": {
+          "name": "discount_pct",
           "type": "numeric(5, 2)",
           "primaryKey": false,
           "notNull": true,
@@ -2507,7 +2528,15 @@
           "type": "supplier_payment_method",
           "typeSchema": "public",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "type": {
+          "name": "type",
+          "type": "supplier_payment_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'payment'"
         },
         "reference_no": {
           "name": "reference_no",
@@ -2576,6 +2605,154 @@
           "tableTo": "users",
           "columnsFrom": [
             "paid_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.supplier_returns": {
+      "name": "supplier_returns",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "batch_id": {
+          "name": "batch_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "supplier_return_reason",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'expiry'"
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "supplier_return_outcome",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "credit_note_amount": {
+          "name": "credit_note_amount",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "supplier_payment_id": {
+          "name": "supplier_payment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "replacement_batch_id": {
+          "name": "replacement_batch_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recorded_by": {
+          "name": "recorded_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "supplier_returns_batch_id_inventory_batches_id_fk": {
+          "name": "supplier_returns_batch_id_inventory_batches_id_fk",
+          "tableFrom": "supplier_returns",
+          "tableTo": "inventory_batches",
+          "columnsFrom": [
+            "batch_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "supplier_returns_supplier_payment_id_supplier_payments_id_fk": {
+          "name": "supplier_returns_supplier_payment_id_supplier_payments_id_fk",
+          "tableFrom": "supplier_returns",
+          "tableTo": "supplier_payments",
+          "columnsFrom": [
+            "supplier_payment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "supplier_returns_replacement_batch_id_inventory_batches_id_fk": {
+          "name": "supplier_returns_replacement_batch_id_inventory_batches_id_fk",
+          "tableFrom": "supplier_returns",
+          "tableTo": "inventory_batches",
+          "columnsFrom": [
+            "replacement_batch_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "supplier_returns_recorded_by_users_id_fk": {
+          "name": "supplier_returns_recorded_by_users_id_fk",
+          "tableFrom": "supplier_returns",
+          "tableTo": "users",
+          "columnsFrom": [
+            "recorded_by"
           ],
           "columnsTo": [
             "id"
@@ -3715,6 +3892,32 @@
         "bank_transfer",
         "cheque",
         "upi",
+        "other"
+      ]
+    },
+    "public.supplier_payment_type": {
+      "name": "supplier_payment_type",
+      "schema": "public",
+      "values": [
+        "payment",
+        "credit_note"
+      ]
+    },
+    "public.supplier_return_outcome": {
+      "name": "supplier_return_outcome",
+      "schema": "public",
+      "values": [
+        "pending",
+        "replacement",
+        "credit_note"
+      ]
+    },
+    "public.supplier_return_reason": {
+      "name": "supplier_return_reason",
+      "schema": "public",
+      "values": [
+        "expiry",
+        "damage",
         "other"
       ]
     },

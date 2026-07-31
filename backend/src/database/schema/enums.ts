@@ -85,3 +85,28 @@ export const leaveStatusEnum = pgEnum("leave_status", [
   "rejected",
   "cancelled",
 ]);
+
+export const supplierPaymentMethodEnum = pgEnum("supplier_payment_method", [
+  "cash",
+  "bank_transfer",
+  "cheque",
+  "upi",
+  "other",
+]);
+
+export const supplierPaymentTypeEnum = pgEnum("supplier_payment_type", [
+  "payment",
+  "credit_note",
+]);
+
+export const supplierReturnReasonEnum = pgEnum("supplier_return_reason", [
+  "expiry",
+  "damage",
+  "other",
+]);
+
+export const supplierReturnOutcomeEnum = pgEnum("supplier_return_outcome", [
+  "pending",
+  "replacement",
+  "credit_note",
+]);

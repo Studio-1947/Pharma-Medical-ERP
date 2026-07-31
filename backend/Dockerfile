@@ -24,6 +24,9 @@ FROM node:20-bullseye-slim AS runner
 RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /deploy .
+# Migration SQL is read at boot by runMigrations(); guarantee it's present
+# regardless of what `pnpm deploy` prunes.
+COPY --from=build /app/backend/drizzle ./drizzle
 ENV NODE_ENV=production
 EXPOSE 4000
 CMD ["node", "dist/main"]

@@ -8,6 +8,7 @@ import type {
   QueryEmployeeDto,
   RecordAttendanceDto,
   CreateLeaveRequestDto,
+  UpdateLeaveRequestDto,
   ReviewLeaveDto,
 } from "@pharmerp/types";
 
@@ -233,6 +234,15 @@ export class HrRepository {
     await this.db
       .delete(schema.leaveRequests)
       .where(eq(schema.leaveRequests.id, id));
+  }
+
+  async updateLeaveRequest(id: string, dto: UpdateLeaveRequestDto) {
+    const [updated] = await this.db
+      .update(schema.leaveRequests)
+      .set(dto as any)
+      .where(eq(schema.leaveRequests.id, id))
+      .returning();
+    return updated!;
   }
 
   async reviewLeave(id: string, dto: ReviewLeaveDto, reviewedBy: string) {

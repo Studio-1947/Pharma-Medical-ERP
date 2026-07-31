@@ -1,10 +1,11 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { Plus, Search, Edit2, Shield, Calendar, UserCheck, Trash2 } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
 
 interface Employee {
   id: string;
@@ -104,7 +105,7 @@ export function EmployeesView() {
     setEditingEmp(null);
     setForm({
       userId: users[0]?.id || "",
-      branchId: users[0]?.branchId || "00000000-0000-0000-0000-000000000000",
+      branchId: "",
       employeeCode: "",
       firstName: "",
       lastName: "",
@@ -141,8 +142,23 @@ export function EmployeesView() {
     e.preventDefault();
     if (!form.userId || !form.employeeCode || !form.firstName || !form.lastName) return;
 
+    // An employee belongs to the branch of the user account it wraps. Derive it
+    // rather than defaulting to a placeholder id: a made-up branch would only
+    // fail the foreign key at the server anyway.
+    const selectedUser = users.find((u: any) => u.id === form.userId);
+    const branchId = editingEmp?.branchId ?? selectedUser?.branchId;
+
+    if (!branchId) {
+      toastError(
+        "Cannot save employee",
+        "The selected user account has no branch assigned. Assign a branch to that user first.",
+      );
+      return;
+    }
+
     const payload = {
       ...form,
+      branchId,
       hireDate: form.hireDate || new Date().toISOString().split("T")[0] || "",
     };
 
@@ -272,118 +288,117 @@ export function EmployeesView() {
       )}
 
       {/* Employee Modal */}
-      {isOpen && (
-        <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full border max-h-[90vh] overflow-y-auto p-6">
-            <h3 className="text-lg font-bold mb-4">
-              {editingEmp ? "Edit Employee" : "Create Employee Record"}
-            </h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">User Account *</label>
-                  <select
-                    required
-                    value={form.userId}
-                    onChange={(e) => setForm({ ...form, userId: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
-                  >
-                    {users.map((u: any) => (
-                      <option key={u.id} value={u.id}>
-                        {u.firstName || u.email}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Employee Code *</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="EMP-001"
-                    value={form.employeeCode}
-                    onChange={(e) => setForm({ ...form, employeeCode: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">First Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={form.firstName}
-                    onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Last Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={form.lastName}
-                    onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Hire Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={form.hireDate}
-                    onChange={(e) => setForm({ ...form, hireDate: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-semibold">Base Salary (₹) *</label>
-                  <input
-                    type="text"
-                    required
-                    value={form.baseSalary}
-                    onChange={(e) => setForm({ ...form, baseSalary: e.target.value })}
-                    className="w-full border rounded-lg px-3 py-2 text-sm bg-background font-mono"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-semibold">Designation</label>
-                <input
-                  type="text"
-                  placeholder="Senior Pharmacist"
-                  value={form.designation}
-                  onChange={(e) => setForm({ ...form, designation: e.target.value })}
-                  className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 pt-3">
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  className="px-4 py-2 border rounded-lg text-sm font-semibold hover:bg-muted transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-sm"
-                >
-                  {createMutation.isPending || updateMutation.isPending ? "Saving..." : editingEmp ? "Update" : "Create"}
-                </button>
-              </div>
-            </form>
+      <Modal
+        title={editingEmp ? "Edit Employee" : "Create Employee Record"}
+        subtitle={editingEmp ? `Editing employee: ${editingEmp.employeeCode}` : "Fill in the form to create a new employee"}
+        open={isOpen}
+        onClose={handleClose}
+        size="lg"
+      >
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">User Account *</label>
+              <select
+                required
+                value={form.userId}
+                onChange={(e) => setForm({ ...form, userId: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+              >
+                {users.map((u: any) => (
+                  <option key={u.id} value={u.id}>
+                    {u.firstName || u.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Employee Code *</label>
+              <input
+                type="text"
+                required
+                placeholder="EMP-001"
+                value={form.employeeCode}
+                onChange={(e) => setForm({ ...form, employeeCode: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background font-mono"
+              />
+            </div>
           </div>
-        </div>
-      )}
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">First Name *</label>
+              <input
+                type="text"
+                required
+                value={form.firstName}
+                onChange={(e) => setForm({ ...form, firstName: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Last Name *</label>
+              <input
+                type="text"
+                required
+                value={form.lastName}
+                onChange={(e) => setForm({ ...form, lastName: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Hire Date *</label>
+              <input
+                type="date"
+                required
+                value={form.hireDate}
+                onChange={(e) => setForm({ ...form, hireDate: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">Base Salary (₹) *</label>
+              <input
+                type="text"
+                required
+                value={form.baseSalary}
+                onChange={(e) => setForm({ ...form, baseSalary: e.target.value })}
+                className="w-full border rounded-lg px-3 py-2 text-sm bg-background font-mono"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">Designation</label>
+            <input
+              type="text"
+              placeholder="Senior Pharmacist"
+              value={form.designation}
+              onChange={(e) => setForm({ ...form, designation: e.target.value })}
+              className="w-full border rounded-lg px-3 py-2 text-sm bg-background"
+            />
+          </div>
+
+          <div className="flex justify-end gap-3 pt-3">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="px-4 py-2 border rounded-lg text-sm font-semibold hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-4 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold hover:bg-emerald-700 transition-colors shadow-sm"
+            >
+              {createMutation.isPending || updateMutation.isPending ? "Saving..." : editingEmp ? "Update" : "Create"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

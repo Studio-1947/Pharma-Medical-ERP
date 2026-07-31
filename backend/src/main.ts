@@ -7,8 +7,21 @@ import multipart from "@fastify/multipart";
 import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import { patchNestJsSwagger } from "nestjs-zod";
 import { AppModule } from "./app.module";
+import { runMigrations } from "./database/run-migrations";
 
 async function bootstrap() {
+  // Apply DB migrations before serving. In prod this is the only place with
+  // network access to the private DB, so it can't be done from CI. Runs by
+  // default in production; opt in elsewhere with RUN_MIGRATIONS_ON_BOOT=true,
+  // opt out with RUN_MIGRATIONS_ON_BOOT=false.
+  const shouldMigrate =
+    process.env.RUN_MIGRATIONS_ON_BOOT === "true" ||
+    (process.env.NODE_ENV === "production" &&
+      process.env.RUN_MIGRATIONS_ON_BOOT !== "false");
+  if (shouldMigrate) {
+    await runMigrations();
+  }
+
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     new FastifyAdapter({ logger: process.env.NODE_ENV === "development" }),

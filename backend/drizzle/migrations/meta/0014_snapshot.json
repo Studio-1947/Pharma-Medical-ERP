@@ -1,6 +1,6 @@
 {
-  "id": "8a260bb8-2a01-4efe-befb-5def37b582f0",
-  "prevId": "348d049e-2888-40fa-967f-d05b254d1712",
+  "id": "9c971072-2e42-43a7-85c7-cea8e41987ab",
+  "prevId": "8a260bb8-2a01-4efe-befb-5def37b582f0",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2152,6 +2152,13 @@
           "notNull": true,
           "default": 0
         },
+        "free_qty": {
+          "name": "free_qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "batch_no": {
           "name": "batch_no",
           "type": "varchar(100)",
@@ -2254,6 +2261,20 @@
         },
         "tax_pct": {
           "name": "tax_pct",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "scheme_free_qty": {
+          "name": "scheme_free_qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "discount_pct": {
+          "name": "discount_pct",
           "type": "numeric(5, 2)",
           "primaryKey": false,
           "notNull": true,
