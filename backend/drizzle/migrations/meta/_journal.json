@@ -120,6 +120,13 @@
       "when": 1783799389378,
       "tag": "0016_chilly_goliath",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1785497673886,
+      "tag": "0017_omniscient_dragon_lord",
+      "breakpoints": true
     }
   ]
 }
