@@ -37,8 +37,10 @@ export function resolveBranchScope(
 
 /**
  * Same as resolveBranchScope but for endpoints that cannot operate without a
- * concrete branch (e.g. GST return, ABC analysis). Rejects the super_admin
- * "all branches" case rather than silently reporting across every branch.
+ * concrete branch — either because the answer is meaningless across branches
+ * (GST return, ABC analysis) or because the row being written has to land in
+ * one (a warehouse, a clinic token). Rejects the super_admin "all branches"
+ * case rather than picking a branch on its behalf.
  */
 export function requireBranchScope(
   user: JwtPayload,
@@ -46,7 +48,9 @@ export function requireBranchScope(
 ): string {
   const branchId = resolveBranchScope(user, requestedBranchId);
   if (!branchId) {
-    throw new ForbiddenException("branchId is required for this report");
+    throw new ForbiddenException(
+      "branchId is required - super_admin must select a branch for this action",
+    );
   }
   return branchId;
 }

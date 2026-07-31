@@ -4,8 +4,10 @@ import { UsersService } from "./users.service";
 import { UsersRepository } from "./users.repository";
 import { BranchesController } from "./branches.controller";
 import { BranchesService } from "./branches.service";
+import { AuthModule } from "../auth/auth.module";
 
 @Module({
+  imports: [AuthModule],
   controllers: [UsersController, BranchesController],
   providers: [UsersService, UsersRepository, BranchesService],
   exports: [UsersService],

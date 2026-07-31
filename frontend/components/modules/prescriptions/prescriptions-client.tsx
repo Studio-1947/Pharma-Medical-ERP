@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
+import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import {
   FileText, CheckCircle2, XCircle, Clock, AlertTriangle, Plus, Trash2, Search, Edit2,
@@ -611,7 +612,11 @@ export function PrescriptionsClient() {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const { success: toastSuccess, error: toastError } = useToast();
+  const { can } = usePermissions();
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  // Doctors reach this page to read prescription history; signing one off is a
+  // pharmacist's call, and the API enforces the same split.
+  const canVerify = can("prescriptions.verify");
 
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [page, setPage] = useState(1);
@@ -786,7 +791,7 @@ export function PrescriptionsClient() {
                     <td className="px-6 py-4">{statusBadge(rx.status)}</td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
-                        {rx.status === "pending_verification" && (
+                        {rx.status === "pending_verification" && canVerify && (
                           <button
                             onClick={() => handleOpenVerify(rx)}
                             className="px-3 py-1.5 bg-primary text-primary-foreground rounded-lg text-xs font-medium hover:bg-primary/90 transition-colors"

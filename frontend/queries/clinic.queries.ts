@@ -10,11 +10,15 @@ export function useClinicDoctors() {
   });
 }
 
-export function useClinicTokens(params: Record<string, unknown> = {}) {
+export function useClinicTokens(
+  params: Record<string, unknown> = {},
+  options: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: queryKeys.clinicTokens.list(params),
     queryFn: () => apiClient.get("/clinic/tokens", { params }) as Promise<any>,
     refetchInterval: 15000,
+    enabled: options.enabled ?? true,
   });
 }
 

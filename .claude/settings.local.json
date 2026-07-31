@@ -73,7 +73,19 @@
       "PowerShell(\"=== FRONTEND ===\")",
       "Bash(grep -n \"handleSubmit\\\\|function handle\\\\|form.userId\\\\|setForm\\({ ...form, userId\\\\|createMutation.mutate\\\\|updateMutation.mutate\\\\|select\" frontend/components/modules/hr/employees-view.tsx)",
       "Bash(python3 -)",
-      "Bash(git checkout *)"
+      "Bash(git checkout *)",
+      "Bash(grep -rn *)",
+      "Bash(node -e \"const p=require\\('./backend/package.json'\\);console.log\\(JSON.stringify\\(p.scripts,null,2\\)\\);console.log\\('drizzle-kit:',p.devDependencies&&p.devDependencies['drizzle-kit'],p.dependencies&&p.dependencies['drizzle-kit']\\)\")",
+      "Bash(cd \"c:/Users/soumi/Desktop/Pharma-Medical-ERP\" && git checkout --theirs backend/drizzle/migrations/meta/0013_snapshot.json && git show :3:backend/drizzle/migrations/meta/_journal.json > backend/drizzle/migrations/meta/_journal.json && rm -f backend/drizzle/migrations/0013_omniscient_dragon_lord.sql && git rm --cached backend/drizzle/migrations/0013_omniscient_dragon_lord.sql -q 2>/dev/null; git add backend/drizzle/migrations/meta/0013_snapshot.json backend/drizzle/migrations/meta/_journal.json && git status --short | grep -E \"^\\(UU|AA|U|A U\\)\" ; echo \"conflicts remaining: $\\(git diff --name-only --diff-filter=U | wc -l\\)\")",
+      "Bash(echo \"BUILD_EXIT=$?\")",
+      "Bash(node -e \"const p=require\\('./backend/package.json'\\); const d={...p.dependencies,...p.devDependencies}; console.log\\(JSON.stringify\\(Object.fromEntries\\(Object.entries\\(d\\).filter\\(\\([k]\\)=>/fastify|cookie|passport|jwt|nestjs\\\\/\\(core|common|config\\)/.test\\(k\\)\\)\\),null,2\\)\\)\")",
+      "Bash(echo \"TYPES_BUILD_EXIT=$?\")",
+      "Bash(npx eslint *)",
+      "Bash(node -e \"console.log\\(JSON.stringify\\(require\\('./package.json'\\).scripts,null,2\\)\\)\")",
+      "Bash(node -e \"const p=require\\('./backend/package.json'\\); const d={...p.dependencies,...p.devDependencies}; console.log\\('backend eslint dep:', Object.keys\\(d\\).filter\\(k=>k.includes\\('eslint'\\)\\).join\\(', '\\)||'NONE'\\)\")",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const p=JSON.parse\\(s\\);const d={...p.dependencies,...p.devDependencies};console.log\\('eslint in HEAD backend/package.json:', Object.keys\\(d\\).filter\\(k=>k.includes\\('eslint'\\)\\).join\\(', '\\)||'NONE'\\)}\\)\")",
+      "Bash(echo \"---NEST BUILD EXIT: $?---\")",
+      "Bash(git --no-pager diff --stat HEAD)"
     ]
   }
 }

@@ -42,11 +42,23 @@ export class PrescriptionsService {
   }
 
   async create(dto: CreatePrescriptionDto, currentUser?: { sub: string; role: string }) {
+    // A prescription written by a doctor skips pharmacist verification, so it
+    // must be attributed to the doctor who actually signed in. Taking
+    // doctorName from the request body would let one prescriber issue
+    // pre-verified controlled-drug prescriptions in another's name, which is
+    // exactly what the Schedule H register exists to rule out.
     const autoVerify = currentUser?.role === "doctor";
-    const prescription = await this.repo.create(dto, {
-      autoVerify,
-      verifiedBy: autoVerify ? currentUser?.sub : undefined,
-    });
+    const attribution = autoVerify
+      ? await this.repo.findUserDisplayName(currentUser!.sub)
+      : null;
+
+    const prescription = await this.repo.create(
+      attribution ? { ...dto, doctorName: attribution } : dto,
+      {
+        autoVerify,
+        verifiedBy: autoVerify ? currentUser?.sub : undefined,
+      },
+    );
     return { data: prescription, message: "Prescription created" };
   }
 

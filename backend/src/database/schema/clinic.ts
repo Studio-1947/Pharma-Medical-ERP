@@ -26,6 +26,11 @@ export const clinicTokens = pgTable(
     doctorId: uuid("doctor_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    // Nullable only so the column could be added to an existing table without
+    // destroying rows predating branch scoping; every write path goes through
+    // requireBranchScope, so new rows always carry a branch. Reads treat a null
+    // branch as visible to super_admin alone.
+    branchId: uuid("branch_id"),
     date: date("date").notNull(),
     timeSlot: varchar("time_slot", { length: 50 }),
     status: tokenStatusEnum("status").notNull().default("pending"),
@@ -48,6 +53,7 @@ export const clinicTokens = pgTable(
     ),
     doctorDateIdx: index("clinic_tokens_doctor_date_idx").on(t.doctorId, t.date),
     patientIdx: index("clinic_tokens_patient_idx").on(t.patientId),
+    branchDateIdx: index("clinic_tokens_branch_date_idx").on(t.branchId, t.date),
   }),
 );
 

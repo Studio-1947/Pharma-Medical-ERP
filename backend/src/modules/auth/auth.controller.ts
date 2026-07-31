@@ -14,7 +14,12 @@ import { AuthService } from "./auth.service";
 import { Public, Roles } from "../../common/decorators/roles.decorator";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
-import { loginSchema, registerSchema, refreshTokenSchema } from "@pharmerp/types";
+import {
+  loginSchema,
+  registerSchema,
+  refreshTokenSchema,
+  changePasswordSchema,
+} from "@pharmerp/types";
 
 @ApiTags("auth")
 @Controller("auth")
@@ -48,6 +53,10 @@ export class AuthController {
   }
 
   @Public()
+  // The other unauthenticated credential endpoint, so it gets a budget of its
+  // own rather than inheriting the global 100/min. Generous enough for a
+  // branch's terminals sharing one NAT address to refresh on their own schedule.
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   @Post("refresh")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Rotate refresh token" })
@@ -72,7 +81,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Change current user's password" })
   async changePassword(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
-    const { currentPassword, newPassword } = body as { currentPassword: string; newPassword: string };
+    const { currentPassword, newPassword } = changePasswordSchema.parse(body);
     return this.authService.changePassword(user.sub, currentPassword, newPassword);
   }
 }

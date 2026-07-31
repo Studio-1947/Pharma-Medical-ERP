@@ -27,7 +27,10 @@ export class AuthService {
     // super_admin can create any role except another super_admin
     // admin can only create branch-level roles (not super_admin or admin)
     const requestedRole = dto.role ?? "cashier";
-    const adminOnlyRoles = ["pharmacist", "cashier", "inventory_manager", "distribution_staff", "hr_manager", "reports_analyst"];
+    // Every non-privileged role a branch admin may onboard. `doctor` belongs
+    // here: it is a branch-level clinical role, and leaving it out meant only
+    // super_admin could staff a branch's own clinic.
+    const adminOnlyRoles = ["pharmacist", "cashier", "inventory_manager", "distribution_staff", "hr_manager", "reports_analyst", "doctor"];
 
     if (caller.role === "admin" && !adminOnlyRoles.includes(requestedRole)) {
       throw new ForbiddenException("Admins can only create branch-level staff accounts");
@@ -92,7 +95,10 @@ export class AuthService {
   ) {
     const hash = this.hashToken(rawToken);
     const stored = await this.repo.findValidRefreshToken(hash);
-    if (!stored) throw new UnauthorizedException("Invalid or expired token");
+    if (!stored) {
+      await this.handleRefreshTokenReuse(hash);
+      throw new UnauthorizedException("Invalid or expired token");
+    }
 
     const user = await this.repo.findUserById(stored.userId);
     if (!user || !user.isActive) throw new UnauthorizedException();
@@ -160,6 +166,23 @@ export class AuthService {
       refreshToken: rawRefresh,
       expiresAt,
     };
+  }
+
+  /**
+   * Refresh tokens are single-use: presenting one that has already been rotated
+   * away means either a stale client retry or a stolen token being replayed.
+   * The two are indistinguishable, so the safe reading is theft — the entire
+   * token family is revoked, which logs out both the attacker and the real
+   * user, who then re-authenticates with their password.
+   */
+  private async handleRefreshTokenReuse(hash: string) {
+    const reused = await this.repo.findRefreshTokenByHash(hash);
+    if (!reused) return;
+
+    await this.repo.revokeAllUserTokens(reused.userId);
+    this.logger.warn(
+      `Refresh token reuse detected for user ${reused.userId} - revoked all sessions`,
+    );
   }
 
   private hashToken(raw: string): string {

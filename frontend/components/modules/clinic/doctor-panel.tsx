@@ -467,8 +467,11 @@ export function DoctorPanel() {
   const [date] = useState(localDateString());
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
 
+  // Wait for the signed-in doctor's id before querying. Sending doctorId as
+  // undefined asks for every doctor's queue; the API now pins it to the caller
+  // anyway, but there is no reason to fire a request that can only be wrong.
   const params = { date, doctorId: user?.id, limit: 100 };
-  const { data: tokensRes, isLoading } = useClinicTokens(params);
+  const { data: tokensRes, isLoading } = useClinicTokens(params, { enabled: !!user?.id });
   const tokensRaw = (tokensRes as any)?.data;
   const tokens: any[] = Array.isArray(tokensRaw) ? tokensRaw : Array.isArray(tokensRaw?.data) ? tokensRaw.data : [];
 

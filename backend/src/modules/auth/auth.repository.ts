@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { eq, and, isNull, gt } from "drizzle-orm";
+import { eq, and, isNull, gt, lt } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 
@@ -76,6 +76,22 @@ export class AuthRepository {
         gt(schema.refreshTokens.expiresAt, new Date()),
       ),
     });
+  }
+
+  /** Any token matching the hash, revoked or expired — used to detect reuse. */
+  async findRefreshTokenByHash(tokenHash: string) {
+    return this.db.query.refreshTokens.findFirst({
+      where: eq(schema.refreshTokens.tokenHash, tokenHash),
+    });
+  }
+
+  /** Drops rows that can no longer authenticate anyone. */
+  async deleteExpiredRefreshTokens(now: Date = new Date()) {
+    const deleted = await this.db
+      .delete(schema.refreshTokens)
+      .where(lt(schema.refreshTokens.expiresAt, now))
+      .returning({ id: schema.refreshTokens.id });
+    return deleted.length;
   }
 
   async revokeRefreshToken(id: string) {

@@ -62,6 +62,18 @@ export class PrescriptionsRepository {
     });
   }
 
+  /** Name of the signed-in prescriber, for attributing a prescription to them. */
+  async findUserDisplayName(id: string) {
+    const user = await this.db.query.users.findFirst({
+      columns: { firstName: true, lastName: true, email: true },
+      where: eq(schema.users.id, id),
+    });
+    if (!user) return null;
+    return (
+      [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email
+    );
+  }
+
   async create(
     data: CreatePrescriptionDto,
     opts?: { autoVerify?: boolean; verifiedBy?: string },

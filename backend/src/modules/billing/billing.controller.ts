@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { BillingService } from "./billing.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -27,7 +27,16 @@ export class BillingController {
 
   @Get("invoices")
   @Roles("admin", "pharmacist", "cashier", "reports_analyst", "doctor")
-  findAll(@Query() q: unknown) { return this.service.findAll(queryInvoiceSchema.parse(q)); }
+  findAll(@Query() q: unknown, @CurrentUser() user: JwtPayload) {
+    const query = queryInvoiceSchema.parse(q);
+    // Doctors get this route only to read one patient's billing history inside
+    // a consultation. Without a patient to scope to, the same call returns
+    // every sale in the system, which is not theirs to see.
+    if (user.role === "doctor" && !query.patientId) {
+      throw new ForbiddenException("Doctors must query invoices for a specific patient");
+    }
+    return this.service.findAll(query);
+  }
 
   @Get("invoices/:id")
   @Roles("admin", "pharmacist", "cashier", "doctor")
