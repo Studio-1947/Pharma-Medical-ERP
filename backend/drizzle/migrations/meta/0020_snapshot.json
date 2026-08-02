@@ -1,6 +1,6 @@
 {
-  "id": "8a260bb8-2a01-4efe-befb-5def37b582f0",
-  "prevId": "348d049e-2888-40fa-967f-d05b254d1712",
+  "id": "11a91384-903f-4318-b385-711376187558",
+  "prevId": "bf068127-4dc3-4a58-86b9-c837ce02966d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -316,6 +316,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "manufacture_date": {
+          "name": "manufacture_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false
+        },
         "expiry_date": {
           "name": "expiry_date",
           "type": "date",
@@ -367,6 +373,19 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "supplier_id": {
+          "name": "supplier_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "is_consignment": {
+          "name": "is_consignment",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "created_at": {
           "name": "created_at",
@@ -540,9 +559,39 @@
           "primaryKey": false,
           "notNull": true
         },
+        "brand_name": {
+          "name": "brand_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "generic_name": {
           "name": "generic_name",
-          "type": "varchar(255)",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "composition": {
+          "name": "composition",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "strength": {
+          "name": "strength",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "dosage_form": {
+          "name": "dosage_form",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pack_size": {
+          "name": "pack_size",
+          "type": "varchar(50)",
           "primaryKey": false,
           "notNull": false
         },
@@ -561,6 +610,12 @@
         "category_id": {
           "name": "category_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "therapeutic_class": {
+          "name": "therapeutic_class",
+          "type": "varchar(100)",
           "primaryKey": false,
           "notNull": false
         },
@@ -595,6 +650,12 @@
           "type": "numeric(12, 2)",
           "primaryKey": false,
           "notNull": true
+        },
+        "purchase_rate": {
+          "name": "purchase_rate",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false
         },
         "tax_percent": {
           "name": "tax_percent",
@@ -643,6 +704,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "drawer_mapping": {
+          "name": "drawer_mapping",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "description": {
           "name": "description",
           "type": "text",
@@ -683,6 +750,21 @@
           "columns": [
             {
               "expression": "name",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "medicines_brand_name_idx": {
+          "name": "medicines_brand_name_idx",
+          "columns": [
+            {
+              "expression": "brand_name",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2152,6 +2234,13 @@
           "notNull": true,
           "default": 0
         },
+        "free_qty": {
+          "name": "free_qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
         "batch_no": {
           "name": "batch_no",
           "type": "varchar(100)",
@@ -2258,6 +2347,27 @@
           "primaryKey": false,
           "notNull": true,
           "default": "'0'"
+        },
+        "scheme_free_qty": {
+          "name": "scheme_free_qty",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "discount_pct": {
+          "name": "discount_pct",
+          "type": "numeric(5, 2)",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "is_consignment": {
+          "name": "is_consignment",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
         },
         "line_total": {
           "name": "line_total",
@@ -2507,7 +2617,15 @@
           "type": "supplier_payment_method",
           "typeSchema": "public",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
+        },
+        "type": {
+          "name": "type",
+          "type": "supplier_payment_type",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'payment'"
         },
         "reference_no": {
           "name": "reference_no",
@@ -2587,6 +2705,154 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {}
     },
+    "public.supplier_returns": {
+      "name": "supplier_returns",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "batch_id": {
+          "name": "batch_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "quantity": {
+          "name": "quantity",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "supplier_return_reason",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'expiry'"
+        },
+        "outcome": {
+          "name": "outcome",
+          "type": "supplier_return_outcome",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "credit_note_amount": {
+          "name": "credit_note_amount",
+          "type": "numeric(12, 2)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "supplier_payment_id": {
+          "name": "supplier_payment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "replacement_batch_id": {
+          "name": "replacement_batch_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "recorded_by": {
+          "name": "recorded_by",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "resolved_at": {
+          "name": "resolved_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "supplier_returns_batch_id_inventory_batches_id_fk": {
+          "name": "supplier_returns_batch_id_inventory_batches_id_fk",
+          "tableFrom": "supplier_returns",
+          "tableTo": "inventory_batches",
+          "columnsFrom": [
+            "batch_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "supplier_returns_supplier_payment_id_supplier_payments_id_fk": {
+          "name": "supplier_returns_supplier_payment_id_supplier_payments_id_fk",
+          "tableFrom": "supplier_returns",
+          "tableTo": "supplier_payments",
+          "columnsFrom": [
+            "supplier_payment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "supplier_returns_replacement_batch_id_inventory_batches_id_fk": {
+          "name": "supplier_returns_replacement_batch_id_inventory_batches_id_fk",
+          "tableFrom": "supplier_returns",
+          "tableTo": "inventory_batches",
+          "columnsFrom": [
+            "replacement_batch_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "supplier_returns_recorded_by_users_id_fk": {
+          "name": "supplier_returns_recorded_by_users_id_fk",
+          "tableFrom": "supplier_returns",
+          "tableTo": "users",
+          "columnsFrom": [
+            "recorded_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
     "public.suppliers": {
       "name": "suppliers",
       "schema": "",
@@ -2620,7 +2886,7 @@
           "name": "phone",
           "type": "varchar(20)",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "email": {
           "name": "email",
@@ -3623,6 +3889,218 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {}
+    },
+    "public.clinic_tokens": {
+      "name": "clinic_tokens",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "token_no": {
+          "name": "token_no",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "patient_id": {
+          "name": "patient_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "doctor_id": {
+          "name": "doctor_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "branch_id": {
+          "name": "branch_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "date": {
+          "name": "date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "time_slot": {
+          "name": "time_slot",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "status": {
+          "name": "status",
+          "type": "token_status",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "prescription_id": {
+          "name": "prescription_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "notes": {
+          "name": "notes",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {
+        "clinic_tokens_doctor_date_token_idx": {
+          "name": "clinic_tokens_doctor_date_token_idx",
+          "columns": [
+            {
+              "expression": "doctor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "token_no",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "clinic_tokens_doctor_date_idx": {
+          "name": "clinic_tokens_doctor_date_idx",
+          "columns": [
+            {
+              "expression": "doctor_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "clinic_tokens_patient_idx": {
+          "name": "clinic_tokens_patient_idx",
+          "columns": [
+            {
+              "expression": "patient_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "clinic_tokens_branch_date_idx": {
+          "name": "clinic_tokens_branch_date_idx",
+          "columns": [
+            {
+              "expression": "branch_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "date",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "clinic_tokens_patient_id_patients_id_fk": {
+          "name": "clinic_tokens_patient_id_patients_id_fk",
+          "tableFrom": "clinic_tokens",
+          "tableTo": "patients",
+          "columnsFrom": [
+            "patient_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "clinic_tokens_doctor_id_users_id_fk": {
+          "name": "clinic_tokens_doctor_id_users_id_fk",
+          "tableFrom": "clinic_tokens",
+          "tableTo": "users",
+          "columnsFrom": [
+            "doctor_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "clinic_tokens_prescription_id_prescriptions_id_fk": {
+          "name": "clinic_tokens_prescription_id_prescriptions_id_fk",
+          "tableFrom": "clinic_tokens",
+          "tableTo": "prescriptions",
+          "columnsFrom": [
+            "prescription_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
     }
   },
   "enums": {
@@ -3718,6 +4196,42 @@
         "other"
       ]
     },
+    "public.supplier_payment_type": {
+      "name": "supplier_payment_type",
+      "schema": "public",
+      "values": [
+        "payment",
+        "credit_note"
+      ]
+    },
+    "public.supplier_return_outcome": {
+      "name": "supplier_return_outcome",
+      "schema": "public",
+      "values": [
+        "pending",
+        "replacement",
+        "credit_note"
+      ]
+    },
+    "public.supplier_return_reason": {
+      "name": "supplier_return_reason",
+      "schema": "public",
+      "values": [
+        "expiry",
+        "damage",
+        "other"
+      ]
+    },
+    "public.token_status": {
+      "name": "token_status",
+      "schema": "public",
+      "values": [
+        "pending",
+        "called",
+        "completed",
+        "cancelled"
+      ]
+    },
     "public.transfer_status": {
       "name": "transfer_status",
       "schema": "public",
@@ -3739,7 +4253,8 @@
         "inventory_manager",
         "distribution_staff",
         "hr_manager",
-        "reports_analyst"
+        "reports_analyst",
+        "doctor"
       ]
     },
     "public.notification_type": {

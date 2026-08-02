@@ -134,6 +134,20 @@
       "when": 1785498887060,
       "tag": "0018_clinic_token_branch_scope",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1785647819388,
+      "tag": "0019_inventory_catalogue_fields",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1785650577166,
+      "tag": "0020_batch_supplier_and_optional_supplier_phone",
+      "breakpoints": true
     }
   ]
 }

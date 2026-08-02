@@ -26,25 +26,39 @@ const barcodeSchema = z.preprocess(
     .optional(),
 );
 
+const decimalString = /^\d+(\.\d{1,2})?$/;
+
 export const createMedicineSchema = z.object({
   name: z.string().min(1).max(255),
-  genericName: z.string().max(255).optional(),
+  brandName: z.string().max(255).optional(),
+  // No .max(): backed by a text column — combination products run past 350 chars.
+  genericName: z.string().optional(),
+  composition: z.string().optional(),
+  strength: z.string().optional(),
+  dosageForm: z.string().max(50).optional(),
+  packSize: z.string().max(50).optional(),
   sku: z.string().min(1).max(100),
   barcode: barcodeSchema,
   categoryId: z.string().uuid().optional(),
+  therapeuticClass: z.string().max(100).optional(),
   manufacturer: z.string().max(255).optional(),
   hsnCode: z.string().max(20).optional(),
   unit: z.string().max(50).default("strip"),
   stripSize: z.number().int().min(1).default(1),
-  priceMrp: z.string().regex(/^\d+(\.\d{1,2})?$/, "Must be a valid decimal"),
-  taxPercent: z.string().regex(/^\d+(\.\d{1,2})?$/).default("0"),
+  priceMrp: z.string().regex(decimalString, "Must be a valid decimal"),
+  purchaseRate: z.string().regex(decimalString, "Must be a valid decimal").optional(),
+  taxPercent: z.string().regex(decimalString).default("0"),
   reorderLevel: z.number().int().min(0).default(10),
   reorderQty: z.number().int().min(0).default(50),
   requiresPrescription: z.boolean().default(false),
   isControlled: z.boolean().default(false),
   scheduleClass: z.string().max(10).optional(),
   storageConditions: z.string().max(100).optional(),
+  drawerMapping: z.string().max(50).optional(),
   description: z.string().optional(),
+  // Bulk import parks incompletely-specified products here (no MRP yet) so the
+  // catalogue is complete without them being sellable.
+  isActive: z.boolean().default(true),
 });
 
 export const updateMedicineSchema = createMedicineSchema.partial().omit({});

@@ -25,7 +25,10 @@ export const suppliers = pgTable("suppliers", {
   name: varchar("name", { length: 255 }).notNull(),
   code: varchar("code", { length: 50 }).notNull().unique(),
   contactPerson: varchar("contact_person", { length: 255 }),
-  phone: varchar("phone", { length: 20 }).notNull(),
+  // Nullable at the DB level so a distributor that arrives as a bare name in a
+  // catalogue import can be recorded truthfully instead of with a placeholder
+  // number. createSupplierSchema still requires a phone for manual creation.
+  phone: varchar("phone", { length: 20 }),
   email: varchar("email", { length: 255 }),
   address: text("address"),
   gstNo: varchar("gst_no", { length: 20 }),

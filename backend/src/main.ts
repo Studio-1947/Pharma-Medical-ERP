@@ -24,7 +24,17 @@ async function bootstrap() {
 
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: process.env.NODE_ENV === "development" }),
+    new FastifyAdapter({
+      logger: process.env.NODE_ENV === "development",
+      // Fastify defaults to 1 MB, which rejects the catalogue bulk-import: a
+      // 5.5k-row supplier sheet is ~3.6 MB of JSON. It has to arrive in one
+      // request because the "last row wins" de-duplication needs to see the
+      // whole file at once, so splitting it across requests is not an option.
+      // Set here rather than per-route: Fastify snapshots a route's parser
+      // limit before onRoute hooks run, so mutating it there has no effect.
+      // 16 MB leaves room for roughly 4x the current catalogue.
+      bodyLimit: 16 * 1024 * 1024,
+    }),
   );
 
   await app.register(multipart, {
