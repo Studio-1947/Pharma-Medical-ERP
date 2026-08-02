@@ -41,10 +41,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
     // Password changes revoke refresh tokens; this is what revokes the access
     // tokens already in the wild, which is the whole point of resetting a
-    // password you believe is compromised. `iat` is in seconds.
+    // password you believe is compromised.
+    //
+    // `iat` is whole seconds while passwordChangedAt has millisecond precision,
+    // so a token minted in the same second as the change floors to just before
+    // it. Without the one-second allowance, signing back in immediately after
+    // changing your password hands you a token that is rejected on sight.
     if (
       user.passwordChangedAt &&
-      payload.iat * 1000 < user.passwordChangedAt.getTime()
+      payload.iat * 1000 < user.passwordChangedAt.getTime() - 1000
     ) {
       throw new UnauthorizedException("Password changed - please sign in again");
     }
