@@ -20,6 +20,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
+import { resolveBranchScope } from "../../common/auth/branch-scope";
 import {
   createMedicineSchema,
   updateMedicineSchema,
@@ -38,7 +39,7 @@ export class InventoryController {
   ) {}
 
   @Get()
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @Roles("admin", "pharmacist", "inventory_manager", "cashier", "doctor")
   @ApiOperation({ summary: "List medicines with pagination and search" })
   findAll(@Query() query: unknown) {
     return this.service.findAll(queryMedicineSchema.parse(query));
@@ -66,14 +67,14 @@ export class InventoryController {
   }
 
   @Get(":id")
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @Roles("admin", "pharmacist", "inventory_manager", "cashier", "doctor")
   @ApiOperation({ summary: "Get a medicine by ID" })
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);
   }
 
   @Get(":id/batches")
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @Roles("admin", "pharmacist", "inventory_manager", "cashier", "doctor")
   @ApiOperation({ summary: "FEFO-ordered active batches for dispense" })
   getBatches(@Param("id") id: string) {
     return this.service.getBatchesForDispense(id);
@@ -100,10 +101,23 @@ export class InventoryController {
 
   @Post("bulk-import")
   @Roles("admin", "inventory_manager")
-  @ApiOperation({ summary: "Bulk-import medicines from CSV rows — deduplicates by SKU" })
+  @ApiOperation({
+    summary:
+      "Bulk-import medicines from CSV rows — deduplicates by SKU. Rows carrying " +
+      "Batch_No/Expiry_Date/Stock also load opening stock into the caller's branch.",
+  })
   bulkImport(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
-    const { rows } = body as { rows: Record<string, string>[] };
-    return this.service.bulkImport(rows, user.sub);
+    const { rows, branchId } = body as {
+      rows: Record<string, string>[];
+      branchId?: string;
+    };
+    // A branch user is pinned to their own branch whatever they send, so an
+    // admin of one branch cannot write stock into another's warehouse. Only
+    // super_admin — the one role with no branch of its own, and the one most
+    // likely to run the initial catalogue load — may name the target branch.
+    return this.service.bulkImport(rows, user.sub, {
+      branchId: resolveBranchScope(user, branchId),
+    });
   }
 
   @Post()

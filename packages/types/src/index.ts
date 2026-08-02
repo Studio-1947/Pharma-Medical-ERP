@@ -12,3 +12,4 @@ export * from "./dtos/procurement.dto";
 export * from "./dtos/hr.dto";
 export * from "./dtos/distribution.dto";
 export * from "./dtos/analytics.dto";
+export * from "./dtos/clinic.dto";

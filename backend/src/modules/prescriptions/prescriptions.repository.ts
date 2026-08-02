@@ -62,7 +62,22 @@ export class PrescriptionsRepository {
     });
   }
 
-  async create(data: CreatePrescriptionDto) {
+  /** Name of the signed-in prescriber, for attributing a prescription to them. */
+  async findUserDisplayName(id: string) {
+    const user = await this.db.query.users.findFirst({
+      columns: { firstName: true, lastName: true, email: true },
+      where: eq(schema.users.id, id),
+    });
+    if (!user) return null;
+    return (
+      [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email
+    );
+  }
+
+  async create(
+    data: CreatePrescriptionDto,
+    opts?: { autoVerify?: boolean; verifiedBy?: string },
+  ) {
     return this.db.transaction(async (tx) => {
       const [prescription] = await tx
         .insert(schema.prescriptions)
@@ -76,7 +91,9 @@ export class PrescriptionsRepository {
           notes: data.notes,
           isControlled: data.isControlled ?? false,
           fileUrl: data.fileUrl,
-          status: "pending_verification",
+          status: opts?.autoVerify ? "verified" : "pending_verification",
+          verifiedBy: opts?.autoVerify ? opts.verifiedBy : undefined,
+          verifiedAt: opts?.autoVerify ? new Date() : undefined,
         })
         .returning();
 

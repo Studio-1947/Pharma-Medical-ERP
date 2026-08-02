@@ -6,43 +6,8 @@ import { useState } from "react";
 import { clsx } from "clsx";
 import { useNavigation } from "@/lib/navigation-context";
 import { usePermissions } from "@/hooks/use-permissions";
-import {
-  LayoutDashboard,
-  Package,
-  Receipt,
-  FileText,
-  Users,
-  ShoppingCart,
-  Truck,
-  BarChart2,
-  ClipboardList,
-  Settings,
-  PanelLeftClose,
-  PanelLeftOpen,
-  X,
-} from "lucide-react";
-
-type NavItem = {
-  href: string;
-  label: string;
-  icon: React.ElementType;
-  permission?: Parameters<ReturnType<typeof usePermissions>["can"]>[0];
-  roles?: string[];
-};
-
-const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/billing", label: "Billing & POS", icon: Receipt, permission: "billing.create" },
-  { href: "/inventory", label: "Inventory", icon: Package, permission: "inventory.adjust" },
-  { href: "/prescriptions", label: "Prescriptions", icon: FileText, permission: "prescriptions.verify" },
-  { href: "/patients", label: "Patients", icon: Users, permission: "patients.write" },
-  { href: "/procurement", label: "Procurement", icon: ShoppingCart, permission: "procurement.write" },
-  { href: "/hr", label: "HR Management", icon: Users, permission: "staff.write" },
-  { href: "/distribution", label: "Distribution", icon: Truck, permission: "distribution.write" },
-  { href: "/analytics", label: "Analytics", icon: BarChart2, permission: "reports.view" },
-  { href: "/reports", label: "Reports & Compliance", icon: ClipboardList, permission: "reports.view" },
-  { href: "/settings", label: "Settings", icon: Settings, permission: "users.manage" },
-];
+import { NAV_ITEMS } from "@/lib/nav-items";
+import { PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
 
 interface SidebarProps {
   mobileOpen?: boolean;

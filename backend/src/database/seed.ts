@@ -40,12 +40,13 @@ async function seed() {
 
   // 2. Hash passwords
   console.log("Hashing passwords...");
-  const [rkmcHash, adminHash, pharmHash, cashHash, invHash] = await Promise.all([
+  const [rkmcHash, adminHash, pharmHash, cashHash, invHash, doctorHash] = await Promise.all([
     argon2.hash("RadhaMadhav@123"),
     argon2.hash("Admin@123"),
     argon2.hash("Pharm@123"),
     argon2.hash("Cash@123"),
     argon2.hash("Inv@1234"),
+    argon2.hash("Doctor@123"),
   ]);
 
   // 3. Users
@@ -80,6 +81,14 @@ async function seed() {
       passwordHash: invHash,
       role: "inventory_manager" as const,
       branchId: brn02.id,
+    },
+    {
+      email: "doctor@mederp.com",
+      passwordHash: doctorHash,
+      firstName: "Anjali",
+      lastName: "Rao",
+      role: "doctor" as const,
+      branchId: brn01.id,
     },
   ];
 

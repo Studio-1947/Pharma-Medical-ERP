@@ -14,20 +14,20 @@ export class PatientsController {
   constructor(private readonly service: PatientsService) {}
 
   @Get()
-  @Roles("admin", "pharmacist", "cashier")
+  @Roles("admin", "pharmacist", "cashier", "doctor")
   findAll(@Query() q: unknown) { return this.service.findAll(queryPatientSchema.parse(q)); }
 
   @Get(":id")
-  @Roles("admin", "pharmacist", "cashier")
+  @Roles("admin", "pharmacist", "cashier", "doctor")
   findOne(@Param("id") id: string) { return this.service.findOne(id); }
 
   @Post()
-  @Roles("admin", "pharmacist", "cashier")
+  @Roles("admin", "pharmacist", "cashier", "doctor")
   @ApiOperation({ summary: "Register a new patient" })
   create(@Body() body: unknown) { return this.service.create(createPatientSchema.parse(body)); }
 
   @Patch(":id")
-  @Roles("admin", "pharmacist", "cashier")
+  @Roles("admin", "pharmacist", "cashier", "doctor")
   update(@Param("id") id: string, @Body() body: unknown) { return this.service.update(id, updatePatientSchema.parse(body)); }
 
   @Delete(":id")

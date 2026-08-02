@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import * as argon2 from "argon2";
 import { UsersRepository } from "./users.repository";
+import { AuthRepository } from "../auth/auth.repository";
 import { UpdateUserDto, UserRole } from "@pharmerp/types";
 
 export interface InviteUserDto {
@@ -19,7 +20,10 @@ export interface InviteUserDto {
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly repo: UsersRepository) {}
+  constructor(
+    private readonly repo: UsersRepository,
+    private readonly authRepo: AuthRepository,
+  ) {}
 
   async getAllUsers(search?: string, page = 1, limit = 20) {
     return this.repo.findAll(search, page, limit);
@@ -71,12 +75,18 @@ export class UsersService {
     }
     const user = await this.repo.changeRole(id, role);
     if (!user) throw new NotFoundException("User not found");
+    // Force re-authentication so the new role can't be worked around by
+    // holding on to a session opened under the old one.
+    await this.authRepo.revokeAllUserTokens(id);
     return user;
   }
 
   async deactivateUser(id: string) {
     const user = await this.repo.setActive(id, false);
     if (!user) throw new NotFoundException("User not found");
+    // Close the session outright rather than leaving refresh tokens that only
+    // fail once someone tries to use them.
+    await this.authRepo.revokeAllUserTokens(id);
     return user;
   }
 

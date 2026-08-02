@@ -30,17 +30,38 @@ export const medicines = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     name: varchar("name", { length: 255 }).notNull(),
-    genericName: varchar("generic_name", { length: 255 }),
+    // Marketed brand ("Dolo") as distinct from the full catalogue name
+    // ("Dolo 650 mg Tablet"). Staff search by brand at the counter.
+    brandName: varchar("brand_name", { length: 255 }),
+    // text, not varchar(255): multi-ingredient nutraceuticals run past 350 chars.
+    genericName: text("generic_name"),
+    // Full ingredient list with per-ingredient amounts, e.g.
+    // "Amoxicillin 500 mg + Clavulanic Acid 125 mg". Same length problem.
+    composition: text("composition"),
+    // Headline strength as printed on the pack ("650 mg", "50 mg/500 mg").
+    strength: text("strength"),
+    // Tablet | Injection | Syrup | Cream | ... — free text, not an enum: the
+    // supplier catalogues use ~60 spellings and new forms appear constantly.
+    dosageForm: varchar("dosage_form", { length: 50 }),
+    // Raw pack label as sold ("10x10 Tablets", "1 Prefilled Syringe").
+    // stripSize stays the numeric field billing divides by.
+    packSize: varchar("pack_size", { length: 50 }),
     sku: varchar("sku", { length: 100 }).notNull().unique(),
     barcode: varchar("barcode", { length: 100 }),
     categoryId: uuid("category_id").references(() => medicineCategories.id, {
       onDelete: "set null",
     }),
+    // Pharmacological class ("Cephalosporin Antibiotic"), narrower than the
+    // shelf-level category ("Antibiotics") that categoryId points at.
+    therapeuticClass: varchar("therapeutic_class", { length: 100 }),
     manufacturer: varchar("manufacturer", { length: 255 }),
     hsnCode: varchar("hsn_code", { length: 20 }),
     unit: varchar("unit", { length: 50 }).notNull().default("strip"),
     stripSize: integer("strip_size").notNull().default(1),
     priceMrp: numeric("price_mrp", { precision: 12, scale: 2 }).notNull(),
+    // Catalogue/list cost from the supplier. Nullable and advisory only —
+    // inventory_batches.cost_price is the figure that values actual stock.
+    purchaseRate: numeric("purchase_rate", { precision: 12, scale: 2 }),
     taxPercent: numeric("tax_percent", { precision: 5, scale: 2 })
       .notNull()
       .default("0"),
@@ -52,6 +73,9 @@ export const medicines = pgTable(
     isControlled: boolean("is_controlled").notNull().default(false),
     scheduleClass: varchar("schedule_class", { length: 10 }),
     storageConditions: varchar("storage_conditions", { length: 100 }),
+    // Physical drawer/pigeonhole label for counter pick-up. Distinct from the
+    // batch's storage_locations row, which is warehouse rack addressing.
+    drawerMapping: varchar("drawer_mapping", { length: 50 }),
     description: text("description"),
     isActive: boolean("is_active").notNull().default(true),
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
@@ -64,6 +88,7 @@ export const medicines = pgTable(
   },
   (t) => ({
     nameIdx: index("medicines_name_idx").on(t.name),
+    brandNameIdx: index("medicines_brand_name_idx").on(t.brandName),
     skuIdx: uniqueIndex("medicines_sku_idx").on(t.sku),
     // Partial unique: one live medicine per barcode. NULL barcodes are exempt
     // (many medicines have none), and soft-deleted rows free their barcode.
@@ -112,6 +137,9 @@ export const inventoryBatches = pgTable(
       onDelete: "set null",
     }),
     batchNo: varchar("batch_no", { length: 100 }).notNull(),
+    // Nullable: printed on most Indian packs but absent from older supplier
+    // records, and never required to sell — only expiryDate gates dispensing.
+    manufactureDate: date("manufacture_date"),
     expiryDate: date("expiry_date").notNull(),
     quantity: integer("quantity").notNull().default(0),
     reservedQty: integer("reserved_qty").notNull().default(0),
@@ -120,6 +148,12 @@ export const inventoryBatches = pgTable(
     status: batchStatusEnum("status").notNull().default("active"),
     poId: uuid("po_id"),
     grnId: uuid("grn_id"),
+    // Distributor this stock came from. Normally reachable by joining through
+    // poId, but opening stock loaded from a catalogue import has no purchase
+    // order behind it and would otherwise lose its source entirely.
+    // No FK reference() here: suppliers is defined in procurement.ts, which
+    // already imports this file, and a back-reference would cycle.
+    supplierId: uuid("supplier_id"),
     // Copied from the PO item at receipt time so consignment queries never
     // need to re-join through the PO.
     isConsignment: boolean("is_consignment").notNull().default(false),

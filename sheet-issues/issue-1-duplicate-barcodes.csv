@@ -1,0 +1,22 @@
+Barcode,Sheet_Row,Medicine_ID,Brand_Name,Medicine_Name,Strength,Pack_Size,Manufacturer,Currently_Imported_With_Barcode
+8900003246790,42,MED00041,"Domstal","Domstal 1 mg/ml Drops","1 mg/ml","30 ml Drops","Aristo Pharmaceuticals Pvt Ltd",no
+8900003246790,5512,,"Domstal Baby","Domstal Baby","5ml","5ml Drops","Torrent Pharmaceuticals Pvt Ltd",YES
+8900016154761,205,MED00204,"Ursocol","Ursocol 300 mg Tablet (10 Tablets)","300 mg","10 Tablets","GSK Pharmaceuticals Ltd",no
+8900016154761,5452,,"Livpres-300","Livpres-300","300 mg","15 Tablets","Foregen healthcare Ltd.",no
+8900016154761,5456,,"Usibon-300","Usibon-300","300 mg","10 Tablets","Micro Labs Ltd.",YES
+8900051156744,647,MED00646,"Cardioxin","Cardioxin 0.25 mg Tablet (10 Tablets)","0.25 mg","10 Tablets","Hetero Healthcare Ltd",no
+8900051156744,5482,,"Lanoxin Tablets","Lanoxin Tablets","0.25 mg","10 Tablets","GiaxoSmithKline Pharmaceuticals Ltd.",YES
+8900073646704,931,MED00930,"Hepamerz","Hepamerz 5 g/10 ml Injection","5 g/10 ml","1 Prefilled Syringe","Unichem Laboratories Ltd",no
+8900073646704,5411,,"Hepamerz Sachet","Hepamerz 5g/ Sachet","5 mg","1 Sachet","Win-Medicare Pvt. Ltd.",YES
+8900089009562,1125,MED01124,"Udiliv 300","Udiliv 300 mg Tablet (15 Tablets)","300 mg","15 Tablets","Abbott India Ltd",no
+8900089009562,5415,,"Sorbidiol 300","Sorbidiol 300","300 mg","10 Tablets","Franco  Indian Remidies Pvt. Ltd.",no
+8900089009562,5416,,"Udilex 300","Udilex 300","300 mg","10 Tablets","Farlex Pharmaceuticals Pvt. Ltd.",no
+8900089009562,5417,,"Activile 300","Activile 300","300 mg","10 Tablets","Zydus Healthcare Pvt. Ltd.",YES
+8900160359753,2026,MED02025,"Sibelium 10mg","Sibelium 10 mg Tablet","10 mg","15 Tablets","Encore healthcare Pvt. Ltd",no
+8900160359753,5403,,"Sibelium 5mg","Sibelium 5 mg Tablet","5 mg","30 Tablets","Encore healthcare Pvt. Ltd",YES
+8900200271519,2530,MED02529,"Evion","Evion 400 mg Softgel Capsule (15 Capsules)","400 mg","15 Capsules","Torrent Pharmaceuticals Ltd",no
+8900200271519,5324,,"Evion 600","Evion 600 mg Softgel Capsule (15 Capsules)","600mg","10 Capsules","Torrent Pharmaceuticals Ltd",YES
+8900223474188,2823,MED02822,"Xyzal","Xyzal 2.5 mg/5 ml Syrup (200 ml)","2.5 mg/5 ml","200 ml","Sun Pharmaceutical Industries Ltd",no
+8900223474188,5400,,"Xyzal","Xyzal 5mg","5 mg","15 tablet","Dr. Reddys Laboratories",YES
+8900377815493,4772,MED04771,"Drotin","Drotin 80 mg Tablet (20 Tablets)","80 mg","20 Tablets","Cadila Pharmaceuticals Ltd",no
+8900377815493,5391,,"Drotin-M","Drotin-M","80 mg + 250mg","10 Tablets","Martin & Harris Laboratories Ltd",YES

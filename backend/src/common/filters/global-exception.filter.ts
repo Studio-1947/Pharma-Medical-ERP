@@ -35,6 +35,26 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const pg = exception as any;
       const pgCode: string | undefined = pg.code ?? pg.cause?.code;
 
+      // Fastify rejects malformed requests before the handler runs (empty body
+      // under application/json, bad content-type, payload too large). Those
+      // carry their own 4xx statusCode and are the caller's fault, so passing
+      // them through as 500 both misreports them and hides them in error logs.
+      if (
+        typeof pg.statusCode === "number" &&
+        pg.statusCode >= 400 &&
+        pg.statusCode < 500 &&
+        typeof pgCode === "string" &&
+        pgCode.startsWith("FST_")
+      ) {
+        reply.status(pg.statusCode).send({
+          success: false,
+          message: pg.message,
+          path: request.url,
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
+
       switch (pgCode) {
         case "23505": // unique_violation
           status = HttpStatus.CONFLICT;

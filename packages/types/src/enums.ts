@@ -7,6 +7,7 @@ export const UserRole = {
   DISTRIBUTION_STAFF: "distribution_staff",
   HR_MANAGER: "hr_manager",
   REPORTS_ANALYST: "reports_analyst",
+  DOCTOR: "doctor",
 } as const;
 export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
@@ -87,3 +88,11 @@ export const LeaveStatus = {
   CANCELLED: "cancelled",
 } as const;
 export type LeaveStatus = (typeof LeaveStatus)[keyof typeof LeaveStatus];
+
+export const TokenStatus = {
+  PENDING: "pending",
+  CALLED: "called",
+  COMPLETED: "completed",
+  CANCELLED: "cancelled",
+} as const;
+export type TokenStatus = (typeof TokenStatus)[keyof typeof TokenStatus];
