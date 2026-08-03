@@ -14,10 +14,19 @@ export const userSchema = z.object({
   updatedAt: z.date(),
 });
 
+// `role` was a bare z.string(), which the users repository then wrote straight
+// into the enum column with an `as any`. That accepted both junk values (a
+// driver-level failure) and "super_admin" (a privilege escalation, since the
+// endpoint is open to branch admins). Validate it here; the caller's authority
+// to grant the role is a separate check in common/auth/role-hierarchy.ts.
 export const updateUserSchema = z.object({
   firstName: z.string().min(2).optional(),
   lastName: z.string().min(2).optional(),
-  role: z.string().optional(),
+  role: z
+    .string()
+    .transform((v) => v.trim().toLowerCase())
+    .pipe(z.nativeEnum(UserRole))
+    .optional(),
   branchId: z.string().uuid().nullable().optional(),
   isActive: z.boolean().optional(),
 });

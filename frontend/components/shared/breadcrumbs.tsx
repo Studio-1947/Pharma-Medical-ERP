@@ -19,6 +19,11 @@ const SEGMENT_LABELS: Record<string, string> = {
   notifications: "Notifications",
   settings:      "Settings",
   staff:         "Staff",
+  admin:         "Admin Console",
+  users:         "Users",
+  audit:         "Audit Log",
+  sessions:      "Sessions",
+  data:          "Cross-Branch Data",
 };
 
 function labelFor(segment: string): string {

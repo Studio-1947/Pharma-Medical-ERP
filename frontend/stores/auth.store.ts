@@ -59,6 +59,9 @@ export const useAuthStore = create<AuthState>()(
         if (typeof window !== "undefined") {
           localStorage.removeItem("pharmerp_access_token");
           localStorage.removeItem("pharmerp_refresh_token");
+          // Without this, logging out mid-impersonation would leave the
+          // operator's own refresh token sitting in sessionStorage.
+          sessionStorage.removeItem("pharmerp_impersonation_origin");
           clearSessionCookie();
         }
       },

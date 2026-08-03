@@ -25,6 +25,9 @@ import { JwtStrategy } from "./strategies/jwt.strategy";
   ],
   controllers: [AuthController],
   providers: [AuthService, AuthRepository, JwtStrategy],
-  exports: [AuthService, AuthRepository],
+  // JwtModule is re-exported so ImpersonationService can inject JwtService and
+  // sign a scoped token with the same RS256 key material, rather than a second
+  // module re-reading the private key from config.
+  exports: [AuthService, AuthRepository, JwtModule],
 })
 export class AuthModule {}

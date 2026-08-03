@@ -43,6 +43,24 @@ function processQueue(error: unknown, token: string | null) {
 }
 
 function clearAuthAndRedirect() {
+  // An impersonation session deliberately carries no refresh token, so it
+  // always ends up here when its short-lived access token expires. Restoring
+  // the stashed super_admin session is the correct outcome — signing the
+  // operator out of their own account is not. Dynamic import avoids a module
+  // cycle, since impersonation.ts imports apiClient.
+  if (
+    typeof window !== "undefined" &&
+    sessionStorage.getItem("pharmerp_impersonation_origin")
+  ) {
+    import("./impersonation").then((m) => {
+      // callApi: false — the token is already dead, so the STOP row cannot be
+      // written with it. A missing STOP row means "expired", not "still open".
+      m.stopImpersonation({ callApi: false });
+      window.location.href = "/admin/users";
+    });
+    return;
+  }
+
   localStorage.removeItem("pharmerp_access_token");
   localStorage.removeItem("pharmerp_refresh_token");
   // Clear Zustand auth state so the store doesn't re-set the session cookie
@@ -189,7 +207,19 @@ export const queryKeys = {
   },
   users: {
     all: () => ["users"] as const,
+    list: (params: object) => ["users", "list", params] as const,
     detail: (id: string) => ["users", id] as const,
+  },
+  admin: {
+    all: () => ["admin"] as const,
+    overview: () => ["admin", "overview"] as const,
+    auditLogs: (params: object) => ["admin", "audit-logs", params] as const,
+    auditActions: () => ["admin", "audit-actions"] as const,
+    sessions: (params: object) => ["admin", "sessions", params] as const,
+  },
+  branches: {
+    all: () => ["branches"] as const,
+    detail: (id: string) => ["branches", id] as const,
   },
   prescriptions: {
     all: () => ["prescriptions"] as const,
