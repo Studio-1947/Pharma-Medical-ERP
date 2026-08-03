@@ -26,7 +26,11 @@ export type Action =
   | "branches.manage"
   | "distribution.write"
   | "clinic.tokens"
-  | "clinic.doctor";
+  | "clinic.doctor"
+  // The only super_admin-exclusive grant. Every other Action is held by both
+  // SUPER_ADMIN and ADMIN, whose arrays are otherwise identical — which is why
+  // there was no way to gate a route to super_admin alone before this.
+  | "admin.console";
 
 const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
   [UserRole.SUPER_ADMIN]: [
@@ -35,8 +39,10 @@ const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
     "procurement.write", "procurement.receive", "patients.write",
     "prescriptions.view", "prescriptions.verify", "staff.write", "reports.view",
     "users.manage", "branches.manage", "distribution.write",
-    "clinic.tokens",
+    "clinic.tokens", "admin.console",
   ],
+  // Deliberately NOT granted "admin.console" — a branch admin must not reach
+  // the developer console.
   [UserRole.ADMIN]: [
     "billing.create", "billing.void", "billing.discount.large",
     "inventory.adjust", "inventory.write", "products.write", "products.delete",

@@ -35,8 +35,14 @@ export class AuthService {
     if (caller.role === "admin" && !adminOnlyRoles.includes(requestedRole)) {
       throw new ForbiddenException("Admins can only create branch-level staff accounts");
     }
+    // Deliberately still closed here. This endpoint is branch onboarding and is
+    // callable by `admin`; POST /users/invite is the single audited path that
+    // may mint a super_admin, and it checks caller authority via
+    // common/auth/role-hierarchy.ts rather than a blanket refusal.
     if (requestedRole === "super_admin") {
-      throw new ForbiddenException("super_admin accounts cannot be created via API — use the seed script");
+      throw new ForbiddenException(
+        "super_admin accounts are created from the admin console (POST /users/invite), not this endpoint",
+      );
     }
 
     let targetBranchId = dto.branchId;

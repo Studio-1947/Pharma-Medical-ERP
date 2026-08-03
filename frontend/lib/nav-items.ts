@@ -11,6 +11,7 @@ import {
   Settings,
   Ticket,
   Stethoscope,
+  ShieldAlert,
 } from "lucide-react";
 import type { Action } from "@/hooks/use-permissions";
 
@@ -42,6 +43,10 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/analytics", label: "Analytics", icon: BarChart2, permission: "reports.view" },
   { href: "/reports", label: "Reports & Compliance", icon: ClipboardList, permission: "reports.view" },
   { href: "/settings", label: "Settings", icon: Settings, permission: "users.manage" },
+  // Last on purpose: the developer console sits below the everyday modules.
+  // permissionForPath does a longest-prefix match, so /admin/users, /admin/audit
+  // and every other subroute inherit this gate with no extra registration.
+  { href: "/admin", label: "Admin Console", icon: ShieldAlert, permission: "admin.console" },
 ];
 
 /**

@@ -9,6 +9,8 @@ import { BullModule } from "@nestjs/bull";
 import { DrizzleModule } from "./database/drizzle.module";
 import { AuthModule } from "./modules/auth/auth.module";
 import { UsersModule } from "./modules/users/users.module";
+import { AdminModule } from "./modules/admin/admin.module";
+import { AuditModule } from "./common/audit/audit.module";
 import { InventoryModule } from "./modules/inventory/inventory.module";
 import { BillingModule } from "./modules/billing/billing.module";
 import { PatientsModule } from "./modules/patients/patients.module";
@@ -79,8 +81,10 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
     }),
 
     DrizzleModule,
+    AuditModule,
     AuthModule,
     UsersModule,
+    AdminModule,
     InventoryModule,
     BillingModule,
     PatientsModule,

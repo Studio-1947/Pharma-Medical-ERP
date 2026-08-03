@@ -7,6 +7,7 @@ import { Header } from "@/components/shared/header";
 import { usePermissions } from "@/hooks/use-permissions";
 import { permissionForPath } from "@/lib/nav-items";
 import { useNavigation } from "@/lib/navigation-context";
+import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
 import { ShieldOff } from "lucide-react";
 
 /**
@@ -62,6 +63,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar mobileOpen={mobileNavOpen} onMobileClose={() => setMobileNavOpen(false)} />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Header onMenuClick={() => setMobileNavOpen(true)} />
+        {/* Outside the permission gate on purpose: while impersonating, `role`
+            is the target's, so /admin renders AccessDenied. The Stop button has
+            to stay reachable or the operator is stranded. */}
+        <ImpersonationBanner />
         <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50">
           {allowed ? children : <AccessDenied />}
         </main>

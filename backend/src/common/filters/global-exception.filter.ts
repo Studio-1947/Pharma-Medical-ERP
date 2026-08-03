@@ -70,6 +70,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
             ? `Required field "${pg.column}" is missing`
             : "A required field is missing";
           break;
+        case "22P02":
+          // invalid_text_representation — a bad enum literal or a malformed
+          // uuid reaching the driver. That is client input, so it must not
+          // surface as a 500 with a stack trace attached.
+          status = HttpStatus.BAD_REQUEST;
+          message = "Invalid value for a typed column";
+          break;
         case "42703": // undefined_column
         case "42P01": // undefined_table
           // Schema drift: the running code references a column/table the DB
