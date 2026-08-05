@@ -9,7 +9,7 @@ import {
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { tokenStatusEnum } from "./enums";
 import { patients } from "./billing";
 import { users } from "./auth";
@@ -34,6 +34,13 @@ export const clinicTokens = pgTable(
     date: date("date").notNull(),
     timeSlot: varchar("time_slot", { length: 50 }),
     status: tokenStatusEnum("status").notNull().default("pending"),
+    // Consultation clock. calledAt is stamped when the doctor calls the patient
+    // in, completedAt when the consultation is signed off; the difference is the
+    // consultation duration. Stored rather than derived from updatedAt, which is
+    // rewritten by any later edit (linking a prescription, adding a note) and so
+    // cannot be trusted as a clinical timestamp.
+    calledAt: timestamp("called_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
     prescriptionId: uuid("prescription_id").references(() => prescriptions.id, {
       onDelete: "set null",
     }),
@@ -51,6 +58,12 @@ export const clinicTokens = pgTable(
       t.date,
       t.tokenNo,
     ),
+    // One consultation per doctor per slot. Partial on purpose: `time_slot` is
+    // optional (walk-ins have none, and NULLs would not conflict anyway), and a
+    // cancelled token must release its slot for someone else to book.
+    doctorDateSlotUniq: uniqueIndex("clinic_tokens_doctor_date_slot_uniq")
+      .on(t.doctorId, t.date, t.timeSlot)
+      .where(sql`${t.timeSlot} IS NOT NULL AND ${t.status} <> 'cancelled'`),
     doctorDateIdx: index("clinic_tokens_doctor_date_idx").on(t.doctorId, t.date),
     patientIdx: index("clinic_tokens_patient_idx").on(t.patientId),
     branchDateIdx: index("clinic_tokens_branch_date_idx").on(t.branchId, t.date),

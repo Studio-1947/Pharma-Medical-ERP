@@ -96,8 +96,31 @@ export class ClinicService {
       );
     }
 
+    // A doctor cannot see two patients at once. Nothing enforced this before,
+    // so reception could hand the same 03:00PM slot to any number of patients
+    // and only discover the clash when they were all sitting in the waiting room.
+    if (dto.timeSlot) {
+      const clash = await this.repo.findTokenAtSlot(
+        dto.doctorId,
+        dto.date,
+        dto.timeSlot,
+      );
+      if (clash) {
+        const who = clash.patient?.name ? ` (${clash.patient.name})` : "";
+        throw new UnprocessableEntityException(
+          `${dto.timeSlot} is already booked with this doctor — token #${clash.tokenNo}${who}. Choose another slot.`,
+        );
+      }
+    }
+
     const token = await this.repo.create({ ...dto, branchId });
     return { data: token, message: "Token generated" };
+  }
+
+  /** Slots already taken for a doctor on a date, for the booking form. */
+  async takenSlots(doctorId: string, date: string) {
+    const rows = await this.repo.findTakenSlots(doctorId, date);
+    return { data: rows };
   }
 
   async update(id: string, dto: UpdateClinicTokenDto, user: JwtPayload) {
@@ -126,7 +149,22 @@ export class ClinicService {
       }
     }
 
-    const updated = await this.repo.update(id, dto);
+    // The consultation clock is stamped by the transition, never by the client:
+    // a timestamp the caller could set is not a record of when care happened.
+    // Each is written once — re-calling a patient does not restart the clock,
+    // so the recorded duration stays the full time the patient was with the doctor.
+    const timestamps: { calledAt?: Date; completedAt?: Date } = {};
+    if (dto.status === "called" && !existing.calledAt) {
+      timestamps.calledAt = new Date();
+    }
+    if (dto.status === "completed" && !existing.completedAt) {
+      timestamps.completedAt = new Date();
+      // Completing straight from pending (the doctor never pressed Call) would
+      // otherwise leave no start time and an unmeasurable consultation.
+      if (!existing.calledAt) timestamps.calledAt = new Date();
+    }
+
+    const updated = await this.repo.update(id, { ...dto, ...timestamps });
     return { data: updated, message: "Token updated" };
   }
 

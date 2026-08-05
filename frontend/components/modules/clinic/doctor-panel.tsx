@@ -1,12 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
 import { useClinicTokens, useClinicToken, useUpdateClinicToken } from "@/queries/clinic.queries";
 import { localDateString } from "@/lib/date";
+import {
+  formatClockTime,
+  formatDuration,
+  durationMinutes,
+  elapsedSince,
+} from "@/lib/consultation-time";
 import { PrescriptionScanUpload } from "@/components/modules/prescriptions/prescription-scan-upload";
 import { MedicineAutocomplete, type MedicineOption } from "@/components/modules/prescriptions/medicine-autocomplete";
 import {
@@ -105,6 +111,55 @@ function MedicineRow({
         </button>
       </td>
     </tr>
+  );
+}
+
+// ─── Consultation clock ───────────────────────────────────────────────────────
+
+/**
+ * Start/end of the consultation, and how long it ran.
+ *
+ * While a consultation is in progress the elapsed figure ticks every 30s — a
+ * doctor glancing at it wants to know how long this patient has been in the
+ * room right now, not when the clock was last re-rendered by something else.
+ */
+function ConsultationClock({ token }: { token: any }) {
+  const [now, setNow] = useState(() => Date.now());
+  const running = token.status === "called" && token.calledAt;
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(id);
+  }, [running]);
+
+  const started = formatClockTime(token.calledAt);
+  const ended = formatClockTime(token.completedAt);
+
+  if (!started) {
+    return (
+      <span className="text-[11px] text-muted-foreground">
+        Not started
+      </span>
+    );
+  }
+
+  if (token.completedAt) {
+    const took = formatDuration(durationMinutes(token.calledAt, token.completedAt));
+    return (
+      <span className="text-[11px] text-muted-foreground tabular-nums">
+        {started} – {ended}
+        {took ? ` · ${took}` : ""}
+      </span>
+    );
+  }
+
+  const elapsed = elapsedSince(token.calledAt, now);
+  return (
+    <span className="text-[11px] text-blue-600 font-medium tabular-nums">
+      Started {started}
+      {elapsed ? ` · ${elapsed} elapsed` : ""}
+    </span>
   );
 }
 
@@ -249,13 +304,21 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
             )}
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs px-2 py-1 rounded-full bg-muted font-medium">Token #{token.tokenNo}</span>
-          {token.status === "pending" && (
-            <button onClick={callPatient} disabled={updateMutation.isPending} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors disabled:opacity-50">
-              Call Patient
-            </button>
-          )}
+        <div className="flex flex-col items-end gap-1.5">
+          <div className="flex items-center gap-2">
+            {token.timeSlot && (
+              <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-medium">
+                <Clock size={11} /> {token.timeSlot}
+              </span>
+            )}
+            <span className="text-xs px-2 py-1 rounded-full bg-muted font-medium">Token #{token.tokenNo}</span>
+            {token.status === "pending" && (
+              <button onClick={callPatient} disabled={updateMutation.isPending} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-xs font-medium hover:bg-blue-700 transition-colors disabled:opacity-50">
+                Call Patient
+              </button>
+            )}
+          </div>
+          <ConsultationClock token={token} />
         </div>
       </div>
 
@@ -476,11 +539,25 @@ export function DoctorPanel() {
                           selectedTokenId === t.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"
                         }`}
                       >
-                        <div className="flex items-center justify-between">
+                        <div className="flex items-center justify-between gap-2">
                           <span className="font-semibold text-sm">#{t.tokenNo}</span>
-                          {queueStatusIcon(t.status)}
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {t.timeSlot && (
+                              <span className="text-[10px] text-muted-foreground tabular-nums">
+                                {t.timeSlot}
+                              </span>
+                            )}
+                            {queueStatusIcon(t.status)}
+                          </div>
                         </div>
                         <div className="text-xs text-muted-foreground truncate">{t.patient?.name ?? "--"}</div>
+                        {/* Completed tokens carry how long they took, so the
+                            doctor can see the shape of the day at a glance. */}
+                        {t.status === "completed" && t.calledAt && t.completedAt && (
+                          <div className="text-[10px] text-muted-foreground/80 tabular-nums mt-0.5">
+                            {formatDuration(durationMinutes(t.calledAt, t.completedAt))}
+                          </div>
+                        )}
                       </button>
                     ))}
                   </div>

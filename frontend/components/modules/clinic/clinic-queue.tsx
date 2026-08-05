@@ -14,7 +14,8 @@ import {
   useCreateClinicToken,
   useUpdateClinicToken,
 } from "@/queries/clinic.queries";
-import { Ticket, Plus, Search, Clock, PhoneCall, CheckCircle2, XCircle } from "lucide-react";
+import { Ticket, Plus, Search, Clock, PhoneCall, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { formatClockTime, formatDuration, durationMinutes } from "@/lib/consultation-time";
 
 interface Patient { id: string; name: string; phone: string; }
 interface Doctor { id: string; firstName?: string; lastName?: string; email: string; }
@@ -26,6 +27,10 @@ interface ClinicToken {
   notes?: string;
   patient?: Patient;
   doctor?: Doctor;
+  /** Stamped by the server when the doctor calls the patient in. */
+  calledAt?: string | null;
+  /** Stamped when the consultation is signed off. */
+  completedAt?: string | null;
   createdAt: string;
 }
 
@@ -88,6 +93,24 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
   const createMutation = useCreateClinicToken();
   const { branchId, needsSelection: needsBranchSelection } = useActiveBranchId();
 
+  // Slots this doctor already has booked on the chosen date.
+  const { data: takenRes } = useQuery({
+    queryKey: ["clinic-taken-slots", doctorId, date],
+    queryFn: () =>
+      apiClient.get("/clinic/tokens/taken-slots", {
+        params: { doctorId, date },
+      }) as Promise<any>,
+    enabled: !!doctorId && !!date,
+  });
+  const takenSlots: string[] = (() => {
+    const d = (takenRes as any)?.data ?? takenRes;
+    const rows = Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : [];
+    return rows.map((r: any) => r.timeSlot).filter(Boolean);
+  })();
+  const slotTaken =
+    !!timeSlot.trim() &&
+    takenSlots.some((s) => s.toLowerCase() === timeSlot.trim().toLowerCase());
+
   function reset() {
     setPatientSearch("");
     setSelectedPatient(null);
@@ -111,6 +134,10 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
     // picks one from the header switcher; every other role is pinned server-side.
     if (needsBranchSelection) {
       setFormError("Select an active branch from the header before generating a token.");
+      return;
+    }
+    if (slotTaken) {
+      setFormError(`${timeSlot.trim()} is already booked with this doctor. Choose another slot.`);
       return;
     }
     setFormError(null);
@@ -214,8 +241,21 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
               value={timeSlot}
               onChange={(e) => setTimeSlot(e.target.value)}
               placeholder="10:00 AM - 10:30 AM"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${
+                slotTaken ? "border-red-400 bg-red-50/40" : ""
+              }`}
             />
+            {/* Shown before submit so the clash is caught at the desk rather
+                than by a rejected save after everything else is filled in. */}
+            {slotTaken ? (
+              <p className="text-[11px] text-red-600 flex items-center gap-1">
+                <AlertTriangle size={10} /> Already booked with this doctor. Pick another time.
+              </p>
+            ) : takenSlots.length > 0 ? (
+              <p className="text-[11px] text-muted-foreground">
+                Taken: {takenSlots.join(", ")}
+              </p>
+            ) : null}
           </div>
         </div>
 
@@ -330,6 +370,7 @@ export function ClinicQueue() {
                   <th className="px-6 py-4">Patient</th>
                   <th className="px-6 py-4">Doctor</th>
                   <th className="px-6 py-4">Time Slot</th>
+                  <th className="px-6 py-4">Consultation</th>
                   <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4 text-right">Actions</th>
                 </tr>
@@ -344,6 +385,22 @@ export function ClinicQueue() {
                     </td>
                     <td className="px-6 py-4">{doctorName(t.doctor)}</td>
                     <td className="px-6 py-4 text-muted-foreground">{t.timeSlot ?? "--"}</td>
+                    <td className="px-6 py-4 text-muted-foreground text-xs tabular-nums">
+                      {t.completedAt && t.calledAt ? (
+                        <>
+                          {formatClockTime(t.calledAt)} – {formatClockTime(t.completedAt)}
+                          <span className="block text-[11px] text-muted-foreground/70">
+                            {formatDuration(durationMinutes(t.calledAt, t.completedAt))}
+                          </span>
+                        </>
+                      ) : t.calledAt ? (
+                        <span className="text-blue-600 font-medium">
+                          Started {formatClockTime(t.calledAt)}
+                        </span>
+                      ) : (
+                        "--"
+                      )}
+                    </td>
                     <td className="px-6 py-4">{statusBadge(t.status)}</td>
                     <td className="px-6 py-4 text-right">
                       {(t.status === "pending" || t.status === "called") && (

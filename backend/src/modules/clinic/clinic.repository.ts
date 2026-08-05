@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 import type {
@@ -122,7 +122,15 @@ export class ClinicRepository {
     });
   }
 
-  async update(id: string, data: UpdateClinicTokenDto) {
+  /**
+   * `calledAt`/`completedAt` are not part of UpdateClinicTokenDto on purpose —
+   * they are derived by the service from the status transition, never accepted
+   * from the request body.
+   */
+  async update(
+    id: string,
+    data: UpdateClinicTokenDto & { calledAt?: Date; completedAt?: Date },
+  ) {
     const [token] = await this.db
       .update(schema.clinicTokens)
       .set({ ...data, updatedAt: new Date() })
@@ -189,6 +197,53 @@ export class ClinicRepository {
       columns: { id: true, tokenNo: true },
       where: and(...conditions),
     });
+  }
+
+  /**
+   * The token already occupying a doctor's slot on a date, if any.
+   *
+   * Mirrors clinic_tokens_doctor_date_slot_uniq so the caller can refuse with a
+   * message naming the clash instead of surfacing a raw constraint violation.
+   * Cancelled tokens are excluded — cancelling frees the slot.
+   */
+  async findTokenAtSlot(
+    doctorId: string,
+    date: string,
+    timeSlot: string,
+    excludeTokenId?: string,
+  ) {
+    const conditions = [
+      eq(schema.clinicTokens.doctorId, doctorId),
+      eq(schema.clinicTokens.date, date),
+      eq(schema.clinicTokens.timeSlot, timeSlot),
+      ne(schema.clinicTokens.status, "cancelled"),
+    ];
+    if (excludeTokenId) conditions.push(ne(schema.clinicTokens.id, excludeTokenId));
+
+    return this.db.query.clinicTokens.findFirst({
+      columns: { id: true, tokenNo: true },
+      with: { patient: { columns: { name: true } } },
+      where: and(...conditions),
+    });
+  }
+
+  /** Slots already taken for a doctor on a date, so the UI can grey them out. */
+  async findTakenSlots(doctorId: string, date: string) {
+    const rows = await this.db
+      .select({
+        timeSlot: schema.clinicTokens.timeSlot,
+        tokenNo: schema.clinicTokens.tokenNo,
+      })
+      .from(schema.clinicTokens)
+      .where(
+        and(
+          eq(schema.clinicTokens.doctorId, doctorId),
+          eq(schema.clinicTokens.date, date),
+          ne(schema.clinicTokens.status, "cancelled"),
+          isNotNull(schema.clinicTokens.timeSlot),
+        ),
+      );
+    return rows;
   }
 
   /** Guards against issuing a token to a soft-deleted patient. */
