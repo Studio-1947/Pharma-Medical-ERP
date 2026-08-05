@@ -8,8 +8,9 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import {
   FileText, CheckCircle2, XCircle, Clock, AlertTriangle, Plus, Trash2, Search, Edit2,
-  Image as ImageIcon,
+  UserPlus, Image as ImageIcon,
 } from "lucide-react";
+import { QuickPatientForm } from "@/components/modules/patients/quick-patient-form";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
 import { PrescriptionScanUpload } from "./prescription-scan-upload";
@@ -123,6 +124,8 @@ function CreatePrescriptionModal({
   const [patientSearch, setPatientSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<{ id: string; name: string; phone: string } | null>(null);
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+  /** Inline patient registration, shown in place of the search box. */
+  const [registering, setRegistering] = useState(false);
   const [doctorName, setDoctorName] = useState("");
   const [doctorRegNo, setDoctorRegNo] = useState("");
   const [hospitalName, setHospitalName] = useState("");
@@ -162,6 +165,7 @@ function CreatePrescriptionModal({
   function handleClose() {
     setPatientSearch("");
     setSelectedPatient(null);
+    setRegistering(false);
     // A doctor's own name is not a per-prescription value, so it survives reset.
     setDoctorName(isDoctor && currentDoctorName ? currentDoctorName : "");
     setDoctorRegNo("");
@@ -278,34 +282,72 @@ function CreatePrescriptionModal({
                 Change
               </button>
             </div>
+          ) : registering ? (
+            <QuickPatientForm
+              initialQuery={patientSearch}
+              onCreated={(p) => {
+                setSelectedPatient(p);
+                setRegistering(false);
+                setPatientSearch("");
+                setFormError(null);
+              }}
+              onCancel={() => setRegistering(false)}
+            />
           ) : (
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search by name or phone..."
-                value={patientSearch}
-                onChange={(e) => { setPatientSearch(e.target.value); setShowPatientDropdown(true); }}
-                onFocus={() => setShowPatientDropdown(true)}
-                className="w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              {showPatientDropdown && patients.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {patients.map((p: any) => (
-                    <button
-                      key={p.id}
-                      onClick={() => {
-                        setSelectedPatient({ id: p.id, name: p.name ?? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim(), phone: p.phone });
-                        setShowPatientDropdown(false);
-                        setPatientSearch("");
-                      }}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center justify-between"
-                    >
-                      <span className="font-medium">{p.name ?? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim()}</span>
-                      <span className="text-muted-foreground text-xs">{p.phone}</span>
-                    </button>
-                  ))}
+            <div className="space-y-2">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search by name or phone..."
+                  value={patientSearch}
+                  onChange={(e) => { setPatientSearch(e.target.value); setShowPatientDropdown(true); }}
+                  onFocus={() => setShowPatientDropdown(true)}
+                  className="w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                {showPatientDropdown && patients.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {patients.map((p: any) => (
+                      <button
+                        key={p.id}
+                        onClick={() => {
+                          setSelectedPatient({ id: p.id, name: p.name ?? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim(), phone: p.phone });
+                          setShowPatientDropdown(false);
+                          setPatientSearch("");
+                        }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center justify-between"
+                      >
+                        <span className="font-medium">{p.name ?? `${p.firstName ?? ""} ${p.lastName ?? ""}`.trim()}</span>
+                        <span className="text-muted-foreground text-xs">{p.phone}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Same reason as the token desk: an unregistered walk-in should
+                  not cost the operator the form they have already filled in. */}
+              {patientSearch.trim().length >= 2 && patients.length === 0 ? (
+                <div className="flex items-center justify-between gap-2 border border-dashed rounded-lg px-3 py-2">
+                  <span className="text-xs text-muted-foreground">
+                    No patient matches &quot;{patientSearch.trim()}&quot;.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setRegistering(true)}
+                    className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline shrink-0"
+                  >
+                    <UserPlus size={11} /> Register them
+                  </button>
                 </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setRegistering(true)}
+                  className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                >
+                  <UserPlus size={11} /> New patient
+                </button>
               )}
             </div>
           )}

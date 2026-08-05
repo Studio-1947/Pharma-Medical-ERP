@@ -66,7 +66,15 @@ export class BillingRepository {
   async findById(id: string) {
     return this.db.query.salesInvoices.findFirst({
       where: eq(schema.salesInvoices.id, id),
-      with: { items: { with: { medicine: true } }, patient: true, payments: true },
+      with: {
+        // The batch is joined in because the line stores only batchId. When a
+        // recall lands or a patient reacts, the question is which physical pack
+        // they were handed — that is the batch number and its expiry, and
+        // without this the invoice could not answer it.
+        items: { with: { medicine: true, batch: true } },
+        patient: true,
+        payments: true,
+      },
     });
   }
 

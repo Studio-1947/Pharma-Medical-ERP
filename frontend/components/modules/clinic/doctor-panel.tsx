@@ -15,9 +15,12 @@ import {
 } from "@/lib/consultation-time";
 import { PrescriptionScanUpload } from "@/components/modules/prescriptions/prescription-scan-upload";
 import { MedicineAutocomplete, type MedicineOption } from "@/components/modules/prescriptions/medicine-autocomplete";
+import { PrescriptionDetailModal } from "@/components/modules/prescriptions/prescription-detail-modal";
+import { InvoiceDetailModal } from "@/components/modules/billing/invoice-detail-modal";
 import {
   Stethoscope, Clock, PhoneCall, CheckCircle2, User, AlertTriangle,
-  Plus, Trash2, Upload, FileText, History,
+  Plus, Trash2, Upload, FileText, History, ChevronRight,
+  Image as ImageIcon,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -178,6 +181,9 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
   const [notes, setNotes] = useState("");
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  // History rows open read-only detail views; both are fetched on demand.
+  const [openPrescriptionId, setOpenPrescriptionId] = useState<string | null>(null);
+  const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   const patientId: string | undefined = token?.patient?.id;
@@ -351,21 +357,30 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
               ) : (
                 <div className="space-y-2">
                   {rxHistory.map((rx: any) => (
-                    <div key={rx.id} className="border rounded-lg px-3 py-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="font-medium">{rx.doctorName}</span>
-                        <span className="text-muted-foreground text-xs">
-                          {rx.issuedDate ? format(new Date(rx.issuedDate), "MMM d, yyyy") : ""}
+                    // Opens the full prescription. The list endpoint returns
+                    // header rows only — no items — so the drugs themselves are
+                    // only reachable by fetching the single record.
+                    <button
+                      key={rx.id}
+                      onClick={() => setOpenPrescriptionId(rx.id)}
+                      className="w-full text-left border rounded-lg px-3 py-2 text-sm hover:bg-muted/50 hover:border-primary/30 transition-colors group"
+                    >
+                      <div className="flex justify-between items-center gap-2">
+                        <span className="font-medium truncate">{rx.doctorName}</span>
+                        <span className="flex items-center gap-1.5 shrink-0">
+                          {rx.fileUrl && (
+                            <ImageIcon size={11} className="text-muted-foreground" />
+                          )}
+                          <span className="text-muted-foreground text-xs">
+                            {rx.issuedDate ? format(new Date(rx.issuedDate), "MMM d, yyyy") : ""}
+                          </span>
+                          <ChevronRight
+                            size={13}
+                            className="text-muted-foreground/40 group-hover:text-primary transition-colors"
+                          />
                         </span>
                       </div>
-                      {Array.isArray(rx.items) && rx.items.length > 0 && (
-                        <ul className="mt-1 text-xs text-muted-foreground list-disc list-inside">
-                          {rx.items.map((it: any, i: number) => (
-                            <li key={i}>{it.medicineName} {it.dosage ? `— ${it.dosage}` : ""} {it.frequency ? `— ${it.frequency}` : ""}</li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -377,12 +392,24 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
               ) : (
                 <div className="space-y-2">
                   {invoiceHistory.map((inv: any) => (
-                    <div key={inv.id} className="border rounded-lg px-3 py-2 text-sm flex justify-between">
-                      <span className="font-medium">{inv.invoiceNo}</span>
-                      <span className="text-muted-foreground text-xs">
-                        {inv.createdAt ? format(new Date(inv.createdAt), "MMM d, yyyy") : ""} · ₹{inv.totalAmount}
+                    // Opens the dispensing record: which drugs, and crucially
+                    // which physical batch the patient was given.
+                    <button
+                      key={inv.id}
+                      onClick={() => setOpenInvoiceId(inv.id)}
+                      className="w-full text-left border rounded-lg px-3 py-2 text-sm flex justify-between items-center gap-2 hover:bg-muted/50 hover:border-primary/30 transition-colors group"
+                    >
+                      <span className="font-medium truncate">{inv.invoiceNo}</span>
+                      <span className="flex items-center gap-1.5 shrink-0">
+                        <span className="text-muted-foreground text-xs">
+                          {inv.createdAt ? format(new Date(inv.createdAt), "MMM d, yyyy") : ""} · ₹{inv.totalAmount}
+                        </span>
+                        <ChevronRight
+                          size={13}
+                          className="text-muted-foreground/40 group-hover:text-primary transition-colors"
+                        />
                       </span>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -480,6 +507,19 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
           )}
         </button>
       </div>
+
+      {openPrescriptionId && (
+        <PrescriptionDetailModal
+          prescriptionId={openPrescriptionId}
+          onClose={() => setOpenPrescriptionId(null)}
+        />
+      )}
+      {openInvoiceId && (
+        <InvoiceDetailModal
+          invoiceId={openInvoiceId}
+          onClose={() => setOpenInvoiceId(null)}
+        />
+      )}
     </div>
   );
 }
