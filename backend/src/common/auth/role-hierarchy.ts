@@ -145,7 +145,11 @@ export function assertNotLastSuperAdmin(
   action: "demote" | "deactivate",
 ): void {
   if (target.role !== UserRole.SUPER_ADMIN) return;
-  if (action === "deactivate" && target.isActive === false) return;
+  // An already-inactive super_admin is not part of activeSuperAdminCount, so
+  // neither demoting nor deactivating it can reduce that count. Guarding it
+  // would refuse harmless housekeeping — "demote the disabled super_admin
+  // nobody uses" — with a message claiming it is the last active one.
+  if (target.isActive === false) return;
   if (activeSuperAdminCount > 1) return;
 
   throw new ForbiddenException(

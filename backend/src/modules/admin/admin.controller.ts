@@ -15,6 +15,7 @@ import { Roles } from "../../common/decorators/roles.decorator";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { NoImpersonationGuard } from "../../common/guards/no-impersonation.guard";
+import { AllowWhileImpersonating } from "../../common/decorators/allow-while-impersonating.decorator";
 import {
   CurrentUser,
   JwtPayload,
@@ -129,6 +130,10 @@ export class AdminController {
   // No @Roles: during impersonation the caller's role is the target's, so
   // requiring super_admin here would make it impossible to stop. Authority
   // comes from the `act` claim the service checks.
+  //
+  // The only mutating route exempt from the read-only rule — it has to be
+  // callable from inside the very session it closes.
+  @AllowWhileImpersonating()
   @ApiOperation({ summary: "End the current impersonation session" })
   stopImpersonation(@CurrentUser() caller: JwtPayload, @Req() req: any) {
     return this.impersonation.stop(caller, reqMeta(req));

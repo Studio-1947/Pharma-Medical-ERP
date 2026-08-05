@@ -74,6 +74,7 @@ export function ImpersonationBanner() {
         <span className="truncate">
           Viewing as <strong>{targetName}</strong>
           <span className="opacity-90"> ({state.target.role.replace(/_/g, " ")})</span>
+          <span className="opacity-90"> · read-only</span>
           <span className="opacity-75"> — signed in as {state.actor.email}</span>
         </span>
       </div>

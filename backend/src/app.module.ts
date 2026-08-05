@@ -5,6 +5,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core";
 import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { JwtAuthGuard } from "./common/guards/jwt-auth.guard";
 import { RolesGuard } from "./common/guards/roles.guard";
+import { ImpersonationReadOnlyGuard } from "./common/guards/impersonation-read-only.guard";
 import { BullModule } from "@nestjs/bull";
 import { DrizzleModule } from "./database/drizzle.module";
 import { AuthModule } from "./modules/auth/auth.module";
@@ -105,6 +106,10 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    // Must come after JwtAuthGuard: it reads request.user, which that guard
+    // populates. Global so a route added later is read-only under
+    // impersonation by default rather than by remembering.
+    { provide: APP_GUARD, useClass: ImpersonationReadOnlyGuard },
   ],
 })
 export class AppModule {}
