@@ -348,8 +348,18 @@ export class BatchRepository {
    * medicine each get their own independent FEFO pass over the remaining
    * batch quantities, in the order given.
    */
+  /**
+   * FEFO allocation for a checkout, scoped to the selling branch.
+   *
+   * `branchId` is required, not optional: a till can only dispense packs that
+   * are physically on its own shelves. Without the filter this allocated the
+   * oldest batch anywhere in the company, so a sale at one branch decremented
+   * another branch's stock for a pack that was never in the building — and both
+   * branches' figures were wrong afterwards.
+   */
   async selectBatchesForDispenseMulti(
     needs: { medicineId: string; needed: number }[],
+    branchId: string,
     tx?: any,
   ): Promise<Array<{ batchId: string; batchNo: string; expiryDate: string; allocate: number; mrpAtEntry: string }>[]> {
     const db = tx ?? this.db;
@@ -371,6 +381,7 @@ export class BatchRepository {
           .where(
             and(
               inArray(schema.inventoryBatches.medicineId, medicineIds),
+              eq(schema.inventoryBatches.branchId, branchId),
               eq(schema.inventoryBatches.status, "active"),
               gt(schema.inventoryBatches.quantity, 0),
               gt(schema.inventoryBatches.expiryDate, today),

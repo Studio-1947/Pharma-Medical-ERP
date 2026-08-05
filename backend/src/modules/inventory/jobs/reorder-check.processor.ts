@@ -12,21 +12,37 @@ export class ReorderCheckProcessor {
   constructor(private readonly inventoryRepo: InventoryRepository) {}
 
   /**
-   * Nightly job: finds all medicines at or below reorder level.
-   * In a full implementation this would create draft POs and emit WS events.
+   * Nightly job: finds medicines at or below reorder level, per branch.
+   *
+   * Runs branch by branch because reordering is a branch decision. A single
+   * company-wide sum hides the case this job exists to catch: one branch out of
+   * a drug while another is overstocked nets out above the reorder level, so
+   * the branch that actually needs stock is never flagged.
    */
   @Process("check")
   async handleCheck(_job: Job) {
     this.logger.log("Running reorder level check...");
 
-    const rows = await this.inventoryRepo.getLowStockMedicines();
-    const items = Array.isArray(rows) ? rows : (rows as any).rows ?? [];
+    const branches = await this.inventoryRepo.findActiveBranches();
+    const perBranch: { branchId: string; branchName: string; medicines: unknown[] }[] = [];
 
-    this.logger.log(`Found ${items.length} medicines below reorder level`);
+    for (const branch of branches) {
+      const rows = await this.inventoryRepo.getLowStockMedicines(branch.id);
+      const items = Array.isArray(rows) ? rows : (rows as any).data ?? (rows as any).rows ?? [];
+      if (items.length > 0) {
+        this.logger.log(
+          `${branch.name}: ${items.length} medicines below reorder level`,
+        );
+      }
+      perBranch.push({ branchId: branch.id, branchName: branch.name, medicines: items });
+    }
 
-    // TODO (Phase 3 / procurement): auto-generate draft POs for each low-stock
-    //   medicine that has a preferred supplier configured.
+    const total = perBranch.reduce((sum, b) => sum + b.medicines.length, 0);
+    this.logger.log(`Reorder check complete — ${total} low-stock lines across ${branches.length} branches`);
 
-    return { lowStockCount: items.length, medicines: items };
+    // TODO (Phase 3 / procurement): auto-generate draft POs per branch for each
+    //   low-stock medicine that has a preferred supplier configured.
+
+    return { lowStockCount: total, branches: perBranch };
   }
 }

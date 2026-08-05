@@ -137,10 +137,41 @@ describe("CHECKOUT-01 — OTC drug, single cash payment, no patient", () => {
 
     expect(result.invoice.invoiceNo).toBe("INV-20240115-0001");
     expect(mockRepo.createInvoiceWithItems).toHaveBeenCalledOnce();
+    // The selling branch is passed through to FEFO: a till may only allocate
+    // packs on its own shelves, never another branch's stock.
     expect(mockBatchRepo.selectBatchesForDispenseMulti).toHaveBeenCalledWith(
       [{ medicineId: "med-otc", needed: 2 }],
+      "branch-1",
       tx,
     );
+  });
+
+  it("allocates from the selling branch, not whichever branch holds older stock", async () => {
+    // Regression guard. FEFO used to run unscoped, so a till at one branch was
+    // allocated the company's oldest batch — decrementing another branch's
+    // stock for a pack that was never physically in the building.
+    const { service, mockBatchRepo, buildTx } = buildService();
+
+    const dto = {
+      items: [{ medicineId: "med-otc", quantity: 2, discountPct: "0" }],
+      payments: [{ mode: "cash", amount: "112.00" }],
+    };
+
+    const tx = buildTx([
+      [{ id: "med-otc", name: "Paracetamol", scheduleClass: "OTC", requiresPrescription: false, taxPercent: "12", stripSize: 10, isActive: true }],
+      [{ id: "batch-b2" }],
+    ]);
+    (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-b2", batchNo: "B002", expiryDate: "2027-01-01", allocate: 2, mrpAtEntry: "560.00" }],
+    ]);
+
+    await service.create(dto as any, "staff-2", "branch-2");
+
+    const [, passedBranchId] =
+      mockBatchRepo.selectBatchesForDispenseMulti.mock.calls[0]!;
+    expect(passedBranchId).toBe("branch-2");
+    expect(passedBranchId).not.toBe("branch-1");
   });
 });
 

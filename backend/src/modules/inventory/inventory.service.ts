@@ -583,15 +583,15 @@ export class InventoryService {
     return { created: idsBySku.size, skipped, batchesCreated, errors, warnings };
   }
 
-  getLowStock() {
-    return this.repo.getLowStockMedicines();
+  getLowStock(branchId?: string) {
+    return this.repo.getLowStockMedicines(branchId);
   }
 
-  getBatchesForDispense(medicineId: string) {
-    return this.repo.getActiveBatchesForDispense(medicineId);
+  getBatchesForDispense(medicineId: string, branchId?: string) {
+    return this.repo.getActiveBatchesForDispense(medicineId, branchId);
   }
 
-  getStockValuation(warehouseId?: string) {
-    return this.repo.getStockValuation(warehouseId);
+  getStockValuation(branchId?: string) {
+    return this.repo.getStockValuation(branchId);
   }
 }

@@ -196,6 +196,8 @@ export class BillingService {
       const allAllocations: RawAllocation[] = [];
       const batchAllocationsPerItem = await this.batchRepo.selectBatchesForDispenseMulti(
         dto.items.map(item => ({ medicineId: item.medicineId, needed: item.quantity })),
+        // Only this branch's shelves are sellable from this till.
+        branchId,
         tx,
       );
       dto.items.forEach((item, idx) => {
