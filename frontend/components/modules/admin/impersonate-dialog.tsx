@@ -123,10 +123,10 @@ export function ImpersonateDialog({ open, onClose, user }: Props) {
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5">
           <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
           <p className="text-xs text-amber-800">
-            You will act as this user, with their permissions and their branch.
-            Everything you do is recorded against <strong>your</strong> account
-            in the audit log. Administrative screens stay blocked while
-            impersonating.
+            The session is <strong>read-only</strong>. You will see exactly what
+            this user sees, but nothing can be created, edited or deleted —
+            otherwise the record would name them rather than you. Administrative
+            screens stay blocked, and the session is logged against your account.
           </p>
         </div>
 

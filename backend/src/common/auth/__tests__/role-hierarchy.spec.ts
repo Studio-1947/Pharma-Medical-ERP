@@ -194,4 +194,27 @@ describe("assertNotLastSuperAdmin", () => {
       ),
     ).not.toThrow();
   });
+
+  // An inactive super_admin is not counted in activeSuperAdminCount, so
+  // demoting it cannot strand anyone. Refusing it blocked legitimate cleanup
+  // with a message that was also untrue.
+  it("allows demoting an already-inactive super_admin even when one active remains", () => {
+    expect(() =>
+      assertNotLastSuperAdmin(
+        { id: "t", role: "super_admin", isActive: false },
+        1,
+        "demote",
+      ),
+    ).not.toThrow();
+  });
+
+  it("still blocks demoting the sole ACTIVE super_admin", () => {
+    expect(() =>
+      assertNotLastSuperAdmin(
+        { id: "t", role: "super_admin", isActive: true },
+        1,
+        "demote",
+      ),
+    ).toThrow(ForbiddenException);
+  });
 });

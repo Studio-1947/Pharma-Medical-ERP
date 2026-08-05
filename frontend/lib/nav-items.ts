@@ -61,3 +61,18 @@ export function permissionForPath(pathname: string): Action | undefined {
 
   return match?.permission;
 }
+
+/**
+ * Where a role lands after signing in.
+ *
+ * Everyone used to be sent to /dashboard, but that page is built from sales,
+ * stock and purchasing data a doctor has no grant for — every request 403s and
+ * the doctor's first screen is a wall of empty cards linking to modules they
+ * cannot open. Their working screen is the consultation queue, so send them
+ * straight there.
+ */
+// Return type is left inferred as a literal union: typedRoutes rejects a
+// widened `string` at the router.push call site.
+export function landingPathForRole(role?: string | null) {
+  return role === "doctor" ? "/clinic/doctor" : "/dashboard";
+}

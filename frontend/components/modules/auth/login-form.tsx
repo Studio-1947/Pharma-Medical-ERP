@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { loginSchema, type LoginDto } from "@pharmerp/types";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
+import { landingPathForRole } from "@/lib/nav-items";
 import { Eye, EyeOff, Mail, Lock, AlertCircle } from "lucide-react";
 
 export function LoginForm() {
@@ -27,13 +28,17 @@ export function LoginForm() {
     try {
       const res: any = await apiClient.post("/auth/login", data);
       setTokens(res.accessToken, res.refreshToken);
+      let role: string | undefined;
       try {
         const payload = JSON.parse(atob(res.accessToken.split(".")[1]!));
+        role = payload.role;
         setUser({ id: payload.sub, email: payload.email, role: payload.role, branchId: payload.branchId });
       } catch {
         // Token decode failed — user info will load on next request
       }
-      router.push("/dashboard");
+      // Roles land on the screen they actually work in, not a shared dashboard
+      // they may have no grants for.
+      router.push(landingPathForRole(role));
     } catch (err: any) {
       const errorData = err?.response?.data;
       setError("root", {

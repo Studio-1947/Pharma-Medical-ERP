@@ -5,12 +5,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
-import { useDebounce } from "@/hooks/use-debounce";
 import { useClinicTokens, useClinicToken, useUpdateClinicToken } from "@/queries/clinic.queries";
 import { localDateString } from "@/lib/date";
+import { PrescriptionScanUpload } from "@/components/modules/prescriptions/prescription-scan-upload";
+import { MedicineAutocomplete, type MedicineOption } from "@/components/modules/prescriptions/medicine-autocomplete";
 import {
   Stethoscope, Clock, PhoneCall, CheckCircle2, User, AlertTriangle,
-  Plus, Trash2, Search, Upload, FileText, History,
+  Plus, Trash2, Upload, FileText, History,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -41,52 +42,25 @@ function queueStatusIcon(status: string) {
 function MedicineRow({
   item,
   onChange,
+  onSelectMedicine,
   onRemove,
   removable,
 }: {
   item: RxItem;
   onChange: (patch: Partial<RxItem>) => void;
+  onSelectMedicine: (m: MedicineOption) => void;
   onRemove: () => void;
   removable: boolean;
 }) {
-  const [showDropdown, setShowDropdown] = useState(false);
-  const debouncedName = useDebounce(item.medicineName, 250);
-
-  const { data } = useQuery({
-    queryKey: ["clinic-medicine-search", debouncedName],
-    queryFn: () => apiClient.get("/inventory/medicines", { params: { search: debouncedName, limit: 8 } }) as Promise<any>,
-    enabled: debouncedName.length >= 2 && !item.medicineId,
-  });
-  const raw = data as any;
-  const results: any[] = Array.isArray(raw?.data?.data) ? raw.data.data : Array.isArray(raw?.data) ? raw.data : [];
-
   return (
     <tr>
-      <td className="px-2 py-1.5 relative">
-        <input
-          type="text"
+      <td className="px-2 py-1.5">
+        <MedicineAutocomplete
           value={item.medicineName}
-          onChange={(e) => { onChange({ medicineName: e.target.value, medicineId: undefined }); setShowDropdown(true); }}
-          onFocus={() => setShowDropdown(true)}
-          placeholder="Search medicine..."
-          className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+          linked={!!item.medicineId}
+          onChange={(text) => onChange({ medicineName: text, medicineId: undefined })}
+          onSelect={onSelectMedicine}
         />
-        {showDropdown && results.length > 0 && (
-          <div className="absolute z-10 left-2 right-2 mt-1 bg-white border rounded-lg shadow-lg max-h-40 overflow-y-auto">
-            {results.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => { onChange({ medicineName: m.name, medicineId: m.id }); setShowDropdown(false); }}
-                className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted/50 transition-colors flex items-center justify-between"
-              >
-                <span className="font-medium">{m.name}</span>
-                {m.scheduleType && m.scheduleType !== "otc" && (
-                  <span className="text-[10px] px-1 py-0.5 rounded bg-orange-100 text-orange-700">{m.scheduleType}</span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
       </td>
       <td className="px-2 py-1.5">
         <input
@@ -148,7 +122,6 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
   const [isControlled, setIsControlled] = useState(false);
   const [notes, setNotes] = useState("");
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -177,26 +150,21 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
   function updateItem(idx: number, patch: Partial<RxItem>) {
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   }
+
+  function selectMedicine(idx: number, m: MedicineOption) {
+    setItems((prev) => {
+      const next = prev.map((it, i) =>
+        i === idx
+          ? { ...it, medicineId: m.id, medicineName: m.name, dosage: it.dosage || m.strength || "" }
+          : it,
+      );
+      // Spare row kept ready so a multi-drug prescription is one continuous pass.
+      return idx === prev.length - 1 ? [...next, blankItem()] : next;
+    });
+  }
+
   function addItem() { setItems((prev) => [...prev, blankItem()]); }
   function removeItem(idx: number) { setItems((prev) => prev.filter((_, i) => i !== idx)); }
-
-  async function handleUpload(file: File) {
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res: any = await apiClient.post("/prescriptions/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      const key = res?.key ?? res?.data?.key;
-      setUploadedUrl(key);
-      toastSuccess("Scan uploaded");
-    } catch (err: any) {
-      toastError("Upload failed", err?.response?.data?.message);
-    } finally {
-      setUploading(false);
-    }
-  }
 
   async function callPatient() {
     await updateMutation.mutateAsync({ status: "called" });
@@ -379,6 +347,7 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
                       key={idx}
                       item={item}
                       onChange={(patch) => updateItem(idx, patch)}
+                      onSelectMedicine={(m) => selectMedicine(idx, m)}
                       onRemove={() => removeItem(idx)}
                       removable={items.length > 1}
                     />
@@ -413,24 +382,16 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
 
         {activeTab === "scan" && (
           <div className="space-y-4">
-            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl px-6 py-10 text-center cursor-pointer hover:bg-muted/40 transition-colors">
-              <Upload className="text-muted-foreground" size={28} />
-              <span className="text-sm font-medium">{uploading ? "Uploading..." : "Click to upload or capture a prescription scan"}</span>
-              <span className="text-xs text-muted-foreground">JPG or PNG</span>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }}
-                disabled={uploading}
-              />
-            </label>
-            {uploadedUrl && (
-              <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                <CheckCircle2 size={14} /> Scan uploaded and attached to this consultation.
-              </div>
-            )}
+            <p className="text-sm text-muted-foreground">
+              Wrote this prescription by hand? Photograph the paper slip and it
+              is attached to the consultation for the pharmacist to read.
+            </p>
+            <PrescriptionScanUpload
+              value={uploadedUrl}
+              onChange={setUploadedUrl}
+              variant="full"
+              disabled={isTerminal}
+            />
           </div>
         )}
       </div>

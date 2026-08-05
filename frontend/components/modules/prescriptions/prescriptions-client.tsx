@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
@@ -8,9 +8,14 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import {
   FileText, CheckCircle2, XCircle, Clock, AlertTriangle, Plus, Trash2, Search, Edit2,
+  Image as ImageIcon,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
+import { PrescriptionScanUpload } from "./prescription-scan-upload";
+import { PrescriptionScanViewer } from "./prescription-scan-viewer";
+import { MedicineAutocomplete, type MedicineOption } from "./medicine-autocomplete";
+import { useCurrentDoctor } from "@/hooks/use-current-doctor";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,10 +32,14 @@ interface Prescription {
   status: string;
   isControlled?: boolean;
   notes?: string;
+  /** S3 key of the uploaded handwritten scan, when one was attached. */
+  fileUrl?: string | null;
   createdAt: string;
 }
 
 interface RxItem {
+  /** Set once the row is pinned to a catalogue medicine; absent for free text. */
+  medicineId?: string;
   medicineName: string;
   dosage: string;
   frequency: string;
@@ -110,6 +119,7 @@ function CreatePrescriptionModal({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const { isDoctor, name: currentDoctorName } = useCurrentDoctor();
   const [patientSearch, setPatientSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<{ id: string; name: string; phone: string } | null>(null);
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
@@ -121,7 +131,14 @@ function CreatePrescriptionModal({
   const [notes, setNotes] = useState("");
   const [isControlled, setIsControlled] = useState(false);
   const [items, setItems] = useState<RxItem[]>([blankItem()]);
+  const [scanKey, setScanKey] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // A doctor prescribes as themselves; the server enforces this regardless, so
+  // the field is filled in and locked rather than left to be typed over.
+  useEffect(() => {
+    if (isDoctor && currentDoctorName) setDoctorName(currentDoctorName);
+  }, [isDoctor, currentDoctorName]);
 
   const { data: patientResults } = useQuery({
     queryKey: ["patient-search", patientSearch],
@@ -145,7 +162,8 @@ function CreatePrescriptionModal({
   function handleClose() {
     setPatientSearch("");
     setSelectedPatient(null);
-    setDoctorName("");
+    // A doctor's own name is not a per-prescription value, so it survives reset.
+    setDoctorName(isDoctor && currentDoctorName ? currentDoctorName : "");
     setDoctorRegNo("");
     setHospitalName("");
     setIssuedDate(new Date().toISOString().split("T")[0]);
@@ -153,12 +171,42 @@ function CreatePrescriptionModal({
     setNotes("");
     setIsControlled(false);
     setItems([blankItem()]);
+    setScanKey(null);
     setFormError(null);
     onClose();
   }
 
   function handleItemChange(idx: number, field: keyof RxItem, value: string | number) {
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
+  }
+
+  /** Typing by hand unpins the row from the catalogue entry it used to match. */
+  function handleNameChange(idx: number, text: string) {
+    setItems((prev) =>
+      prev.map((item, i) => (i === idx ? { ...item, medicineName: text, medicineId: undefined } : item)),
+    );
+  }
+
+  function handleMedicineSelect(idx: number, m: MedicineOption) {
+    setItems((prev) => {
+      const next = prev.map((item, i) =>
+        i === idx
+          ? {
+              ...item,
+              medicineId: m.id,
+              medicineName: m.name,
+              // Strength is the dosage in all but name; pre-filling it saves the
+              // prescriber retyping "500mg" they just selected. Never overwrite
+              // a dosage they already entered.
+              dosage: item.dosage || m.strength || "",
+            }
+          : item,
+      );
+      // Keep a spare row ready so a multi-drug prescription is one continuous
+      // pass instead of a click on "Add Medicine" between every entry.
+      const isLast = idx === prev.length - 1;
+      return isLast ? [...next, blankItem()] : next;
+    });
   }
 
   function addItem() { setItems((prev) => [...prev, blankItem()]); }
@@ -169,17 +217,26 @@ function CreatePrescriptionModal({
     if (!doctorName.trim()) { setFormError("Doctor name is required."); return; }
     if (!issuedDate) { setFormError("Issue date is required."); return; }
     if (!expiryDate) { setFormError("Expiry date is required."); return; }
-    setFormError(null);
 
     const rxItems = items
       .filter((i) => i.medicineName.trim())
       .map((i) => ({
+        medicineId: i.medicineId,
         medicineName: i.medicineName.trim(),
         dosage: i.dosage || undefined,
         frequency: i.frequency || undefined,
         duration: i.duration || undefined,
         quantityPrescribed: i.quantityPrescribed !== "" ? Number(i.quantityPrescribed) : undefined,
       }));
+
+    // A handwritten prescription is captured as an image with no typed rows, so
+    // either form of content is enough on its own — but a record with neither is
+    // an empty prescription the pharmacist cannot dispense against.
+    if (rxItems.length === 0 && !scanKey) {
+      setFormError("Add at least one medicine or upload a scan of the prescription.");
+      return;
+    }
+    setFormError(null);
 
     mutation.mutate({
       patientId: selectedPatient.id,
@@ -190,6 +247,7 @@ function CreatePrescriptionModal({
       expiryDate,
       notes: notes.trim() || undefined,
       isControlled,
+      fileUrl: scanKey ?? undefined,
       items: rxItems.length > 0 ? rxItems : undefined,
     });
   }
@@ -261,9 +319,17 @@ function CreatePrescriptionModal({
               type="text"
               value={doctorName}
               onChange={(e) => setDoctorName(e.target.value)}
+              readOnly={isDoctor}
               placeholder="Dr. Name"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${
+                isDoctor ? "bg-slate-50 text-slate-600 cursor-not-allowed" : ""
+              }`}
             />
+            {isDoctor && (
+              <p className="text-xs text-muted-foreground">
+                Prescriptions you create are recorded under your own name.
+              </p>
+            )}
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium">Doctor Reg. No.</label>
@@ -364,12 +430,12 @@ function CreatePrescriptionModal({
                 {items.map((item, idx) => (
                   <tr key={idx}>
                     <td className="px-2 py-1.5">
-                      <input
-                        type="text"
+                      <MedicineAutocomplete
                         value={item.medicineName}
-                        onChange={(e) => handleItemChange(idx, "medicineName", e.target.value)}
-                        placeholder="Medicine name"
-                        className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                        linked={!!item.medicineId}
+                        onChange={(text) => handleNameChange(idx, text)}
+                        onSelect={(m) => handleMedicineSelect(idx, m)}
+                        placeholder="Type to search medicines..."
                       />
                     </td>
                     <td className="px-2 py-1.5">
@@ -425,6 +491,18 @@ function CreatePrescriptionModal({
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* Handwritten prescription scan */}
+        <div className="space-y-2">
+          <div>
+            <label className="text-sm font-medium">Prescription Scan</label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              For handwritten prescriptions — photograph the paper slip. The
+              pharmacist reads this when verifying.
+            </p>
+          </div>
+          <PrescriptionScanUpload value={scanKey} onChange={setScanKey} />
         </div>
 
         {formError && (
@@ -617,11 +695,15 @@ export function PrescriptionsClient() {
   // Doctors reach this page to read prescription history; signing one off is a
   // pharmacist's call, and the API enforces the same split.
   const canVerify = can("prescriptions.verify");
+  // PATCH /prescriptions/:id is admin+pharmacist only; showing the pencil to a
+  // doctor or cashier just produced a 403 when they clicked Save.
+  const canEdit = can("prescriptions.edit");
 
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [page, setPage] = useState(1);
   const [verifyingPrescription, setVerifyingPrescription] = useState<Prescription | null>(null);
   const [editingPrescription, setEditingPrescription] = useState<Prescription | null>(null);
+  const [viewingScan, setViewingScan] = useState<Prescription | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [verifyError, setVerifyError] = useState("");
@@ -799,13 +881,24 @@ export function PrescriptionsClient() {
                             Verify
                           </button>
                         )}
-                        <button
-                          onClick={() => setEditingPrescription(rx)}
-                          className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-primary"
-                          title="Edit prescription"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
+                        {rx.fileUrl && (
+                          <button
+                            onClick={() => setViewingScan(rx)}
+                            className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-primary"
+                            title="View handwritten prescription scan"
+                          >
+                            <ImageIcon className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canEdit && (
+                          <button
+                            onClick={() => setEditingPrescription(rx)}
+                            className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-primary"
+                            title="Edit prescription"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        )}
                         {isAdmin && (
                           confirmDeleteId === rx.id ? (
                             <span className="flex items-center gap-1">
@@ -875,6 +968,15 @@ export function PrescriptionsClient() {
         />
       )}
 
+      {/* Handwritten scan viewer */}
+      {viewingScan && (
+        <PrescriptionScanViewer
+          prescriptionId={viewingScan.id}
+          patientName={viewingScan.patient?.name}
+          onClose={() => setViewingScan(null)}
+        />
+      )}
+
       {/* Verify Modal */}
       <Modal
         title="Review Prescription"
@@ -928,6 +1030,18 @@ export function PrescriptionsClient() {
                 </div>
               )}
             </div>
+
+            {/* A handwritten prescription carries its content in the image, not
+                in the typed rows, so verification is guesswork without it. */}
+            {verifyingPrescription.fileUrl && (
+              <button
+                type="button"
+                onClick={() => setViewingScan(verifyingPrescription)}
+                className="flex items-center justify-center gap-2 w-full px-4 py-2.5 border border-primary/30 bg-primary/5 text-primary rounded-lg text-sm font-medium hover:bg-primary/10 transition-colors"
+              >
+                <ImageIcon size={14} /> View handwritten prescription scan
+              </button>
+            )}
 
             <div className="space-y-1">
               <label className="text-sm font-medium">
