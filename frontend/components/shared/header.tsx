@@ -6,6 +6,7 @@ import { useAuthStore } from "@/stores/auth.store";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { LogOut, Bell, Menu } from "lucide-react";
 import { Breadcrumbs } from "@/components/shared/breadcrumbs";
+import { BranchSwitcher } from "@/components/shared/branch-switcher";
 import { useNavigation } from "@/lib/navigation-context";
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
@@ -57,6 +58,9 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
       </div>
 
       <div className="flex items-center gap-2 shrink-0">
+        {/* Active branch — renders for super_admin only */}
+        <BranchSwitcher />
+
         {/* Notifications */}
         <button
           onClick={() => navigate("/notifications")}
