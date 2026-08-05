@@ -14,7 +14,8 @@ import {
   useCreateClinicToken,
   useUpdateClinicToken,
 } from "@/queries/clinic.queries";
-import { Ticket, Plus, Search, Clock, PhoneCall, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
+import { Ticket, Plus, Search, Clock, PhoneCall, CheckCircle2, XCircle, AlertTriangle, UserPlus } from "lucide-react";
+import { QuickPatientForm } from "@/components/modules/patients/quick-patient-form";
 import { formatClockTime, formatDuration, durationMinutes } from "@/lib/consultation-time";
 
 interface Patient { id: string; name: string; phone: string; }
@@ -73,6 +74,8 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
   const [patientSearch, setPatientSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
+  /** Inline patient registration, shown in place of the search box. */
+  const [registering, setRegistering] = useState(false);
   const [doctorId, setDoctorId] = useState("");
   const [date, setDate] = useState(localDateString());
   const [timeSlot, setTimeSlot] = useState("");
@@ -114,6 +117,7 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
   function reset() {
     setPatientSearch("");
     setSelectedPatient(null);
+    setRegistering(false);
     setDoctorId("");
     setDate(localDateString());
     setTimeSlot("");
@@ -181,30 +185,70 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
                 Change
               </button>
             </div>
+          ) : registering ? (
+            <QuickPatientForm
+              initialQuery={patientSearch}
+              onCreated={(p) => {
+                setSelectedPatient(p);
+                setRegistering(false);
+                setPatientSearch("");
+                setFormError(null);
+              }}
+              onCancel={() => setRegistering(false)}
+            />
           ) : (
-            <div className="relative">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Search by name or phone..."
-                value={patientSearch}
-                onChange={(e) => { setPatientSearch(e.target.value); setShowPatientDropdown(true); }}
-                onFocus={() => setShowPatientDropdown(true)}
-                className="w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-              {showPatientDropdown && patients.length > 0 && (
-                <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                  {patients.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => { setSelectedPatient(p); setShowPatientDropdown(false); setPatientSearch(""); }}
-                      className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center justify-between"
-                    >
-                      <span className="font-medium">{p.name}</span>
-                      <span className="text-muted-foreground text-xs">{p.phone}</span>
-                    </button>
-                  ))}
+            <div className="space-y-2">
+              <div className="relative">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <input
+                  type="text"
+                  placeholder="Search by name or phone..."
+                  value={patientSearch}
+                  onChange={(e) => { setPatientSearch(e.target.value); setShowPatientDropdown(true); }}
+                  onFocus={() => setShowPatientDropdown(true)}
+                  className="w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                {showPatientDropdown && patients.length > 0 && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {patients.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => { setSelectedPatient(p); setShowPatientDropdown(false); setPatientSearch(""); }}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center justify-between"
+                      >
+                        <span className="font-medium">{p.name}</span>
+                        <span className="text-muted-foreground text-xs">{p.phone}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* A walk-in is usually not on file. Registering inline keeps the
+                  rest of the token form intact — leaving for the Patients
+                  screen loses it. The no-results case is called out explicitly
+                  because that is when the desk needs this. */}
+              {debouncedPatientSearch.length >= 2 && patients.length === 0 ? (
+                <div className="flex items-center justify-between gap-2 border border-dashed rounded-lg px-3 py-2">
+                  <span className="text-xs text-muted-foreground">
+                    No patient matches &quot;{patientSearch.trim()}&quot;.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setRegistering(true)}
+                    className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline shrink-0"
+                  >
+                    <UserPlus size={11} /> Register them
+                  </button>
                 </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setRegistering(true)}
+                  className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                >
+                  <UserPlus size={11} /> New patient
+                </button>
               )}
             </div>
           )}
