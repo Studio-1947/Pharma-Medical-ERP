@@ -290,14 +290,35 @@ export const stockMovementsRelations = relations(stockMovements, ({ one }) => ({
   }),
 }));
 
-export const systemAlerts = pgTable("system_alerts", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  type: varchar("type", { length: 50 }).notNull(), // 'EXPIRY', 'REORDER', 'SYSTEM'
-  message: text("message").notNull(),
-  isRead: boolean("is_read").notNull().default(false),
-  referenceId: uuid("reference_id"), // medicineId, batchId, etc.
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+export const systemAlerts = pgTable(
+  "system_alerts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    type: varchar("type", { length: 50 }).notNull(), // 'EXPIRY', 'REORDER', 'SYSTEM'
+    message: text("message").notNull(),
+    isRead: boolean("is_read").notNull().default(false),
+    referenceId: uuid("reference_id"), // medicineId, batchId, etc.
+    // Branch the alert concerns. Nullable on purpose: a genuinely system-wide
+    // alert ('SYSTEM') belongs to no branch and should reach everyone, whereas
+    // stock alerts are only actionable by the branch holding the stock.
+    branchId: uuid("branch_id").references(() => branches.id, {
+      onDelete: "cascade",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    branchUnreadIdx: index("system_alerts_branch_unread_idx").on(
+      t.branchId,
+      t.isRead,
+    ),
+    // Keeps a nightly job from re-raising the same alert every night: while an
+    // alert is still unread it is a no-op, and once dismissed the next scan may
+    // legitimately raise it again.
+    openAlertUniq: uniqueIndex("system_alerts_open_uniq")
+      .on(t.type, t.referenceId, t.branchId)
+      .where(sql`${t.isRead} = false AND ${t.referenceId} IS NOT NULL`),
+  }),
+);
 

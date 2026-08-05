@@ -34,12 +34,14 @@ export class ClinicService {
   constructor(private readonly repo: ClinicRepository) {}
 
   /**
-   * Rejects a token that belongs to another branch. `branchId` is null only on
-   * rows predating branch scoping, which stay visible to super_admin alone.
+   * Rejects a token that belongs to another branch.
+   *
+   * `branchId` is NOT NULL as of 0023, so the old "a null branch is visible to
+   * super_admin alone" carve-out is gone — every token now names its branch.
    */
-  private assertInBranch(token: { branchId: string | null }, user: JwtPayload) {
+  private assertInBranch(token: { branchId: string }, user: JwtPayload) {
     if (user.role === "super_admin") return;
-    if (!token.branchId || token.branchId !== user.branchId) {
+    if (token.branchId !== user.branchId) {
       throw new ForbiddenException("You can only access data for your own branch");
     }
   }

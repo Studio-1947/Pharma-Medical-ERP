@@ -12,6 +12,7 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { tokenStatusEnum } from "./enums";
 import { patients } from "./billing";
+import { branches } from "./branches";
 import { users } from "./auth";
 import { prescriptions } from "./prescriptions";
 
@@ -26,11 +27,13 @@ export const clinicTokens = pgTable(
     doctorId: uuid("doctor_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    // Nullable only so the column could be added to an existing table without
-    // destroying rows predating branch scoping; every write path goes through
-    // requireBranchScope, so new rows always carry a branch. Reads treat a null
-    // branch as visible to super_admin alone.
-    branchId: uuid("branch_id"),
+    // A token is issued at a branch and belongs to that branch's queue. Was
+    // nullable while the column was being introduced; every row has since been
+    // backfilled, so the "null branch is visible to super_admin alone" special
+    // case is gone and reads no longer have to reason about it.
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
     date: date("date").notNull(),
     timeSlot: varchar("time_slot", { length: 50 }),
     status: tokenStatusEnum("status").notNull().default("pending"),
