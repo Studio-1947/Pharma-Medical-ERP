@@ -21,6 +21,8 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { apiClient } from "@/lib/api-client";
+import { usePermissions } from "@/hooks/use-permissions";
+import { DoctorDashboard } from "@/components/modules/dashboard/doctor-dashboard";
 
 function fmt(n: number) {
   if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
@@ -135,6 +137,33 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 };
 
 export default function DashboardPage() {
+  const { role } = usePermissions();
+
+  // `role` is empty until the auth store rehydrates from localStorage. Rendering
+  // the pharmacy dashboard in that window would fire four requests a doctor is
+  // not allowed to make, then swap the screen out from under them.
+  if (!role) return <DashboardSkeleton />;
+  if (role === "doctor") return <DoctorDashboard />;
+
+  return <PharmacyDashboard />;
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6 animate-pulse">
+      <div className="h-9 w-56 bg-slate-100 rounded-lg" />
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        {[1, 2, 3, 4].map((i) => <div key={i} className="h-28 bg-slate-100 rounded-2xl" />)}
+      </div>
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+        <div className="xl:col-span-2 h-72 bg-slate-100 rounded-2xl" />
+        <div className="h-72 bg-slate-100 rounded-2xl" />
+      </div>
+    </div>
+  );
+}
+
+function PharmacyDashboard() {
   const { navigate } = useNavigation();
   const today = new Date().toISOString().split("T")[0];
 

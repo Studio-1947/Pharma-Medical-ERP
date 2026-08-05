@@ -8,9 +8,10 @@ import { useToast } from "@/components/ui/toast";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useClinicTokens, useClinicToken, useUpdateClinicToken } from "@/queries/clinic.queries";
 import { localDateString } from "@/lib/date";
+import { PrescriptionScanUpload } from "@/components/modules/prescriptions/prescription-scan-upload";
 import {
   Stethoscope, Clock, PhoneCall, CheckCircle2, User, AlertTriangle,
-  Plus, Trash2, Search, Upload, FileText, History,
+  Plus, Trash2, Upload, FileText, History,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -148,7 +149,6 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
   const [isControlled, setIsControlled] = useState(false);
   const [notes, setNotes] = useState("");
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -179,24 +179,6 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
   }
   function addItem() { setItems((prev) => [...prev, blankItem()]); }
   function removeItem(idx: number) { setItems((prev) => prev.filter((_, i) => i !== idx)); }
-
-  async function handleUpload(file: File) {
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res: any = await apiClient.post("/prescriptions/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      const key = res?.key ?? res?.data?.key;
-      setUploadedUrl(key);
-      toastSuccess("Scan uploaded");
-    } catch (err: any) {
-      toastError("Upload failed", err?.response?.data?.message);
-    } finally {
-      setUploading(false);
-    }
-  }
 
   async function callPatient() {
     await updateMutation.mutateAsync({ status: "called" });
@@ -413,24 +395,16 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
 
         {activeTab === "scan" && (
           <div className="space-y-4">
-            <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl px-6 py-10 text-center cursor-pointer hover:bg-muted/40 transition-colors">
-              <Upload className="text-muted-foreground" size={28} />
-              <span className="text-sm font-medium">{uploading ? "Uploading..." : "Click to upload or capture a prescription scan"}</span>
-              <span className="text-xs text-muted-foreground">JPG or PNG</span>
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                className="hidden"
-                onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); }}
-                disabled={uploading}
-              />
-            </label>
-            {uploadedUrl && (
-              <div className="flex items-center gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
-                <CheckCircle2 size={14} /> Scan uploaded and attached to this consultation.
-              </div>
-            )}
+            <p className="text-sm text-muted-foreground">
+              Wrote this prescription by hand? Photograph the paper slip and it
+              is attached to the consultation for the pharmacist to read.
+            </p>
+            <PrescriptionScanUpload
+              value={uploadedUrl}
+              onChange={setUploadedUrl}
+              variant="full"
+              disabled={isTerminal}
+            />
           </div>
         )}
       </div>

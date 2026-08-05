@@ -8,9 +8,12 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import {
   FileText, CheckCircle2, XCircle, Clock, AlertTriangle, Plus, Trash2, Search, Edit2,
+  Image as ImageIcon,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
+import { PrescriptionScanUpload } from "./prescription-scan-upload";
+import { PrescriptionScanViewer } from "./prescription-scan-viewer";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -27,6 +30,8 @@ interface Prescription {
   status: string;
   isControlled?: boolean;
   notes?: string;
+  /** S3 key of the uploaded handwritten scan, when one was attached. */
+  fileUrl?: string | null;
   createdAt: string;
 }
 
@@ -121,6 +126,7 @@ function CreatePrescriptionModal({
   const [notes, setNotes] = useState("");
   const [isControlled, setIsControlled] = useState(false);
   const [items, setItems] = useState<RxItem[]>([blankItem()]);
+  const [scanKey, setScanKey] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
   const { data: patientResults } = useQuery({
@@ -153,6 +159,7 @@ function CreatePrescriptionModal({
     setNotes("");
     setIsControlled(false);
     setItems([blankItem()]);
+    setScanKey(null);
     setFormError(null);
     onClose();
   }
@@ -169,7 +176,6 @@ function CreatePrescriptionModal({
     if (!doctorName.trim()) { setFormError("Doctor name is required."); return; }
     if (!issuedDate) { setFormError("Issue date is required."); return; }
     if (!expiryDate) { setFormError("Expiry date is required."); return; }
-    setFormError(null);
 
     const rxItems = items
       .filter((i) => i.medicineName.trim())
@@ -181,6 +187,15 @@ function CreatePrescriptionModal({
         quantityPrescribed: i.quantityPrescribed !== "" ? Number(i.quantityPrescribed) : undefined,
       }));
 
+    // A handwritten prescription is captured as an image with no typed rows, so
+    // either form of content is enough on its own — but a record with neither is
+    // an empty prescription the pharmacist cannot dispense against.
+    if (rxItems.length === 0 && !scanKey) {
+      setFormError("Add at least one medicine or upload a scan of the prescription.");
+      return;
+    }
+    setFormError(null);
+
     mutation.mutate({
       patientId: selectedPatient.id,
       doctorName: doctorName.trim(),
@@ -190,6 +205,7 @@ function CreatePrescriptionModal({
       expiryDate,
       notes: notes.trim() || undefined,
       isControlled,
+      fileUrl: scanKey ?? undefined,
       items: rxItems.length > 0 ? rxItems : undefined,
     });
   }
@@ -427,6 +443,18 @@ function CreatePrescriptionModal({
           </div>
         </div>
 
+        {/* Handwritten prescription scan */}
+        <div className="space-y-2">
+          <div>
+            <label className="text-sm font-medium">Prescription Scan</label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              For handwritten prescriptions — photograph the paper slip. The
+              pharmacist reads this when verifying.
+            </p>
+          </div>
+          <PrescriptionScanUpload value={scanKey} onChange={setScanKey} />
+        </div>
+
         {formError && (
           <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">
             <AlertTriangle size={14} /> {formError}
@@ -617,11 +645,15 @@ export function PrescriptionsClient() {
   // Doctors reach this page to read prescription history; signing one off is a
   // pharmacist's call, and the API enforces the same split.
   const canVerify = can("prescriptions.verify");
+  // PATCH /prescriptions/:id is admin+pharmacist only; showing the pencil to a
+  // doctor or cashier just produced a 403 when they clicked Save.
+  const canEdit = can("prescriptions.edit");
 
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [page, setPage] = useState(1);
   const [verifyingPrescription, setVerifyingPrescription] = useState<Prescription | null>(null);
   const [editingPrescription, setEditingPrescription] = useState<Prescription | null>(null);
+  const [viewingScan, setViewingScan] = useState<Prescription | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [verifyError, setVerifyError] = useState("");
@@ -799,13 +831,24 @@ export function PrescriptionsClient() {
                             Verify
                           </button>
                         )}
-                        <button
-                          onClick={() => setEditingPrescription(rx)}
-                          className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-primary"
-                          title="Edit prescription"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
+                        {rx.fileUrl && (
+                          <button
+                            onClick={() => setViewingScan(rx)}
+                            className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-primary"
+                            title="View handwritten prescription scan"
+                          >
+                            <ImageIcon className="w-4 h-4" />
+                          </button>
+                        )}
+                        {canEdit && (
+                          <button
+                            onClick={() => setEditingPrescription(rx)}
+                            className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-primary"
+                            title="Edit prescription"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                        )}
                         {isAdmin && (
                           confirmDeleteId === rx.id ? (
                             <span className="flex items-center gap-1">
@@ -875,6 +918,15 @@ export function PrescriptionsClient() {
         />
       )}
 
+      {/* Handwritten scan viewer */}
+      {viewingScan && (
+        <PrescriptionScanViewer
+          prescriptionId={viewingScan.id}
+          patientName={viewingScan.patient?.name}
+          onClose={() => setViewingScan(null)}
+        />
+      )}
+
       {/* Verify Modal */}
       <Modal
         title="Review Prescription"
@@ -928,6 +980,18 @@ export function PrescriptionsClient() {
                 </div>
               )}
             </div>
+
+            {/* A handwritten prescription carries its content in the image, not
+                in the typed rows, so verification is guesswork without it. */}
+            {verifyingPrescription.fileUrl && (
+              <button
+                type="button"
+                onClick={() => setViewingScan(verifyingPrescription)}
+                className="flex items-center justify-center gap-2 w-full px-4 py-2.5 border border-primary/30 bg-primary/5 text-primary rounded-lg text-sm font-medium hover:bg-primary/10 transition-colors"
+              >
+                <ImageIcon size={14} /> View handwritten prescription scan
+              </button>
+            )}
 
             <div className="space-y-1">
               <label className="text-sm font-medium">

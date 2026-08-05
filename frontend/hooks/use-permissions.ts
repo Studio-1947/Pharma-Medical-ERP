@@ -20,6 +20,9 @@ export type Action =
   // front of doctors that the API rejects with a 403.
   | "prescriptions.view"
   | "prescriptions.verify"
+  // Amending a prescription after the fact is a pharmacist/admin correction.
+  // A doctor writes a new one instead, matching @Roles on PATCH /prescriptions/:id.
+  | "prescriptions.edit"
   | "staff.write"
   | "reports.view"
   | "users.manage"
@@ -37,7 +40,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
     "billing.create", "billing.void", "billing.discount.large",
     "inventory.adjust", "inventory.write", "products.write", "products.delete",
     "procurement.write", "procurement.receive", "patients.write",
-    "prescriptions.view", "prescriptions.verify", "staff.write", "reports.view",
+    "prescriptions.view", "prescriptions.verify", "prescriptions.edit",
+    "staff.write", "reports.view",
     "users.manage", "branches.manage", "distribution.write",
     "clinic.tokens", "admin.console",
   ],
@@ -47,13 +51,14 @@ const ROLE_PERMISSIONS: Record<UserRole, Action[]> = {
     "billing.create", "billing.void", "billing.discount.large",
     "inventory.adjust", "inventory.write", "products.write", "products.delete",
     "procurement.write", "procurement.receive", "patients.write",
-    "prescriptions.view", "prescriptions.verify", "staff.write", "reports.view",
+    "prescriptions.view", "prescriptions.verify", "prescriptions.edit",
+    "staff.write", "reports.view",
     "users.manage", "branches.manage", "distribution.write",
     "clinic.tokens",
   ],
   [UserRole.PHARMACIST]: [
     "billing.create", "patients.write",
-    "prescriptions.view", "prescriptions.verify",
+    "prescriptions.view", "prescriptions.verify", "prescriptions.edit",
     "inventory.adjust", "reports.view",
   ],
   [UserRole.CASHIER]: [
