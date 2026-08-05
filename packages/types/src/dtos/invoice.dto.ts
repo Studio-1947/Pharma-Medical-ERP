@@ -18,6 +18,9 @@ export const paymentEntrySchema = z.object({
 export const createInvoiceSchema = z.object({
   patientId: z.string().uuid().optional(),
   prescriptionId: z.string().uuid().optional(),
+  // Honoured only for super_admin, who has no branch of their own; every other
+  // role is pinned to its own branch server-side regardless of what is sent.
+  branchId: z.string().uuid().optional(),
   discountAmount: z.string().regex(/^\d+(\.\d{1,2})?$/).default("0"),
   loyaltyPointsToRedeem: z.number().int().min(0).default(0),
   notes: z.string().optional(),

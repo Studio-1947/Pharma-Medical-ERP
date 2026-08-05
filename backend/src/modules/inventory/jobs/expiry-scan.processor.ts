@@ -3,6 +3,7 @@ import { Logger } from "@nestjs/common";
 import { Job } from "bull";
 import { BatchRepository } from "../batch.repository";
 import { StockMovementRepository } from "../stock-movement.repository";
+import { AlertsRepository } from "../alerts.repository";
 
 export const EXPIRY_SCAN_QUEUE = "expiry-scan";
 
@@ -13,6 +14,7 @@ export class ExpiryScanProcessor {
   constructor(
     private readonly batchRepo: BatchRepository,
     private readonly movementRepo: StockMovementRepository,
+    private readonly alertsRepo: AlertsRepository,
   ) {}
 
   /**
@@ -34,6 +36,7 @@ export class ExpiryScanProcessor {
         await this.movementRepo.log({
           batchId: b.id,
           medicineId: full.medicineId,
+          branchId: full.branchId,
           movementType: "expiry_write_off",
           quantity: -full.quantity,
           notes: "Auto write-off on expiry scan",
@@ -42,18 +45,41 @@ export class ExpiryScanProcessor {
       }
     }
 
-    // 3. Collect critical (<30 days) and warning (30-90 days) for notifications
+    // 3. Raise expiry alerts, addressed to the branch holding the stock.
+    //    These lists were previously collected, counted into a log line and
+    //    discarded, so nothing ever reached the /alerts screen.
     const critical = await this.batchRepo.findExpiringBatches(30);
     const warning = await this.batchRepo.findExpiringBatches(90);
 
+    const criticalIds = new Set(critical.map((b) => b.id));
+    const raised = await this.alertsRepo.raiseMany([
+      ...critical.map((b) => ({
+        type: "EXPIRY" as const,
+        // The batch, not the medicine: two batches of the same drug expire on
+        // different dates and each needs its own action.
+        referenceId: b.id,
+        branchId: b.branchId,
+        message: `Batch ${b.batchNo} expires on ${b.expiryDate} (${b.quantity} units) — within 30 days.`,
+      })),
+      ...warning
+        .filter((b) => !criticalIds.has(b.id))
+        .map((b) => ({
+          type: "EXPIRY" as const,
+          referenceId: b.id,
+          branchId: b.branchId,
+          message: `Batch ${b.batchNo} expires on ${b.expiryDate} (${b.quantity} units) — within 90 days.`,
+        })),
+    ]);
+
     this.logger.log(
-      `Expiry alerts: ${critical.length} critical, ${warning.length - critical.length} warning`,
+      `Expiry: ${critical.length} critical, ${warning.length - critical.length} warning, ${raised} new alerts raised`,
     );
 
     return {
       expiredCount: expired.length,
       criticalCount: critical.length,
       warningCount: warning.length,
+      alertsRaised: raised,
     };
   }
 }

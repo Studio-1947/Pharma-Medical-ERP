@@ -17,6 +17,7 @@ import {
   CurrentUser,
   JwtPayload,
 } from "../../common/decorators/current-user.decorator";
+import { requireBranchScope } from "../../common/auth/branch-scope";
 import {
   createTransferSchema,
   deliverTransferSchema,
@@ -48,7 +49,12 @@ export class DistributionController {
   @Roles("super_admin", "admin", "distribution_staff")
   @ApiOperation({ summary: "Create a new stock transfer" })
   create(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
-    return this.service.create(createTransferSchema.parse(body), user.sub);
+    const dto = createTransferSchema.parse(body);
+    // Stock may only be sent out of the caller's own branch. Without this a
+    // branch admin could drain another branch's shelves into their own.
+    // The destination is unrestricted — receiving is confirmed by that branch.
+    requireBranchScope(user, dto.fromBranchId);
+    return this.service.create(dto, user.sub);
   }
 
   @Patch("transfers/:id/approve")

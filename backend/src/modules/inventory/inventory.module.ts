@@ -7,8 +7,7 @@ import { BatchController } from "./batch.controller";
 import { BatchService } from "./batch.service";
 import { BatchRepository } from "./batch.repository";
 import { StockMovementRepository } from "./stock-movement.repository";
-import { WarehouseController } from "./warehouse.controller";
-import { WarehouseRepository } from "./warehouse.repository";
+import { AlertsRepository } from "./alerts.repository";
 import { BarcodeService } from "./barcode.service";
 import { AlertsController } from "./alerts.controller";
 import { ExpiryScanProcessor, EXPIRY_SCAN_QUEUE } from "./jobs/expiry-scan.processor";
@@ -21,14 +20,14 @@ import { ReorderCheckProcessor, REORDER_CHECK_QUEUE } from "./jobs/reorder-check
       { name: REORDER_CHECK_QUEUE },
     ),
   ],
-  controllers: [InventoryController, BatchController, WarehouseController, AlertsController],
+  controllers: [InventoryController, BatchController, AlertsController],
   providers: [
     InventoryService,
     InventoryRepository,
     BatchService,
     BatchRepository,
     StockMovementRepository,
-    WarehouseRepository,
+    AlertsRepository,
     BarcodeService,
     ExpiryScanProcessor,
     ReorderCheckProcessor,

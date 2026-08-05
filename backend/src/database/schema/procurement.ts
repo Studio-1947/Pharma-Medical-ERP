@@ -17,7 +17,8 @@ import {
   supplierReturnReasonEnum,
   supplierReturnOutcomeEnum,
 } from "./enums";
-import { medicines, inventoryBatches, warehouses } from "./inventory";
+import { medicines, inventoryBatches } from "./inventory";
+import { branches } from "./branches";
 import { users } from "./auth";
 
 export const suppliers = pgTable("suppliers", {
@@ -61,9 +62,12 @@ export const purchaseOrders = pgTable("purchase_orders", {
   supplierId: uuid("supplier_id")
     .notNull()
     .references(() => suppliers.id, { onDelete: "restrict" }),
-  warehouseId: uuid("warehouse_id")
+  // Branch this order is raised for and whose stock it will become. The GRN
+  // copies this onto every batch it creates — that is what keeps received
+  // stock in the branch that actually ordered it.
+  branchId: uuid("branch_id")
     .notNull()
-    .references(() => warehouses.id, { onDelete: "restrict" }),
+    .references(() => branches.id, { onDelete: "restrict" }),
   raisedBy: uuid("raised_by")
     .notNull()
     .references(() => users.id, { onDelete: "restrict" }),
@@ -122,6 +126,11 @@ export const goodsReceivedNotes = pgTable("goods_received_notes", {
   poId: uuid("po_id")
     .notNull()
     .references(() => purchaseOrders.id, { onDelete: "restrict" }),
+  // Copied from the PO. Derivable by joining, but per-branch goods-inward
+  // listings are frequent and this keeps the batch-stamping rule explicit.
+  branchId: uuid("branch_id")
+    .notNull()
+    .references(() => branches.id, { onDelete: "restrict" }),
   receivedBy: uuid("received_by")
     .notNull()
     .references(() => users.id, { onDelete: "restrict" }),
@@ -165,6 +174,12 @@ export const supplierPayments = pgTable("supplier_payments", {
   grnId: uuid("grn_id").references(() => goodsReceivedNotes.id, {
     onDelete: "set null",
   }),
+  // Not derivable: grnId is nullable, so an "on account" payment would belong
+  // to no branch. Supplier outstanding is computed per branch, so a payment
+  // that cannot name its branch would silently drop out of every balance.
+  branchId: uuid("branch_id")
+    .notNull()
+    .references(() => branches.id, { onDelete: "restrict" }),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   // Nullable: a credit note has no cash payment method.
   method: supplierPaymentMethodEnum("method"),
@@ -189,6 +204,11 @@ export const supplierReturns = pgTable("supplier_returns", {
   batchId: uuid("batch_id")
     .notNull()
     .references(() => inventoryBatches.id, { onDelete: "restrict" }),
+  // Mirrors the batch's branch so credit-note totals roll up per branch
+  // without joining through inventory on every supplier statement.
+  branchId: uuid("branch_id")
+    .notNull()
+    .references(() => branches.id, { onDelete: "restrict" }),
   quantity: integer("quantity").notNull(),
   reason: supplierReturnReasonEnum("reason").notNull().default("expiry"),
   outcome: supplierReturnOutcomeEnum("outcome").notNull().default("pending"),
@@ -225,9 +245,9 @@ export const purchaseOrdersRelations = relations(
       fields: [purchaseOrders.supplierId],
       references: [suppliers.id],
     }),
-    warehouse: one(warehouses, {
-      fields: [purchaseOrders.warehouseId],
-      references: [warehouses.id],
+    branch: one(branches, {
+      fields: [purchaseOrders.branchId],
+      references: [branches.id],
     }),
     items: many(purchaseOrderItems),
     grns: many(goodsReceivedNotes),

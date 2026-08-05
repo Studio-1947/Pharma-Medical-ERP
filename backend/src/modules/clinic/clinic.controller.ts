@@ -40,6 +40,19 @@ export class ClinicController {
     );
   }
 
+  // Declared before tokens/:id so "taken-slots" is not captured as an id.
+  @Get("tokens/taken-slots")
+  @Roles("admin", "cashier", "doctor")
+  @ApiOperation({
+    summary: "Time slots already booked for a doctor on a date",
+  })
+  takenSlots(
+    @Query("doctorId") doctorId: string,
+    @Query("date") date: string,
+  ) {
+    return this.service.takenSlots(doctorId, date);
+  }
+
   @Get("tokens/:id")
   @Roles("admin", "cashier", "doctor")
   @ApiOperation({ summary: "Get a single clinic token with patient and prescription detail" })

@@ -15,7 +15,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
-import { resolveBranchScope } from "../../common/auth/branch-scope";
+import { resolveBranchScope, requireBranchScope } from "../../common/auth/branch-scope";
 import {
   createBatchSchema,
   updateBatchSchema,
@@ -68,7 +68,12 @@ export class BatchController {
   @Roles("admin", "inventory_manager")
   @ApiOperation({ summary: "Receive a new batch (logs purchase movement)" })
   create(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
-    return this.service.create(createBatchSchema.parse(body), user.sub);
+    const dto = createBatchSchema.parse(body);
+    // Pins the batch to the caller's branch so an inventory manager cannot
+    // deposit stock into another branch by editing the body. super_admin, being
+    // unscoped, must name the branch explicitly.
+    const branchId = requireBranchScope(user, dto.branchId);
+    return this.service.create(dto, user.sub, branchId);
   }
 
   @Patch(":id")

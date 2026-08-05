@@ -48,15 +48,24 @@ export class InventoryController {
   @Get("low-stock")
   @Roles("admin", "inventory_manager")
   @ApiOperation({ summary: "Medicines at or below reorder level" })
-  getLowStock() {
-    return this.service.getLowStock();
+  getLowStock(
+    @CurrentUser() user: JwtPayload,
+    @Query("branchId") branchId?: string,
+  ) {
+    return this.service.getLowStock(resolveBranchScope(user, branchId));
   }
 
   @Get("valuation")
   @Roles("admin", "inventory_manager", "reports_analyst")
   @ApiOperation({ summary: "Stock valuation — cost and MRP value per medicine" })
-  getValuation(@Query("warehouseId") warehouseId?: string) {
-    return this.service.getStockValuation(warehouseId);
+  getValuation(
+    @CurrentUser() user: JwtPayload,
+    @Query("branchId") branchId?: string,
+  ) {
+    // Was unscoped: a branch admin could read every branch's stock value simply
+    // by omitting the parameter. resolveBranchScope pins them to their own and
+    // still lets super_admin ask for all branches by passing nothing.
+    return this.service.getStockValuation(resolveBranchScope(user, branchId));
   }
 
   @Get("barcode/:code")
@@ -76,8 +85,12 @@ export class InventoryController {
   @Get(":id/batches")
   @Roles("admin", "pharmacist", "inventory_manager", "cashier", "doctor")
   @ApiOperation({ summary: "FEFO-ordered active batches for dispense" })
-  getBatches(@Param("id") id: string) {
-    return this.service.getBatchesForDispense(id);
+  getBatches(
+    @Param("id") id: string,
+    @CurrentUser() user: JwtPayload,
+    @Query("branchId") branchId?: string,
+  ) {
+    return this.service.getBatchesForDispense(id, resolveBranchScope(user, branchId));
   }
 
   @Get(":id/movements")

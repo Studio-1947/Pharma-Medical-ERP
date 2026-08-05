@@ -4,8 +4,8 @@ import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 
 export interface CreateTransferDto {
-  fromWarehouseId: string;
-  toWarehouseId: string;
+  fromBranchId: string;
+  toBranchId: string;
   notes?: string;
   items: {
     medicineId: string;
@@ -75,30 +75,25 @@ export class DistributionRepository {
     const transferNo = `TRF-${Date.now()}`;
 
     return this.db.transaction(async (tx) => {
-      // A batch is tied to exactly one storage location (and therefore one
-      // warehouse) at a time — the schema has no per-warehouse quantity
-      // split for the same batch number. So a transfer can only move a
-      // batch in its entirety, not part of it.
+      // A batch row belongs to exactly one branch, and there is no per-branch
+      // quantity split within a single batch row, so a transfer moves a batch
+      // in its entirety rather than part of it.
       for (const item of data.items) {
         const [batch] = await tx
           .select({
             quantity: schema.inventoryBatches.quantity,
             reservedQty: schema.inventoryBatches.reservedQty,
-            warehouseId: schema.storageLocations.warehouseId,
+            branchId: schema.inventoryBatches.branchId,
           })
           .from(schema.inventoryBatches)
-          .leftJoin(
-            schema.storageLocations,
-            eq(schema.inventoryBatches.locationId, schema.storageLocations.id),
-          )
           .where(eq(schema.inventoryBatches.id, item.batchId));
 
         if (!batch) {
           throw new BadRequestException(`Batch ${item.batchId} not found`);
         }
-        if (batch.warehouseId !== data.fromWarehouseId) {
+        if (batch.branchId !== data.fromBranchId) {
           throw new BadRequestException(
-            `Batch ${item.batchId} does not belong to warehouse ${data.fromWarehouseId}`,
+            `Batch ${item.batchId} does not belong to branch ${data.fromBranchId}`,
           );
         }
         const available = batch.quantity - batch.reservedQty;
@@ -113,8 +108,8 @@ export class DistributionRepository {
         .insert(schema.stockTransfers)
         .values({
           transferNo,
-          fromWarehouseId: data.fromWarehouseId,
-          toWarehouseId: data.toWarehouseId,
+          fromBranchId: data.fromBranchId,
+          toBranchId: data.toBranchId,
           initiatedBy,
           notes: data.notes,
           status: "draft",
@@ -227,39 +222,105 @@ export class DistributionRepository {
           })
           .where(eq(schema.stockTransferItems.id, ri.itemId));
 
+        // Source batch is always spent: whatever was not received was rejected.
+        const [sourceBatch] = await tx
+          .select()
+          .from(schema.inventoryBatches)
+          .where(eq(schema.inventoryBatches.id, item.batchId));
+        if (!sourceBatch) continue;
+
+        await tx
+          .update(schema.inventoryBatches)
+          .set({
+            quantity: 0,
+            reservedQty: 0,
+            status: "depleted",
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.inventoryBatches.id, item.batchId));
+
+        await tx.insert(schema.stockMovements).values({
+          batchId: item.batchId,
+          medicineId: item.medicineId,
+          branchId: transfer.fromBranchId,
+          movementType: "transfer_out",
+          quantity: -sourceBatch.quantity,
+          referenceId: id,
+          referenceType: "stock_transfer",
+          notes: `Dispatched on transfer ${transfer.transferNo}`,
+        });
+
         if (ri.receivedQty > 0) {
-          destLocationId ??= await this.findOrCreateDefaultLocationForWarehouse(
+          destLocationId ??= await this.findOrCreateDefaultLocationForBranch(
             tx,
-            transfer.toWarehouseId,
+            transfer.toBranchId,
           );
-          // Relocate the batch to the destination warehouse — same row,
-          // since (medicineId, batchNo) must stay unique across the table.
-          await tx
-            .update(schema.inventoryBatches)
-            .set({
-              locationId: destLocationId,
-              quantity: ri.receivedQty,
-              reservedQty: 0,
-              updatedAt: new Date(),
-            })
-            .where(eq(schema.inventoryBatches.id, item.batchId));
-        } else {
-          // Fully rejected on receipt — nothing moves; the batch is spent.
-          await tx
-            .update(schema.inventoryBatches)
-            .set({
-              quantity: 0,
-              reservedQty: 0,
-              status: "depleted",
-              updatedAt: new Date(),
-            })
-            .where(eq(schema.inventoryBatches.id, item.batchId));
+
+          // The destination gets its own batch row rather than the source row
+          // being re-pointed. Two branches may legitimately hold the same
+          // manufacturer batch number, so moving the row would collide with an
+          // existing one under batch_medicine_batchno_branch_uniq — and each
+          // branch's ledger should stand on its own regardless.
+          const [existingAtDest] = await tx
+            .select({ id: schema.inventoryBatches.id })
+            .from(schema.inventoryBatches)
+            .where(
+              and(
+                eq(schema.inventoryBatches.medicineId, item.medicineId),
+                eq(schema.inventoryBatches.batchNo, sourceBatch.batchNo),
+                eq(schema.inventoryBatches.branchId, transfer.toBranchId),
+              ),
+            );
+
+          let destBatchId: string;
+          if (existingAtDest) {
+            await tx
+              .update(schema.inventoryBatches)
+              .set({
+                quantity: sql`${schema.inventoryBatches.quantity} + ${ri.receivedQty}`,
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(eq(schema.inventoryBatches.id, existingAtDest.id));
+            destBatchId = existingAtDest.id;
+          } else {
+            const [created] = await tx
+              .insert(schema.inventoryBatches)
+              .values({
+                medicineId: sourceBatch.medicineId,
+                branchId: transfer.toBranchId,
+                locationId: destLocationId,
+                batchNo: sourceBatch.batchNo,
+                manufactureDate: sourceBatch.manufactureDate,
+                expiryDate: sourceBatch.expiryDate,
+                quantity: ri.receivedQty,
+                reservedQty: 0,
+                costPrice: sourceBatch.costPrice,
+                mrpAtEntry: sourceBatch.mrpAtEntry,
+                supplierId: sourceBatch.supplierId,
+                isConsignment: sourceBatch.isConsignment,
+              })
+              .returning({ id: schema.inventoryBatches.id });
+            destBatchId = created!.id;
+          }
+
+          await tx.insert(schema.stockMovements).values({
+            batchId: destBatchId,
+            medicineId: item.medicineId,
+            branchId: transfer.toBranchId,
+            movementType: "transfer_in",
+            quantity: ri.receivedQty,
+            referenceId: id,
+            referenceType: "stock_transfer",
+            notes: `Received on transfer ${transfer.transferNo}`,
+          });
         }
 
         if (rejectedQty > 0) {
           await tx.insert(schema.stockMovements).values({
             batchId: item.batchId,
             medicineId: item.medicineId,
+            branchId: transfer.fromBranchId,
             movementType: "transfer_reject_writeoff",
             quantity: -rejectedQty,
             referenceId: id,
@@ -283,14 +344,14 @@ export class DistributionRepository {
     });
   }
 
-  private async findOrCreateDefaultLocationForWarehouse(
+  private async findOrCreateDefaultLocationForBranch(
     tx: any,
-    warehouseId: string,
+    branchId: string,
   ): Promise<string> {
     const [existingLocation] = await tx
       .select({ id: schema.storageLocations.id })
       .from(schema.storageLocations)
-      .where(eq(schema.storageLocations.warehouseId, warehouseId))
+      .where(eq(schema.storageLocations.branchId, branchId))
       .limit(1);
 
     if (existingLocation) return existingLocation.id;
@@ -298,7 +359,7 @@ export class DistributionRepository {
     const [newLocation] = await tx
       .insert(schema.storageLocations)
       .values({
-        warehouseId,
+        branchId,
         label: "Default Shelf",
         aisle: "A",
         shelf: "1",

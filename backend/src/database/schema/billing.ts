@@ -13,6 +13,7 @@ import {
 import { relations } from "drizzle-orm";
 import { invoiceStatusEnum, paymentModeEnum } from "./enums";
 import { medicines, inventoryBatches } from "./inventory";
+import { branches } from "./branches";
 import { users } from "./auth";
 
 export const patients = pgTable(
@@ -64,7 +65,11 @@ export const salesInvoices = pgTable(
     staffId: uuid("staff_id")
       .notNull()
       .references(() => users.id, { onDelete: "restrict" }),
-    branchId: uuid("branch_id"),
+    // Mandatory: revenue that cannot name its branch breaks per-branch sales
+    // reporting and the GST return, which is filed per branch registration.
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
     prescriptionId: uuid("prescription_id"),
     subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull(),
     discountAmount: numeric("discount_amount", { precision: 12, scale: 2 })

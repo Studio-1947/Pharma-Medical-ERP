@@ -148,6 +148,27 @@
       "when": 1785650577166,
       "tag": "0020_batch_supplier_and_optional_supplier_phone",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1785919709071,
+      "tag": "0021_branch_separation",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785922291634,
+      "tag": "0022_clinic_slot_and_consultation_clock",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1785924699434,
+      "tag": "0023_branch_alerts_and_token_branch_notnull",
+      "breakpoints": true
     }
   ]
 }

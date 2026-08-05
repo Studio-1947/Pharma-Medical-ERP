@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useToast } from "@/components/ui/toast";
+import { BranchSelect } from "@/components/shared/branch-select";
+import { useActiveBranchId } from "@/hooks/use-branch";
+import { useAuthStore } from "@/stores/auth.store";
 import {
   LineChart, Line, BarChart, Bar, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -408,11 +411,26 @@ function PurchaseTab() {
 
 function ComplianceTab() {
   const { error: toastError } = useToast();
-  const [gstBranchId, setGstBranchId] = useState("");
+  // Both reports require a concrete branch server-side (requireBranchScope).
+  // A branch user gets theirs; super_admin picks one from the header switcher,
+  // and can still override per report below.
+  const { branchId: activeBranchId } = useActiveBranchId();
+  const { user } = useAuthStore();
+  const defaultBranchId = activeBranchId ?? user?.branchId ?? "";
+
+  const [gstBranchId, setGstBranchId] = useState(defaultBranchId);
   const [month, setMonth] = useState(new Date().getMonth() + 1);
   const [year, setYear] = useState(new Date().getFullYear());
 
-  const [schBranchId, setSchBranchId] = useState("");
+  const [schBranchId, setSchBranchId] = useState(defaultBranchId);
+
+  // The active branch resolves after the auth store rehydrates, so seed the
+  // pickers once it arrives rather than leaving them stuck on empty.
+  useEffect(() => {
+    if (!defaultBranchId) return;
+    setGstBranchId((v) => v || defaultBranchId);
+    setSchBranchId((v) => v || defaultBranchId);
+  }, [defaultBranchId]);
   const [fromDate, setFromDate] = useState(new Date().toISOString().split("T")[0]);
   const [toDate, setToDate] = useState(new Date().toISOString().split("T")[0]);
 
@@ -451,14 +469,17 @@ function ComplianceTab() {
         <hr />
         <div className="space-y-3">
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-700">Branch ID (optional)</label>
-            <input
-              type="text"
-              placeholder="All branches if empty"
+            <label className="text-xs font-semibold text-gray-700">
+              Branch <span className="text-red-500">*</span>
+            </label>
+            <BranchSelect
               value={gstBranchId}
-              onChange={(e) => setGstBranchId(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              onChange={setGstBranchId}
+              placeholder="Select branch"
             />
+            <p className="text-[11px] text-muted-foreground">
+              GST is filed per branch registration, so one must be chosen.
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -492,14 +513,15 @@ function ComplianceTab() {
           </div>
         </div>
         <button
+          disabled={!gstBranchId}
           onClick={() =>
             downloadCsv(
               "/reports/gst",
-              { branchId: gstBranchId || undefined, month, year },
+              { branchId: gstBranchId, month, year },
               `gstr1-${year}-${String(month).padStart(2, "0")}.csv`,
             )
           }
-          className="w-full inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-primary/90 transition"
+          className="w-full inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Download className="w-4 h-4" /> Download GSTR-1 CSV
         </button>
@@ -519,14 +541,17 @@ function ComplianceTab() {
         <hr />
         <div className="space-y-3">
           <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-700">Branch ID (optional)</label>
-            <input
-              type="text"
-              placeholder="All branches if empty"
+            <label className="text-xs font-semibold text-gray-700">
+              Branch <span className="text-red-500">*</span>
+            </label>
+            <BranchSelect
               value={schBranchId}
-              onChange={(e) => setSchBranchId(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              onChange={setSchBranchId}
+              placeholder="Select branch"
             />
+            <p className="text-[11px] text-muted-foreground">
+              The Schedule H register is kept per branch.
+            </p>
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
@@ -550,14 +575,15 @@ function ComplianceTab() {
           </div>
         </div>
         <button
+          disabled={!schBranchId}
           onClick={() =>
             downloadCsv(
               "/reports/schedule-h-register",
-              { branchId: schBranchId || undefined, from: fromDate, to: toDate },
+              { branchId: schBranchId, from: fromDate, to: toDate },
               `schedule-h-${fromDate}-to-${toDate}.csv`,
             )
           }
-          className="w-full inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-primary/90 transition"
+          className="w-full inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Download className="w-4 h-4" /> Download Register CSV
         </button>

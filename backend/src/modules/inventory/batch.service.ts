@@ -32,26 +32,42 @@ export class BatchService {
     return { data: batch };
   }
 
-  async create(dto: CreateBatchDto, userId?: string) {
+  async create(dto: CreateBatchDto, userId?: string, branchId?: string) {
     // Verify medicine exists
     const medicine = await this.inventoryRepo.findMedicineById(dto.medicineId);
     if (!medicine) {
       throw new NotFoundException(`Medicine ${dto.medicineId} not found`);
     }
 
-    // If no locationId but branchId provided, auto-assign the branch's default location
-    // so selectBatchesForDispense (which joins through locationId) can find this batch.
-    let resolvedLocationId = dto.locationId;
-    if (!resolvedLocationId && (dto as any).branchId) {
-      resolvedLocationId = await this.batchRepo.findOrCreateDefaultLocationForBranch((dto as any).branchId);
+    // Stock cannot exist outside a branch. The caller resolves this through
+    // requireBranchScope, so a branch user always has one and a super_admin is
+    // forced to name the branch rather than have one guessed for them.
+    const resolvedBranchId = branchId ?? dto.branchId;
+    if (!resolvedBranchId) {
+      throw new UnprocessableEntityException(
+        "branchId is required — a batch must belong to a branch.",
+      );
     }
 
-    const batch = await this.batchRepo.createBatch({ ...dto, resolvedLocationId } as any);
+    // Shelf is cosmetic for ownership now, but staff still need somewhere to
+    // physically find the pack, so fall back to the branch's default shelf.
+    let resolvedLocationId = dto.locationId;
+    if (!resolvedLocationId) {
+      resolvedLocationId =
+        await this.batchRepo.findOrCreateDefaultLocationForBranch(resolvedBranchId);
+    }
+
+    const batch = await this.batchRepo.createBatch({
+      ...dto,
+      branchId: resolvedBranchId,
+      resolvedLocationId,
+    });
 
     // Log the inbound stock movement
     await this.movementRepo.log({
       batchId: batch.id,
       medicineId: dto.medicineId,
+      branchId: resolvedBranchId,
       movementType: "purchase",
       quantity: dto.quantity,
       performedBy: userId,
@@ -78,6 +94,9 @@ export class BatchService {
       await this.movementRepo.log({
         batchId: id,
         medicineId: existing.medicineId,
+        // The movement inherits the batch's branch — stock cannot leave a
+        // branch it was never in.
+        branchId: existing.branchId,
         movementType: "expiry_write_off",
         quantity: -existing.quantity,
         performedBy: userId,
@@ -114,6 +133,7 @@ export class BatchService {
     await this.movementRepo.log({
       batchId: id,
       medicineId: existing.medicineId,
+      branchId: existing.branchId,
       movementType: "adjustment",
       quantity: dto.adjustment,
       performedBy: userId,

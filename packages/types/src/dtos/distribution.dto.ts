@@ -8,8 +8,10 @@ export const createTransferItemSchema = z.object({
 });
 
 export const createTransferSchema = z.object({
-  fromWarehouseId: z.string().uuid("Invalid source warehouse ID"),
-  toWarehouseId: z.string().uuid("Invalid destination warehouse ID"),
+  // Transfers move stock branch to branch. Warehouses were removed — the
+  // business has branches, and racks inside them, with nothing in between.
+  fromBranchId: z.string().uuid("Invalid source branch ID"),
+  toBranchId: z.string().uuid("Invalid destination branch ID"),
   notes: z.string().max(1000).optional(),
   items: z.array(createTransferItemSchema).min(1, "At least one item is required"),
 });
@@ -28,8 +30,8 @@ export const queryTransferSchema = z.object({
   status: z
     .enum(["draft", "in_transit", "delivered", "rejected"])
     .optional(),
-  fromWarehouseId: z.string().uuid().optional(),
-  toWarehouseId: z.string().uuid().optional(),
+  fromBranchId: z.string().uuid().optional(),
+  toBranchId: z.string().uuid().optional(),
   search: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),

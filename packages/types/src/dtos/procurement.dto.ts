@@ -44,7 +44,10 @@ export const querySupplierSchema = z.object({
 
 export const createPurchaseOrderSchema = z.object({
   supplierId: z.string().uuid(),
-  warehouseId: z.string().uuid(),
+  // Branch the order is raised for. The GRN copies this onto every batch it
+  // creates, so received stock lands in the branch that ordered it. Optional in
+  // the body: branch users are pinned server-side, super_admin must name one.
+  branchId: z.string().uuid().optional(),
   expectedDelivery: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   notes: z.string().optional(),
   items: z.array(z.object({

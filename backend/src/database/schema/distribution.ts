@@ -5,40 +5,28 @@ import {
   timestamp,
   text,
   integer,
-  boolean,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { transferStatusEnum } from "./enums";
-import { medicines, inventoryBatches, warehouses } from "./inventory";
+import { medicines, inventoryBatches } from "./inventory";
+import { branches } from "./branches";
 import { users } from "./auth";
 
-export const branches = pgTable("branches", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: varchar("name", { length: 255 }).notNull(),
-  code: varchar("code", { length: 20 }).notNull().unique(),
-  address: text("address").notNull(),
-  phone: varchar("phone", { length: 20 }),
-  email: varchar("email", { length: 255 }),
-  isHeadOffice: boolean("is_head_office").notNull().default(false),
-  isActive: boolean("is_active").notNull().default(true),
-  state: varchar("state", { length: 100 }),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-  updatedAt: timestamp("updated_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
+// `branches` moved to ./branches so schema files needing a branch FK can import
+// it without closing an import cycle through inventory.ts. It is exported from
+// the schema barrel, so consumers using `schema.branches` are unaffected.
 
 export const stockTransfers = pgTable("stock_transfers", {
   id: uuid("id").primaryKey().defaultRandom(),
   transferNo: varchar("transfer_no", { length: 50 }).notNull().unique(),
-  fromWarehouseId: uuid("from_warehouse_id")
+  // Transfers move stock between branches. They used to reference warehouses,
+  // which were removed: the business has branches and nothing below them.
+  fromBranchId: uuid("from_branch_id")
     .notNull()
-    .references(() => warehouses.id),
-  toWarehouseId: uuid("to_warehouse_id")
+    .references(() => branches.id, { onDelete: "restrict" }),
+  toBranchId: uuid("to_branch_id")
     .notNull()
-    .references(() => warehouses.id),
+    .references(() => branches.id, { onDelete: "restrict" }),
   initiatedBy: uuid("initiated_by")
     .notNull()
     .references(() => users.id, { onDelete: "restrict" }),
@@ -66,6 +54,9 @@ export const stockTransferItems = pgTable("stock_transfer_items", {
   medicineId: uuid("medicine_id")
     .notNull()
     .references(() => medicines.id, { onDelete: "restrict" }),
+  // The source branch's batch. Receiving creates a separate batch row in the
+  // destination branch rather than moving this one, so each branch's ledger
+  // stays self-contained.
   batchId: uuid("batch_id")
     .notNull()
     .references(() => inventoryBatches.id, { onDelete: "restrict" }),
@@ -80,13 +71,15 @@ export const stockTransferItems = pgTable("stock_transfer_items", {
 export const stockTransfersRelations = relations(
   stockTransfers,
   ({ one, many }) => ({
-    fromWarehouse: one(warehouses, {
-      fields: [stockTransfers.fromWarehouseId],
-      references: [warehouses.id],
+    fromBranch: one(branches, {
+      fields: [stockTransfers.fromBranchId],
+      references: [branches.id],
+      relationName: "transferFromBranch",
     }),
-    toWarehouse: one(warehouses, {
-      fields: [stockTransfers.toWarehouseId],
-      references: [warehouses.id],
+    toBranch: one(branches, {
+      fields: [stockTransfers.toBranchId],
+      references: [branches.id],
+      relationName: "transferToBranch",
     }),
     items: many(stockTransferItems),
   }),

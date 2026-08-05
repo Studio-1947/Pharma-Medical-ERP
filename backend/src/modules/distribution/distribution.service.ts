@@ -24,9 +24,9 @@ export class DistributionService {
   }
 
   async create(data: CreateTransferDto, initiatedBy: string) {
-    if (data.fromWarehouseId === data.toWarehouseId) {
+    if (data.fromBranchId === data.toBranchId) {
       throw new BadRequestException(
-        "Source and destination warehouse cannot be the same",
+        "Source and destination branch cannot be the same",
       );
     }
     if (!data.items || data.items.length === 0) {

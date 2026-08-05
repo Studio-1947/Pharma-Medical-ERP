@@ -26,6 +26,8 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { apiClient } from "@/lib/api-client";
+import { usePermissions } from "@/hooks/use-permissions";
+import { BranchComparison } from "@/components/modules/analytics/branch-comparison";
 
 const PERIOD_OPTIONS = [
   { value: "7d", label: "Last 7 days" },
@@ -68,6 +70,9 @@ function fmt(n: number) {
 
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState("30d");
+  const [view, setView] = useState<"overview" | "branches">("overview");
+  const { role } = usePermissions();
+  const canCompareBranches = role === "super_admin" || role === "admin";
 
   const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
 
@@ -147,6 +152,33 @@ export default function AnalyticsPage() {
         </div>
       </div>
 
+      {/* Overview is scoped to the viewer's own branch; comparison is the
+          org-wide view and is limited to super_admin and admin server-side. */}
+      {canCompareBranches && (
+        <div className="flex gap-1 border-b border-slate-200">
+          {[
+            { key: "overview" as const, label: "Overview" },
+            { key: "branches" as const, label: "Branch Comparison" },
+          ].map((t) => (
+            <button
+              key={t.key}
+              onClick={() => setView(t.key)}
+              className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                view === t.key
+                  ? "border-emerald-600 text-emerald-700"
+                  : "border-transparent text-slate-500 hover:text-slate-700"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {view === "branches" && canCompareBranches && <BranchComparison />}
+
+      {view === "overview" && (
+      <>
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <KpiCard
@@ -332,6 +364,8 @@ export default function AnalyticsPage() {
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

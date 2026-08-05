@@ -92,7 +92,9 @@
       "Bash(timeout 180 node verify-wiring.js)",
       "Bash(node verify-security.js)",
       "Bash(curl -sL --max-time 30 \"https://docs.google.com/spreadsheets/d/1PeRvlpZCoBQ8PuXTN7RE0vy3-l7rthBXY5MpIK3GBO0/export?format=csv&gid=43138005\" -o \"C:/Users/soumi/AppData/Local/Temp/claude/c--Users-soumi-Desktop-Pharma-Medical-ERP/3bd7d14a-48f6-40c6-899f-edd6c2ac3697/scratchpad/inventory.csv\" -w \"HTTP:%{http_code}\\\\n\")",
-      "Bash(node analyze.js)"
+      "Bash(node analyze.js)",
+      "Bash(mkdir -p backups)",
+      "Bash(docker exec *)"
     ]
   }
 }

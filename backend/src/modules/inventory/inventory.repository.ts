@@ -217,18 +217,25 @@ export class InventoryRepository {
   }
 
   /** FEFO: batches ordered by expiry ASC for dispense */
-  async getActiveBatchesForDispense(medicineId: string) {
+  /**
+   * FEFO-ordered sellable batches for a medicine. Scoped to a branch when one
+   * is given — the POS must only ever show packs on its own shelves.
+   */
+  async getActiveBatchesForDispense(medicineId: string, branchId?: string) {
+    const conditions = [
+      eq(schema.inventoryBatches.medicineId, medicineId),
+      eq(schema.inventoryBatches.status, "active"),
+      gt(schema.inventoryBatches.quantity, 0),
+      gte(schema.inventoryBatches.expiryDate, sql`CURRENT_DATE`),
+    ];
+    if (branchId) {
+      conditions.push(eq(schema.inventoryBatches.branchId, branchId));
+    }
+
     return this.db
       .select()
       .from(schema.inventoryBatches)
-      .where(
-        and(
-          eq(schema.inventoryBatches.medicineId, medicineId),
-          eq(schema.inventoryBatches.status, "active"),
-          gt(schema.inventoryBatches.quantity, 0),
-          gte(schema.inventoryBatches.expiryDate, sql`CURRENT_DATE`),
-        ),
-      )
+      .where(and(...conditions))
       .orderBy(asc(schema.inventoryBatches.expiryDate));
   }
 
@@ -239,8 +246,19 @@ export class InventoryRepository {
     return [];
   }
 
-  async getStockValuation(warehouseId?: string) {
-    const result = warehouseId
+  /**
+   * Stock value per medicine, optionally for one branch.
+   *
+   * The branch filter belongs on the join, not the WHERE clause: medicines are
+   * a shared catalogue, so a branch-filtered valuation must still list every
+   * medicine — the ones this branch holds none of report zero rather than
+   * dropping out of the report entirely.
+   *
+   * Previously filtered through `storage_locations.warehouse_id`, a column that
+   * no longer exists; being raw SQL, nothing caught it at compile time.
+   */
+  async getStockValuation(branchId?: string) {
+    const result = branchId
       ? await this.db.execute(sql`
           SELECT
             m.id,
@@ -255,9 +273,8 @@ export class InventoryRepository {
           LEFT JOIN inventory_batches b ON b.medicine_id = m.id
             AND b.status = 'active'
             AND b.expiry_date > CURRENT_DATE
-          LEFT JOIN storage_locations sl ON sl.id = b.location_id
+            AND b.branch_id = ${branchId}
           WHERE m.is_active = true AND m.deleted_at IS NULL
-            AND (sl.warehouse_id = ${warehouseId} OR b.location_id IS NULL)
           GROUP BY m.id
           ORDER BY "costValue" DESC
         `)
@@ -407,10 +424,9 @@ export class InventoryRepository {
         return { idsBySku, batchesCreated: 0 };
       }
 
-      const warehouseId = await this.findOrCreateWarehouseForBranch(branchId, tx);
       const [locationIds, supplierIds] = await Promise.all([
         this.findOrCreateLocationIds(
-          warehouseId,
+          branchId,
           usable.flatMap((b) => (b.locationLabel ? [b.locationLabel] : [])),
           tx,
         ),
@@ -423,6 +439,9 @@ export class InventoryRepository {
       const batchesCreated = await this.bulkCreateBatches(
         usable.map((b) => ({
           medicineId: idsBySku.get(b.sku)!,
+          // Imported stock belongs to the branch running the import. Previously
+          // this was implied by the shelf it landed on; now it is stated.
+          branchId,
           locationId: b.locationLabel
             ? locationIds.get(b.locationLabel.toLowerCase())
             : undefined,
@@ -458,42 +477,14 @@ export class InventoryRepository {
     return new Set(rows.map((r) => normalizedIdentity(r.name, r.manufacturer)));
   }
 
-  /** The warehouse imported stock lands in: the branch's default if it has one,
-   *  otherwise its first active warehouse, otherwise a "Main Store" created on
-   *  the spot. Mirrors BatchRepository.findOrCreateDefaultLocationForBranch so
-   *  a CSV import and a hand-entered batch end up in the same place. */
-  async findOrCreateWarehouseForBranch(branchId: string, tx?: any): Promise<string> {
-    const db = tx ?? this.db;
-    const [existing] = await db
-      .select({ id: schema.warehouses.id })
-      .from(schema.warehouses)
-      .where(
-        and(
-          eq(schema.warehouses.branchId, branchId),
-          eq(schema.warehouses.isActive, true),
-        ),
-      )
-      .orderBy(desc(schema.warehouses.isDefault))
-      .limit(1);
-    if (existing) return existing.id;
-
-    const [created] = await db
-      .insert(schema.warehouses)
-      .values({
-        branchId,
-        name: "Main Store",
-        code: `WH-${branchId.slice(0, 8).toUpperCase()}`,
-        isDefault: true,
-      })
-      .returning({ id: schema.warehouses.id });
-    return created!.id;
-  }
-
   /** Resolve rack labels ("Rack C-2, Shelf 2") to storage_locations rows in the
-   *  given warehouse, creating the ones that do not exist yet. Keyed
-   *  lowercase so callers can look up case-insensitively. */
+   *  given branch, creating the ones that do not exist yet. Keyed
+   *  lowercase so callers can look up case-insensitively.
+   *
+   *  Rack labels repeat across branches — every branch has a "Rack A-1" — so
+   *  the lookup is scoped by branch or two branches would share one shelf row. */
   async findOrCreateLocationIds(
-    warehouseId: string,
+    branchId: string,
     labels: string[],
     tx?: any,
   ): Promise<Map<string, string>> {
@@ -507,7 +498,7 @@ export class InventoryRepository {
         label: schema.storageLocations.label,
       })
       .from(schema.storageLocations)
-      .where(eq(schema.storageLocations.warehouseId, warehouseId));
+      .where(eq(schema.storageLocations.branchId, branchId));
     const byLabel = new Map<string, string>(
       existing.map((l: { id: string; label: string }) => [l.label.toLowerCase(), l.id]),
     );
@@ -516,7 +507,7 @@ export class InventoryRepository {
     for (const chunk of chunkForColumns(missing, 5)) {
       const created = await db
         .insert(schema.storageLocations)
-        .values(chunk.map((label) => ({ warehouseId, ...parseLocationLabel(label) })))
+        .values(chunk.map((label) => ({ branchId, ...parseLocationLabel(label) })))
         .returning({
           id: schema.storageLocations.id,
           label: schema.storageLocations.label,
@@ -631,13 +622,35 @@ export class InventoryRepository {
     return tx ? run(tx) : this.db.transaction(run);
   }
 
-  async getLowStockMedicines() {
+  /** Active branches, for jobs that must run once per branch. */
+  async findActiveBranches() {
+    return this.db
+      .select({ id: schema.branches.id, name: schema.branches.name })
+      .from(schema.branches)
+      .where(eq(schema.branches.isActive, true));
+  }
+
+  /**
+   * Medicines at or below reorder level, for one branch or across all.
+   *
+   * Summing every branch together is actively misleading once stock is
+   * branch-scoped: a well-stocked branch masks an empty one, and the branch
+   * that is actually out of a drug never appears in its own reorder list. The
+   * branch filter sits on the join so medicines this branch holds none of still
+   * surface — those are precisely the ones needing an order.
+   */
+  async getLowStockMedicines(branchId?: string) {
+    const branchFilter = branchId
+      ? sql`AND b.branch_id = ${branchId}`
+      : sql``;
+
     const result = await this.db.execute(sql`
       SELECT m.id, m.name, m.sku, m.reorder_level,
              COALESCE(SUM(b.quantity), 0)::int AS current_stock
       FROM medicines m
       LEFT JOIN inventory_batches b ON b.medicine_id = m.id
         AND b.status = 'active' AND b.expiry_date > CURRENT_DATE
+        ${branchFilter}
       WHERE m.is_active = true AND m.deleted_at IS NULL
       GROUP BY m.id
       HAVING COALESCE(SUM(b.quantity), 0) <= m.reorder_level

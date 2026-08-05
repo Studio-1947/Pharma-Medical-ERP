@@ -16,6 +16,26 @@ import { parse } from "json2csv";
 export class ReportsController {
   constructor(private readonly service: ReportsService) {}
 
+  @Get("branch-comparison")
+  // Deliberately not open to reports_analyst: this is the one report that shows
+  // every branch's numbers side by side, which is an org-wide view.
+  @Roles("super_admin", "admin")
+  @ApiOperation({
+    summary: "Per-branch revenue, stock and expiry side by side, plus totals",
+  })
+  getBranchComparison(
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    const today = new Date().toISOString().slice(0, 10);
+    const defaultFrom = new Date();
+    defaultFrom.setDate(defaultFrom.getDate() - 30);
+    return this.service.getBranchComparison(
+      from || defaultFrom.toISOString().slice(0, 10),
+      to || today,
+    );
+  }
+
   @Get("sales")
   @Roles("admin", "pharmacist", "reports_analyst")
   @ApiOperation({ summary: "Sales trend for the last N days, grouped by day/week/month" })
@@ -73,16 +93,11 @@ export class ReportsController {
     @CurrentUser() user: JwtPayload,
     @Query("from") from?: string,
     @Query("to") to?: string,
-    @Query("warehouseId") warehouseId?: string,
+    @Query("branchId") branchId?: string,
   ) {
     const today = new Date().toISOString().slice(0, 10);
-    const branchId = resolveBranchScope(user);
-    return this.service.getPurchaseSummary(
-      from || today,
-      to || today,
-      warehouseId,
-      branchId,
-    );
+    const scoped = resolveBranchScope(user, branchId);
+    return this.service.getPurchaseSummary(from || today, to || today, scoped);
   }
 
   @Get("gst")

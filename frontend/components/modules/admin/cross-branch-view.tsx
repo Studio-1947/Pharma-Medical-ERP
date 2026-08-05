@@ -69,14 +69,6 @@ export function CrossBranchView() {
       }) as Promise<any>,
   });
 
-  const warehouses = useQuery({
-    queryKey: ["admin", "xbranch", "warehouses", branchId],
-    queryFn: () =>
-      apiClient.get("/inventory/warehouses", {
-        params: branchParam,
-      }) as Promise<any>,
-  });
-
   const expiring = useQuery({
     queryKey: ["admin", "xbranch", "expiring", branchId],
     queryFn: () =>
@@ -87,7 +79,6 @@ export function CrossBranchView() {
 
   const summaryData = ((summary.data as any)?.data ?? summary.data) as any;
   const employeeRows = rowsOf<any>(employees.data);
-  const warehouseRows = rowsOf<any>(warehouses.data);
   const expiringRows = rowsOf<any>(expiring.data);
 
   const branchLabel =
@@ -172,24 +163,8 @@ export function CrossBranchView() {
           )}
         </Panel>
 
-        <Panel title="Warehouses" subtitle="Storage sites in this branch">
-          {warehouses.isLoading ? (
-            <Loading />
-          ) : warehouseRows.length ? (
-            <ul className="divide-y divide-slate-100 text-sm">
-              {warehouseRows.map((w: any) => (
-                <li key={w.id} className="py-2 flex justify-between gap-3">
-                  <span className="text-slate-700 truncate">{w.name}</span>
-                  <span className="text-xs text-slate-400 shrink-0">
-                    {w.code ?? ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <Empty label="No warehouses." />
-          )}
-        </Panel>
+        {/* Warehouses panel removed with the warehouse layer. Side-by-side
+            branch figures now live on the Branch Comparison report. */}
 
         <Panel title="Employees" subtitle="First 10">
           {employees.isLoading ? (

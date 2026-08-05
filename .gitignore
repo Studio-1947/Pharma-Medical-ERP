@@ -11,3 +11,4 @@ Thumbs.db
 drizzle/migrations/*.sql
 infra/gcp/secrets.tfvars
 *.pem
+backups/

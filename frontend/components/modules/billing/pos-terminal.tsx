@@ -13,6 +13,7 @@ import { useToast } from "@/components/ui/toast";
 import { useDebounce } from "@/hooks/use-debounce";
 import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
 import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
+import { useActiveBranchId } from "@/hooks/use-branch";
 
 const CONTROLLED_CLASSES = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"];
 
@@ -23,6 +24,10 @@ const formLabelCls = "block text-xs font-semibold text-slate-600 mb-1";
 
 export function PosTerminal() {
   const { warning: toastWarning, success: toastSuccess, info: toastInfo, error: toastError } = useToast();
+  // Batch lookups are pinned to the selling branch so the packs shown on screen
+  // are the packs the checkout will actually allocate. Branch staff are scoped
+  // server-side anyway; this is what keeps super_admin's view honest.
+  const { branchId: activeBranchId } = useActiveBranchId();
   const [search, setSearch] = useState("");
   const [payOpen, setPayOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -294,7 +299,7 @@ export function PosTerminal() {
       const medicine = res?.data?.data ?? res?.data ?? null;
       if (medicine) {
         // FEFO dispense endpoint: active, non-expired batches with qty > 0, earliest expiry first
-        const batchesRes: any = await apiClient.get(`/inventory/medicines/${medicine.id}/batches`);
+        const batchesRes: any = await apiClient.get(`/inventory/medicines/${medicine.id}/batches`, { params: { branchId: activeBranchId } });
         const batchList: any[] = Array.isArray(batchesRes) ? batchesRes : Array.isArray(batchesRes?.data?.data) ? batchesRes.data.data : Array.isArray(batchesRes?.data) ? batchesRes.data : [];
         const firstBatch = batchList[0];
         if (firstBatch) {
@@ -400,6 +405,10 @@ export function PosTerminal() {
     const payload = {
       patientId: patientId || undefined,
       prescriptionId: prescriptionId?.trim() || undefined,
+      // Honoured for super_admin only; every other role is pinned server-side.
+      // An invoice must name a branch, so without this a super_admin checkout
+      // is rejected outright.
+      branchId: activeBranchId,
       loyaltyPointsToRedeem,
       items: items.map((i) => ({
         medicineId: i.medicineId,
@@ -657,7 +666,7 @@ export function PosTerminal() {
                     key={m.id}
                     onClick={async () => {
                       try {
-                        const batchRes: any = await apiClient.get(`/inventory/medicines/${m.id}/batches`);
+                        const batchRes: any = await apiClient.get(`/inventory/medicines/${m.id}/batches`, { params: { branchId: activeBranchId } });
                         const batchArr: any[] = Array.isArray(batchRes) ? batchRes : Array.isArray(batchRes?.data?.data) ? batchRes.data.data : Array.isArray(batchRes?.data) ? batchRes.data : [];
                         const first = batchArr[0];
                         if (!first) {
