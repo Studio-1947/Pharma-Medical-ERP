@@ -45,6 +45,14 @@ export class InventoryController {
     return this.service.findAll(queryMedicineSchema.parse(query));
   }
 
+  // Declared before :id so "categories" is not captured as a medicine id.
+  @Get("categories")
+  @Roles("admin", "pharmacist", "inventory_manager", "cashier", "doctor")
+  @ApiOperation({ summary: "Shelf categories, for the medicine form" })
+  listCategories() {
+    return this.service.listCategories();
+  }
+
   @Get("low-stock")
   @Roles("admin", "inventory_manager")
   @ApiOperation({ summary: "Medicines at or below reorder level" })

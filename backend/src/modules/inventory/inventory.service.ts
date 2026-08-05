@@ -594,4 +594,8 @@ export class InventoryService {
   getStockValuation(branchId?: string) {
     return this.repo.getStockValuation(branchId);
   }
+
+  async listCategories() {
+    return { data: await this.repo.findCategories() };
+  }
 }

@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createMedicineSchema, type CreateMedicineDto } from "@pharmerp/types";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
@@ -17,6 +17,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Camera,
+  Loader2,
 } from "lucide-react";
 
 interface Props {
@@ -56,17 +57,71 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
   const isEdit = !!initial?.id;
   const [cameraOpen, setCameraOpen] = useState(false);
 
+  // Categories are created on the fly by catalogue imports, so the picker is
+  // loaded rather than hardcoded.
+  const { data: categoryRes } = useQuery({
+    queryKey: ["medicine-categories"],
+    queryFn: () => apiClient.get("/inventory/categories") as Promise<any>,
+    staleTime: 5 * 60_000,
+  });
+  const categories: { id: string; name: string }[] = (() => {
+    const d = (categoryRes as any)?.data ?? categoryRes;
+    return Array.isArray(d) ? d : Array.isArray(d?.data) ? d.data : [];
+  })();
+
   const {
     register,
     handleSubmit,
     watch,
     setValue,
+    reset,
     formState: { errors, isSubmitting, isDirty },
     setError,
   } = useForm<CreateMedicineDto>({
     resolver: zodResolver(createMedicineSchema),
     defaultValues: initial as CreateMedicineDto,
   });
+
+  /**
+   * When editing, load the full record rather than trusting the row handed in.
+   *
+   * The medicine list query selects a subset of columns — it has no
+   * composition, categoryId, hsnCode, storageConditions, drawerMapping,
+   * description or reorderQty. Seeding the form from that row and submitting
+   * would blank every one of them, so correcting a spelling mistake quietly
+   * destroyed the rest of the record.
+   */
+  const { data: fullRes, isLoading: loadingFull } = useQuery({
+    queryKey: queryKeys.medicines.detail(initial?.id ?? ""),
+    queryFn: () => apiClient.get(`/inventory/medicines/${initial!.id}`) as Promise<any>,
+    enabled: isEdit,
+  });
+
+  useEffect(() => {
+    if (!isEdit || !fullRes) return;
+    const d = (fullRes as any)?.data?.data ?? (fullRes as any)?.data ?? fullRes;
+    if (!d?.id) return;
+    reset({
+      ...(d as CreateMedicineDto),
+      // Nulls from the API would make the inputs uncontrolled; normalise to "".
+      brandName: d.brandName ?? "",
+      genericName: d.genericName ?? "",
+      composition: d.composition ?? "",
+      strength: d.strength ?? "",
+      dosageForm: d.dosageForm ?? "",
+      packSize: d.packSize ?? "",
+      barcode: d.barcode ?? "",
+      categoryId: d.categoryId ?? "",
+      therapeuticClass: d.therapeuticClass ?? "",
+      manufacturer: d.manufacturer ?? "",
+      hsnCode: d.hsnCode ?? "",
+      purchaseRate: d.purchaseRate ?? "",
+      scheduleClass: d.scheduleClass ?? "",
+      storageConditions: d.storageConditions ?? "",
+      drawerMapping: d.drawerMapping ?? "",
+      description: d.description ?? "",
+    });
+  }, [fullRes, isEdit, reset]);
 
   const scheduleVal = watch("scheduleClass");
   const scheduleOption = SCHEDULE_OPTIONS.find((o) => o.value === scheduleVal) ?? SCHEDULE_OPTIONS[0];
@@ -89,6 +144,17 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
 
   const onSubmit = (data: CreateMedicineDto) => mutation.mutate(data);
 
+  // Blocks submitting a partially-populated form: until the full record lands,
+  // the untouched fields would post back as blanks.
+  if (isEdit && loadingFull) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-20 text-muted-foreground">
+        <Loader2 className="animate-spin" size={22} />
+        <p className="text-sm">Loading full record...</p>
+      </div>
+    );
+  }
+
   return (
     <>
       <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col flex-1 min-h-0">
@@ -108,11 +174,63 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
             />
           </Field>
 
+          <Field
+            label="Brand Name"
+            hint="Marketed brand as staff know it at the counter (e.g. Dolo)"
+            error={errors.brandName?.message}
+          >
+            <input
+              {...register("brandName")}
+              placeholder="e.g. Dolo"
+              className={inputCls(!!errors.brandName)}
+            />
+          </Field>
+
           <Field label="Generic Name" error={errors.genericName?.message}>
             <input
               {...register("genericName")}
               placeholder="e.g. Acetaminophen"
               className={inputCls(!!errors.genericName)}
+            />
+          </Field>
+
+          <Field
+            label="Composition"
+            hint="Full ingredient list with amounts"
+            error={errors.composition?.message}
+          >
+            <input
+              {...register("composition")}
+              placeholder="e.g. Amoxicillin 500 mg + Clavulanic Acid 125 mg"
+              className={inputCls(!!errors.composition)}
+            />
+          </Field>
+
+          <Field label="Strength" error={errors.strength?.message}>
+            <input
+              {...register("strength")}
+              placeholder="e.g. 650 mg"
+              className={inputCls(!!errors.strength)}
+            />
+          </Field>
+
+          <Field label="Dosage Form" error={errors.dosageForm?.message}>
+            <input
+              {...register("dosageForm")}
+              placeholder="e.g. Tablet, Syrup, Injection"
+              className={inputCls(!!errors.dosageForm)}
+            />
+          </Field>
+
+          <Field
+            label="Pack Size"
+            hint="Pack label as sold (e.g. 10x10 Tablets)"
+            error={errors.packSize?.message}
+          >
+            <input
+              {...register("packSize")}
+              placeholder="e.g. 10x10 Tablets"
+              className={inputCls(!!errors.packSize)}
             />
           </Field>
 
@@ -160,6 +278,27 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
               className={`${inputCls(!!errors.hsnCode)} font-mono`}
             />
           </Field>
+
+          <Field
+            label="Therapeutic Class"
+            hint="Pharmacological class, narrower than the shelf category"
+            error={errors.therapeuticClass?.message}
+          >
+            <input
+              {...register("therapeuticClass")}
+              placeholder="e.g. Cephalosporin Antibiotic"
+              className={inputCls(!!errors.therapeuticClass)}
+            />
+          </Field>
+
+          <Field label="Category" error={errors.categoryId?.message}>
+            <select {...register("categoryId")} className={selectCls(!!errors.categoryId)}>
+              <option value="">Uncategorised</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </Field>
         </div>
       </Section>
 
@@ -176,6 +315,24 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
                 min="0"
                 placeholder="0.00"
                 className={`${inputCls(!!errors.priceMrp)} pl-7`}
+              />
+            </div>
+          </Field>
+
+          <Field
+            label="Purchase Rate (INR)"
+            hint="Catalogue cost from the supplier — advisory; each batch records its own cost"
+            error={errors.purchaseRate?.message}
+          >
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium pointer-events-none">₹</span>
+              <input
+                {...register("purchaseRate")}
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="0.00"
+                className={`${inputCls(!!errors.purchaseRate)} pl-7`}
               />
             </div>
           </Field>
@@ -283,22 +440,54 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
       <Section icon={<FileText size={14} />} title="Additional Information" last>
 
         <div className="space-y-4">
-          <Field label="Storage Conditions" error={errors.storageConditions?.message}>
-            <input
-              {...register("storageConditions")}
-              placeholder="e.g. Store below 25°C, protect from direct sunlight"
-              className={inputCls(!!errors.storageConditions)}
-            />
-          </Field>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
+            <Field label="Storage Conditions" error={errors.storageConditions?.message}>
+              <input
+                {...register("storageConditions")}
+                placeholder="e.g. Store below 25°C, protect from direct sunlight"
+                className={inputCls(!!errors.storageConditions)}
+              />
+            </Field>
+
+            <Field
+              label="Drawer Mapping"
+              hint="Counter drawer or pigeonhole label used to pick this product"
+              error={errors.drawerMapping?.message}
+            >
+              <input
+                {...register("drawerMapping")}
+                placeholder="e.g. D-14"
+                className={inputCls(!!errors.drawerMapping)}
+              />
+            </Field>
+          </div>
 
           <Field label="Description / Notes" error={errors.description?.message}>
             <textarea
               {...register("description")}
               rows={3}
-              placeholder="Optional: composition, usage instructions, or internal notes"
+              placeholder="Optional: usage instructions, or internal notes"
               className={`${inputCls(!!errors.description)} resize-none`}
             />
           </Field>
+
+          {/* Sellability. A catalogue import parks rows here inactive when the
+              sheet carried no MRP, and there was previously no way to switch
+              one back on — the product stayed unsellable however it was edited. */}
+          <div className="rounded-lg border border-slate-200 bg-slate-50/60 p-3">
+            <CheckboxField
+              {...register("isActive")}
+              label="Active — available for sale"
+              description="Inactive products stay in the catalogue but are hidden from POS search and barcode scanning."
+            />
+            {isEdit && initial?.isActive === false && (
+              <p className="mt-2 flex items-start gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                <AlertCircle size={11} className="shrink-0 mt-0.5" />
+                This product was imported without a price and is not sellable. Set an
+                MRP above, then tick Active.
+              </p>
+            )}
+          </div>
         </div>
       </Section>
 
