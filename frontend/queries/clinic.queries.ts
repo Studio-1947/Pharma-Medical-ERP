@@ -3,10 +3,13 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 
-export function useClinicDoctors() {
+export function useClinicDoctors(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.clinicTokens.doctors(),
     queryFn: () => apiClient.get("/clinic/doctors") as Promise<any>,
+    // Pharmacists are not on this route's @Roles list, so callers that render
+    // for every role must gate the request rather than eat a 403.
+    enabled: options.enabled ?? true,
   });
 }
 

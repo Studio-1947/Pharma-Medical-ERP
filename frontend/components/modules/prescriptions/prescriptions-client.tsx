@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
@@ -15,6 +15,7 @@ import { Modal } from "@/components/ui/modal";
 import { PrescriptionScanUpload } from "./prescription-scan-upload";
 import { PrescriptionScanViewer } from "./prescription-scan-viewer";
 import { MedicineAutocomplete, type MedicineOption } from "./medicine-autocomplete";
+import { useCurrentDoctor } from "@/hooks/use-current-doctor";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -118,6 +119,7 @@ function CreatePrescriptionModal({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const { isDoctor, name: currentDoctorName } = useCurrentDoctor();
   const [patientSearch, setPatientSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<{ id: string; name: string; phone: string } | null>(null);
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
@@ -131,6 +133,12 @@ function CreatePrescriptionModal({
   const [items, setItems] = useState<RxItem[]>([blankItem()]);
   const [scanKey, setScanKey] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+
+  // A doctor prescribes as themselves; the server enforces this regardless, so
+  // the field is filled in and locked rather than left to be typed over.
+  useEffect(() => {
+    if (isDoctor && currentDoctorName) setDoctorName(currentDoctorName);
+  }, [isDoctor, currentDoctorName]);
 
   const { data: patientResults } = useQuery({
     queryKey: ["patient-search", patientSearch],
@@ -154,7 +162,8 @@ function CreatePrescriptionModal({
   function handleClose() {
     setPatientSearch("");
     setSelectedPatient(null);
-    setDoctorName("");
+    // A doctor's own name is not a per-prescription value, so it survives reset.
+    setDoctorName(isDoctor && currentDoctorName ? currentDoctorName : "");
     setDoctorRegNo("");
     setHospitalName("");
     setIssuedDate(new Date().toISOString().split("T")[0]);
@@ -310,9 +319,17 @@ function CreatePrescriptionModal({
               type="text"
               value={doctorName}
               onChange={(e) => setDoctorName(e.target.value)}
+              readOnly={isDoctor}
               placeholder="Dr. Name"
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${
+                isDoctor ? "bg-slate-50 text-slate-600 cursor-not-allowed" : ""
+              }`}
             />
+            {isDoctor && (
+              <p className="text-xs text-muted-foreground">
+                Prescriptions you create are recorded under your own name.
+              </p>
+            )}
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium">Doctor Reg. No.</label>
