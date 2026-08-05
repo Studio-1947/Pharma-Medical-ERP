@@ -6,6 +6,7 @@ import { apiClient, queryKeys } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
 import { useDebounce } from "@/hooks/use-debounce";
 import { localDateString } from "@/lib/date";
+import { useActiveBranchId } from "@/hooks/use-branch";
 import { Modal } from "@/components/ui/modal";
 import {
   useClinicDoctors,
@@ -85,6 +86,7 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
   const patients: Patient[] = (patientsRes as any)?.data ?? [];
 
   const createMutation = useCreateClinicToken();
+  const { branchId, needsSelection: needsBranchSelection } = useActiveBranchId();
 
   function reset() {
     setPatientSearch("");
@@ -105,6 +107,12 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
     if (!selectedPatient) { setFormError("Please select a patient."); return; }
     if (!doctorId) { setFormError("Please select a doctor."); return; }
     if (!date) { setFormError("Please select a date."); return; }
+    // A token has to land in one branch's queue. super_admin is unscoped, so it
+    // picks one from the header switcher; every other role is pinned server-side.
+    if (needsBranchSelection) {
+      setFormError("Select an active branch from the header before generating a token.");
+      return;
+    }
     setFormError(null);
 
     createMutation.mutate(
@@ -114,6 +122,7 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
         date,
         timeSlot: timeSlot.trim() || undefined,
         notes: notes.trim() || undefined,
+        branchId,
       },
       {
         onSuccess: (res: any) => {
