@@ -5,7 +5,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
-import { resolveBranchScope } from "../../common/auth/branch-scope";
+import { resolveBranchScope, requireBranchScope } from "../../common/auth/branch-scope";
 import {
   CreateInvoiceDto,
   QueryInvoiceDto, 
@@ -46,7 +46,12 @@ export class BillingController {
   @Roles("admin", "pharmacist", "cashier")
   @ApiOperation({ summary: "Create invoice — atomically decrements stock (FEFO)" })
   create(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
-    return this.service.create(createInvoiceSchema.parse(body), user.sub, user.branchId);
+    const dto = createInvoiceSchema.parse(body);
+    // Revenue has to land in a branch: per-branch sales reporting and the GST
+    // return both key off it. Passing user.branchId straight through left
+    // super_admin invoices with no branch at all.
+    const branchId = requireBranchScope(user, dto.branchId);
+    return this.service.create(dto, user.sub, branchId);
   }
 
   @Post("invoices/:id/void")

@@ -75,10 +75,24 @@ export class BatchRepository {
     });
   }
 
-  async checkBatchNoExists(medicineId: string, batchNo: string, excludeId?: string): Promise<boolean> {
+  /**
+   * Scoped by branch, mirroring the batch_medicine_batchno_branch_uniq index.
+   *
+   * Without the branchId term this check stayed global while the database
+   * constraint became per-branch — the application would refuse a batch number
+   * that Postgres was perfectly willing to accept, which is exactly the
+   * cross-branch collision the migration set out to fix.
+   */
+  async checkBatchNoExists(
+    medicineId: string,
+    batchNo: string,
+    branchId: string,
+    excludeId?: string,
+  ): Promise<boolean> {
     const conditions: any[] = [
       eq(schema.inventoryBatches.medicineId, medicineId),
       eq(schema.inventoryBatches.batchNo, batchNo),
+      eq(schema.inventoryBatches.branchId, branchId),
     ];
     if (excludeId) {
       conditions.push(ne(schema.inventoryBatches.id, excludeId));
@@ -91,11 +105,17 @@ export class BatchRepository {
     return !!row;
   }
 
-  async createBatch(data: CreateBatchDto & { resolvedLocationId?: string }) {
-    const duplicate = await this.checkBatchNoExists(data.medicineId, data.batchNo);
+  async createBatch(
+    data: CreateBatchDto & { resolvedLocationId?: string; branchId: string },
+  ) {
+    const duplicate = await this.checkBatchNoExists(
+      data.medicineId,
+      data.batchNo,
+      data.branchId,
+    );
     if (duplicate) {
       throw new UnprocessableEntityException(
-        `Batch number "${data.batchNo}" already exists for this medicine. Use a unique batch number.`,
+        `Batch number "${data.batchNo}" already exists for this medicine in this branch. Use a unique batch number.`,
       );
     }
 
@@ -103,6 +123,7 @@ export class BatchRepository {
       .insert(schema.inventoryBatches)
       .values({
         medicineId: data.medicineId,
+        branchId: data.branchId,
         locationId: data.resolvedLocationId ?? data.locationId,
         batchNo: data.batchNo,
         expiryDate: data.expiryDate,
@@ -146,41 +167,25 @@ export class BatchRepository {
   }
 
   /**
-   * Returns the first storage location for a branch, creating a default
-   * warehouse + location if none exists. Ensures every directly-created batch
-   * has a locationId so selectBatchesForDispense can find it.
+   * Returns a storage location for a branch, creating a default shelf if the
+   * branch has none.
+   *
+   * Shelf assignment is now cosmetic for stock ownership — a batch carries its
+   * own branchId — but locations still describe where staff physically find the
+   * pack, so new batches are given one.
    */
   async findOrCreateDefaultLocationForBranch(branchId: string): Promise<string> {
-    // Find existing warehouse for branch
-    const [existingWarehouse] = await this.db
-      .select({ id: schema.warehouses.id })
-      .from(schema.warehouses)
-      .where(and(eq(schema.warehouses.branchId, branchId), eq(schema.warehouses.isActive, true)))
-      .limit(1);
-
-    let warehouseId: string;
-    if (existingWarehouse) {
-      warehouseId = existingWarehouse.id;
-    } else {
-      const [newWarehouse] = await this.db
-        .insert(schema.warehouses)
-        .values({ branchId, name: "Main Store", code: `WH-${branchId.slice(0, 8).toUpperCase()}`, isDefault: true })
-        .returning({ id: schema.warehouses.id });
-      warehouseId = newWarehouse!.id;
-    }
-
-    // Find existing storage location in warehouse
     const [existingLocation] = await this.db
       .select({ id: schema.storageLocations.id })
       .from(schema.storageLocations)
-      .where(eq(schema.storageLocations.warehouseId, warehouseId))
+      .where(eq(schema.storageLocations.branchId, branchId))
       .limit(1);
 
     if (existingLocation) return existingLocation.id;
 
     const [newLocation] = await this.db
       .insert(schema.storageLocations)
-      .values({ warehouseId, label: "Default Shelf", aisle: "A", shelf: "1", bin: "1" })
+      .values({ branchId, label: "Default Shelf", aisle: "A", shelf: "1", bin: "1" })
       .returning({ id: schema.storageLocations.id });
     return newLocation!.id;
   }
@@ -233,27 +238,23 @@ export class BatchRepository {
     ];
 
     if (branchId) {
-      conditions.push(eq(schema.warehouses.branchId, branchId));
+      conditions.push(eq(schema.inventoryBatches.branchId, branchId));
     }
 
+    // Reads branchId straight off the batch. The old form inner-joined through
+    // storage_locations to warehouses, which silently dropped every batch with
+    // no shelf assigned — those simply never appeared in expiry alerts.
     return this.db
       .select({
         id: schema.inventoryBatches.id,
         medicineId: schema.inventoryBatches.medicineId,
+        branchId: schema.inventoryBatches.branchId,
         batchNo: schema.inventoryBatches.batchNo,
         expiryDate: schema.inventoryBatches.expiryDate,
         quantity: schema.inventoryBatches.quantity,
         status: schema.inventoryBatches.status,
       })
       .from(schema.inventoryBatches)
-      .innerJoin(
-        schema.storageLocations,
-        eq(schema.inventoryBatches.locationId, schema.storageLocations.id),
-      )
-      .innerJoin(
-        schema.warehouses,
-        eq(schema.storageLocations.warehouseId, schema.warehouses.id),
-      )
       .where(and(...conditions))
       .orderBy(asc(schema.inventoryBatches.expiryDate));
   }

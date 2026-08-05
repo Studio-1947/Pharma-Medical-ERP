@@ -164,7 +164,7 @@ export class ProcurementRepository {
       where: and(eq(schema.purchaseOrders.id, id), isNull(schema.purchaseOrders.deletedAt)),
       with: {
         supplier: true,
-        warehouse: true,
+        branch: true,
         items: { with: { medicine: true } },
         grns: {
           orderBy: (grns, { desc: descOp }) => [descOp(grns.receivedAt)],
@@ -184,7 +184,10 @@ export class ProcurementRepository {
     });
   }
 
-  async createPO(data: CreatePurchaseOrderDto, raisedBy: string) {
+  async createPO(
+    data: CreatePurchaseOrderDto & { branchId: string },
+    raisedBy: string,
+  ) {
     return this.db.transaction(async (tx) => {
       const poNumber = `PO-${Date.now()}`;
 
@@ -210,7 +213,7 @@ export class ProcurementRepository {
         .values({
           poNumber,
           supplierId: data.supplierId,
-          warehouseId: data.warehouseId,
+          branchId: data.branchId,
           raisedBy,
           status: "draft",
           expectedDelivery: data.expectedDelivery,
@@ -267,7 +270,9 @@ export class ProcurementRepository {
         .update(schema.purchaseOrders)
         .set({
           supplierId: data.supplierId,
-          warehouseId: data.warehouseId,
+          // branchId is deliberately not editable: moving a PO to another
+          // branch after the fact would send its received stock somewhere the
+          // ordering branch never sees.
           expectedDelivery: data.expectedDelivery,
           notes: data.notes,
           subtotal: subtotal.toFixed(2),
@@ -339,22 +344,31 @@ export class ProcurementRepository {
 
     const grnNumber = `GRN-${Date.now()}`;
 
-    // Get PO details to find warehouse and supplier
+    // Get PO details to find branch and supplier
     const po = await db.query.purchaseOrders.findFirst({
       where: eq(schema.purchaseOrders.id, dto.poId),
       with: { items: true },
     });
     if (!po) throw new Error(`PO ${dto.poId} not found during GRN`);
 
-    // Find a default storage location for this warehouse
-    const [location] = await db
+    // The branch that raised the order owns the stock it receives. This single
+    // value is what keeps goods inward in the right branch — get it wrong and
+    // stock silently lands in another branch's shelves.
+    const branchId = po.branchId;
+
+    // A shelf to physically file the stock on. Ownership no longer depends on
+    // it, so a branch with no shelves configured gets one rather than failing.
+    let [location] = await db
       .select({ id: schema.storageLocations.id })
       .from(schema.storageLocations)
-      .where(eq(schema.storageLocations.warehouseId, po.warehouseId))
+      .where(eq(schema.storageLocations.branchId, branchId))
       .limit(1);
 
     if (!location) {
-      throw new Error(`No storage locations found for warehouse ${po.warehouseId}. Create one first.`);
+      [location] = await db
+        .insert(schema.storageLocations)
+        .values({ branchId, label: "Default Shelf", aisle: "A", shelf: "1", bin: "1" })
+        .returning({ id: schema.storageLocations.id });
     }
 
     let grnTotal = new Decimal(0);
@@ -367,6 +381,7 @@ export class ProcurementRepository {
       .values({
         grnNumber,
         poId: dto.poId,
+        branchId,
         receivedBy,
         supplierInvoiceNo: dto.supplierInvoiceNo,
         qcPassed: dto.qcPassed,
@@ -395,7 +410,9 @@ export class ProcurementRepository {
         .insert(schema.inventoryBatches)
         .values({
           medicineId: poItem.medicineId,
-          locationId: location.id,
+          // Stamped from the PO's branch — the correctness hinge of goods inward.
+          branchId,
+          locationId: location!.id,
           batchNo: item.batchNo,
           expiryDate: item.expiryDate,
           quantity: item.receivedQty,
@@ -414,6 +431,7 @@ export class ProcurementRepository {
       await db.insert(schema.stockMovements).values({
         batchId: batch!.id,
         medicineId: poItem.medicineId,
+        branchId,
         movementType: "purchase",
         quantity: item.receivedQty,
         performedBy: receivedBy,

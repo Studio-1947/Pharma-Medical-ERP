@@ -277,8 +277,12 @@ export class ProcurementService {
     return { supplier, bills, payments };
   }
 
-  async createPO(dto: CreatePurchaseOrderDto, raisedBy: string) {
-    const po = await this.repo.createPO(dto, raisedBy);
+  async createPO(
+    dto: CreatePurchaseOrderDto,
+    raisedBy: string,
+    branchId: string,
+  ) {
+    const po = await this.repo.createPO({ ...dto, branchId }, raisedBy);
     return { data: po, message: "Purchase order created" };
   }
 

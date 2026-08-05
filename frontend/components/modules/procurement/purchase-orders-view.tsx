@@ -7,6 +7,8 @@ import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
 import { Plus, Search, FileText, CheckCircle, XCircle, Send, PlusCircle, PackageCheck, Trash2, Loader2, Edit2 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
+import { BranchSelect } from "@/components/shared/branch-select";
+import { useActiveBranchId } from "@/hooks/use-branch";
 
 interface POItem {
   id: string;
@@ -23,7 +25,7 @@ interface PO {
   id: string;
   poNumber: string;
   supplierId: string;
-  warehouseId: string;
+  branchId: string;
   status: string;
   expectedDelivery?: string;
   totalValue: string;
@@ -32,7 +34,7 @@ interface PO {
   notes?: string;
   items: POItem[];
   supplier?: { id: string; name: string; code: string };
-  warehouse?: { name: string };
+  branch?: { name: string };
 }
 
 interface GrnLineItem {
@@ -255,6 +257,7 @@ export function PurchaseOrdersView() {
   const { user } = useAuthStore();
   const { error: toastError, warning: toastWarning, success: toastSuccess } = useToast();
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const { branchId: activeBranchId } = useActiveBranchId();
 
   const [isOpen, setIsOpen] = useState(false);
   const [editingPO, setEditingPO] = useState<PO | null>(null);
@@ -265,7 +268,7 @@ export function PurchaseOrdersView() {
   // For Create PO Modal
   const [form, setForm] = useState({
     supplierId: "",
-    warehouseId: "",
+    branchId: "",
     expectedDelivery: "",
     notes: "",
     items: [{ medicineId: "", orderedQty: 1, unitCost: "0", taxPct: "0", schemeFreeQty: 0, discountPct: "0", isConsignment: false }],
@@ -286,10 +289,7 @@ export function PurchaseOrdersView() {
     queryFn: () => apiClient.get("/inventory/medicines"),
   });
 
-  const { data: rawWarehouses } = useQuery({
-    queryKey: ["warehouses"],
-    queryFn: () => apiClient.get("/inventory/warehouses"),
-  });
+  // Branch options come from the shared BranchSelect below.
 
   const pos: PO[] = (() => {
     const d = rawPOs as any;
@@ -311,15 +311,6 @@ export function PurchaseOrdersView() {
 
   const medicines = (() => {
     const d = rawMedicines as any;
-    if (Array.isArray(d)) return d;
-    if (Array.isArray(d?.data)) return d.data;
-    if (Array.isArray(d?.data?.data)) return d.data.data;
-    if (Array.isArray(d?.rows)) return d.rows;
-    return [];
-  })();
-
-  const warehouses = (() => {
-    const d = rawWarehouses as any;
     if (Array.isArray(d)) return d;
     if (Array.isArray(d?.data)) return d.data;
     if (Array.isArray(d?.data?.data)) return d.data.data;
@@ -393,7 +384,9 @@ export function PurchaseOrdersView() {
     setEditingPO(null);
     setForm({
       supplierId: suppliers[0]?.id || "",
-      warehouseId: warehouses[0]?.id || "",
+      // Defaults to the active branch; a branch user is pinned to theirs
+      // server-side regardless of what the form sends.
+      branchId: activeBranchId ?? "",
       expectedDelivery: "",
       notes: "",
       items: [{ medicineId: medicines[0]?.id || "", orderedQty: 1, unitCost: "0", taxPct: "0", schemeFreeQty: 0, discountPct: "0", isConsignment: false }],
@@ -405,7 +398,7 @@ export function PurchaseOrdersView() {
     setEditingPO(po);
     setForm({
       supplierId: po.supplierId,
-      warehouseId: po.warehouseId,
+      branchId: po.branchId,
       expectedDelivery: po.expectedDelivery ?? "",
       notes: po.notes ?? "",
       items: po.items?.length
@@ -445,14 +438,14 @@ export function PurchaseOrdersView() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.supplierId || !form.warehouseId || form.items.some((i) => !i.medicineId || i.orderedQty <= 0)) {
+    if (!form.supplierId || !form.branchId || form.items.some((i) => !i.medicineId || i.orderedQty <= 0)) {
       toastWarning("Incomplete order", "All fields are required and each item quantity must be greater than 0.");
       return;
     }
 
     const payload = {
       supplierId: form.supplierId,
-      warehouseId: form.warehouseId,
+      branchId: form.branchId,
       expectedDelivery: form.expectedDelivery || undefined,
       notes: form.notes || undefined,
       items: form.items.map((i) => ({
@@ -648,19 +641,15 @@ export function PurchaseOrdersView() {
               </select>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold">Warehouse *</label>
-              <select
-                required
-                value={form.warehouseId}
-                onChange={(e) => setForm({ ...form, warehouseId: e.target.value })}
-                className="w-full border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-              >
-                {warehouses.map((w: any) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}
-                  </option>
-                ))}
-              </select>
+              <label className="text-xs font-semibold">Branch *</label>
+              <BranchSelect
+                value={form.branchId}
+                onChange={(id) => setForm({ ...form, branchId: id })}
+                placeholder="Select branch"
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Stock received against this order lands in this branch.
+              </p>
             </div>
           </div>
 

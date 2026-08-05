@@ -129,7 +129,7 @@ describe("BillingService (Compliance)", () => {
         }]
       ]);
 
-      await expect(service.create(dto as any, "staff-1")).rejects.toThrow(UnprocessableEntityException);
+      await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(UnprocessableEntityException);
     });
 
     it("should allow Schedule H with verified prescription", async () => {
@@ -186,7 +186,7 @@ describe("BillingService (Compliance)", () => {
             totalAmount: 112
         });
 
-        const result = await service.create(dto as any, "staff-1");
+        const result = await service.create(dto as any, "staff-1", "branch-1");
         expect(result.invoice.id).toBe("inv-1");
       });
   });
@@ -226,7 +226,7 @@ describe("BillingService (Compliance)", () => {
         totalAmount: 112,
       });
 
-      await expect(service.create(dto as any, "staff-1")).rejects.toThrow(UnprocessableEntityException);
+      await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(UnprocessableEntityException);
     });
   });
 

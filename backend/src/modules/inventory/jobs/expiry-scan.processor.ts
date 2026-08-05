@@ -34,6 +34,7 @@ export class ExpiryScanProcessor {
         await this.movementRepo.log({
           batchId: b.id,
           medicineId: full.medicineId,
+          branchId: full.branchId,
           movementType: "expiry_write_off",
           quantity: -full.quantity,
           notes: "Auto write-off on expiry scan",

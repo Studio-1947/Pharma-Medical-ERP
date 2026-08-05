@@ -133,7 +133,7 @@ describe("CHECKOUT-01 — OTC drug, single cash payment, no patient", () => {
       [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" }],
     ]);
 
-    const result = await service.create(dto as any, "staff-1");
+    const result = await service.create(dto as any, "staff-1", "branch-1");
 
     expect(result.invoice.invoiceNo).toBe("INV-20240115-0001");
     expect(mockRepo.createInvoiceWithItems).toHaveBeenCalledOnce();
@@ -181,7 +181,7 @@ describe("CHECKOUT-02 — Multi-item, split payment produces paymentMode=mixed",
       [{ batchId: "batch-b", batchNo: "BB01", expiryDate: "2026-07-01", allocate: 1, mrpAtEntry: "1120.00" }],
     ]);
 
-    await service.create(dto as any, "staff-1");
+    await service.create(dto as any, "staff-1", "branch-1");
 
     const invoiceArg = mockRepo.createInvoiceWithItems.mock.calls[0]![0];
     expect(invoiceArg.paymentMode).toBe("mixed");
@@ -212,7 +212,7 @@ describe("CHECKOUT-03 — Loyalty points accrual", () => {
       [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 5, mrpAtEntry: "1000.00" }],
     ]);
 
-    await service.create(dto as any, "staff-1");
+    await service.create(dto as any, "staff-1", "branch-1");
 
     expect(mockPatientsRepo.addLoyaltyPoints).toHaveBeenCalledWith("patient-1", 5, tx);
   });
@@ -243,7 +243,7 @@ describe("CHECKOUT-04 — Loyalty points redemption lowers final total", () => {
       [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "1100.00" }],
     ]);
 
-    await service.create(dto as any, "staff-1");
+    await service.create(dto as any, "staff-1", "branch-1");
 
     expect(mockPatientsRepo.deductLoyaltyPoints).toHaveBeenCalledWith("patient-1", 200, tx);
     const invoiceArg = mockRepo.createInvoiceWithItems.mock.calls[0]![0];
@@ -271,7 +271,7 @@ describe("CHECKOUT-05 — Expired prescription is rejected", () => {
 
     (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
 
-    await expect(service.create(dto as any, "staff-1")).rejects.toThrow(/expired/i);
+    await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(/expired/i);
   });
 });
 
@@ -295,7 +295,7 @@ describe("CHECKOUT-06 — Already-fully-dispensed prescription item rejected", (
 
     (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
 
-    await expect(service.create(dto as any, "staff-1")).rejects.toThrow(/fully dispensed/i);
+    await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(/fully dispensed/i);
   });
 });
 
@@ -319,7 +319,7 @@ describe("CHECKOUT-07 — Schedule H override approver must be pharmacist or adm
 
     (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
 
-    await expect(service.create(dto as any, "staff-1")).rejects.toThrow(/Override approver/i);
+    await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(/Override approver/i);
   });
 });
 
@@ -345,7 +345,7 @@ describe("CHECKOUT-08 — Concurrent batch depletion guard", () => {
       [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" }],
     ]);
 
-    await expect(service.create(dto as any, "staff-1")).rejects.toThrow(/Concurrent depletion/i);
+    await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(/Concurrent depletion/i);
   });
 });
 
@@ -370,7 +370,7 @@ describe("CHECKOUT-09 — PDF is not pre-generated during checkout", () => {
       [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 1, mrpAtEntry: "1120.00" }],
     ]);
 
-    await service.create(dto as any, "staff-1");
+    await service.create(dto as any, "staff-1", "branch-1");
 
     expect(mockPdfService.generateAndUpload).not.toHaveBeenCalled();
   });
@@ -397,7 +397,7 @@ describe("CHECKOUT-10 — ClickHouse sale events emitted after checkout", () => 
       [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" }],
     ]);
 
-    await service.create(dto as any, "staff-1");
+    await service.create(dto as any, "staff-1", "branch-1");
 
     // insertSaleEvents is fire-and-forget — use a small wait to let the microtask flush
     await Promise.resolve();

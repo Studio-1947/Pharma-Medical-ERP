@@ -18,10 +18,10 @@ interface TransferItem {
 interface Transfer {
   id: string;
   transferNo: string;
-  fromWarehouseId: string;
-  fromWarehouseName?: string;
-  toWarehouseId: string;
-  toWarehouseName?: string;
+  fromBranchId: string;
+  fromBranchName?: string;
+  toBranchId: string;
+  toBranchName?: string;
   status: "draft" | "in_transit" | "delivered" | "rejected";
   notes?: string;
   createdAt: string;
@@ -269,8 +269,8 @@ export function TransfersView() {
                         <td className="px-4 py-3 font-mono text-xs font-semibold text-emerald-600">
                           {t.transferNo}
                         </td>
-                        <td className="px-4 py-3 text-sm">{t.fromWarehouseName ?? t.fromWarehouseId}</td>
-                        <td className="px-4 py-3 text-sm">{t.toWarehouseName ?? t.toWarehouseId}</td>
+                        <td className="px-4 py-3 text-sm">{t.fromBranchName ?? t.fromBranchId}</td>
+                        <td className="px-4 py-3 text-sm">{t.toBranchName ?? t.toBranchId}</td>
                         <td className="px-4 py-3 text-center">{t.items?.length ?? 0}</td>
                         <td className="px-4 py-3 text-center">
                           <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium ${cfg.className}`}>
@@ -373,7 +373,7 @@ export function TransfersView() {
       {/* Create modal */}
       <Modal
         title="New Stock Transfer"
-        subtitle="Create an inter-warehouse stock transfer"
+        subtitle="Create an inter-branch stock transfer"
         icon={<Truck size={16} />}
         open={createOpen}
         onClose={() => setCreateOpen(false)}

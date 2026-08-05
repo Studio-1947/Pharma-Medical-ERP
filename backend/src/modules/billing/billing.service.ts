@@ -80,7 +80,7 @@ export class BillingService {
    * Includes Schedule H gate, FEFO selection, server-side price enforcement,
    * GST split, and split payments.
    */
-  async create(dto: CreateInvoiceDto, staffId: string, branchId?: string) {
+  async create(dto: CreateInvoiceDto, staffId: string, branchId: string) {
     const result = await this.drizzle.db.transaction(async (tx) => {
       const interState = false;
 
@@ -268,6 +268,7 @@ export class BillingService {
       const movementRows: {
         batchId: string;
         medicineId: string;
+        branchId: string;
         movementType: "sale";
         quantity: number;
         performedBy: string;
@@ -298,6 +299,7 @@ export class BillingService {
         movementRows.push({
           batchId: allocation.batchId,
           medicineId: item.medicineId,
+          branchId,
           movementType: "sale",
           quantity: -allocation.allocate,
           performedBy: staffId,
@@ -409,7 +411,7 @@ export class BillingService {
       lineTotal: parseFloat(line.lineTotal.toFixed(2)),
       taxAmount: parseFloat(line.taxAmount.toFixed(2)),
       paymentMode: paymentMode as SaleEventDto["paymentMode"],
-      branchId: branchId ?? "unknown",
+      branchId,
       staffId,
       patientId: dto.patientId,
       createdAt: now,
@@ -446,6 +448,8 @@ export class BillingService {
         await this.movementRepo.log({
           batchId: item.batchId,
           medicineId: item.medicineId,
+          // Stock returns to the branch that raised the invoice.
+          branchId: existing.data.branchId,
           movementType: "return",
           quantity: item.quantity,
           performedBy: userId,
@@ -525,6 +529,7 @@ export class BillingService {
         await this.movementRepo.log({
           batchId: line.originalItem.batchId,
           medicineId: line.originalItem.medicineId,
+          branchId: original.branchId,
           movementType: "return",
           quantity: line.returnQty,   // positive = restock
           performedBy: staffId,
@@ -539,6 +544,9 @@ export class BillingService {
         invoiceNo: returnInvoiceNo,
         patientId: original.patientId,
         staffId,
+        // A credit note belongs to the branch that made the original sale, so
+        // the refund nets off against that branch's revenue and not another's.
+        branchId: original.branchId,
         prescriptionId: original.prescriptionId,
         subtotal: returnTotal.toFixed(2),
         discountAmount: "0.00",

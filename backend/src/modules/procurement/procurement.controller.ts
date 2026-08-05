@@ -7,6 +7,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
+import { requireBranchScope } from "../../common/auth/branch-scope";
 import {
   createSupplierSchema,
   updateSupplierSchema,
@@ -181,7 +182,11 @@ export class ProcurementController {
   @Roles("admin", "pharmacist", "inventory_manager")
   @ApiOperation({ summary: "Create a draft purchase order" })
   createPO(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
-    return this.service.createPO(createPurchaseOrderSchema.parse(body), user.sub);
+    const dto = createPurchaseOrderSchema.parse(body);
+    // The ordering branch is stamped onto every batch the GRN later creates,
+    // so it is resolved from the caller rather than trusted from the body.
+    const branchId = requireBranchScope(user, dto.branchId);
+    return this.service.createPO(dto, user.sub, branchId);
   }
 
   @Patch("purchase-orders/:id")

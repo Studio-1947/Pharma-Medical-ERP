@@ -14,6 +14,7 @@ import {
 import { relations, sql } from "drizzle-orm";
 import { batchStatusEnum } from "./enums";
 import { users } from "./auth";
+import { branches } from "./branches";
 
 export const medicineCategories = pgTable("medicine_categories", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -98,24 +99,18 @@ export const medicines = pgTable(
   }),
 );
 
-export const warehouses = pgTable("warehouses", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  branchId: uuid("branch_id").notNull(),
-  name: varchar("name", { length: 100 }).notNull(),
-  code: varchar("code", { length: 20 }).notNull().unique(),
-  address: text("address"),
-  isDefault: boolean("is_default").notNull().default(false),
-  isActive: boolean("is_active").notNull().default(true),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .defaultNow()
-    .notNull(),
-});
-
+/**
+ * Physical shelf addressing inside a branch (rack, shelf, cold chain).
+ *
+ * Previously hung off a `warehouses` table sitting between branch and shelf.
+ * That layer did not exist in the business — there are branches and there are
+ * racks — so it was removed and these re-parented straight onto the branch.
+ */
 export const storageLocations = pgTable("storage_locations", {
   id: uuid("id").primaryKey().defaultRandom(),
-  warehouseId: uuid("warehouse_id")
+  branchId: uuid("branch_id")
     .notNull()
-    .references(() => warehouses.id, { onDelete: "cascade" }),
+    .references(() => branches.id, { onDelete: "cascade" }),
   aisle: varchar("aisle", { length: 10 }),
   shelf: varchar("shelf", { length: 10 }),
   bin: varchar("bin", { length: 10 }),
@@ -133,6 +128,13 @@ export const inventoryBatches = pgTable(
     medicineId: uuid("medicine_id")
       .notNull()
       .references(() => medicines.id, { onDelete: "restrict" }),
+    // Which branch physically holds this stock. Denormalised on purpose: the
+    // branch used to be reachable only as batch -> location -> warehouse ->
+    // branch, and `locationId` is nullable, so any batch without a shelf
+    // assigned belonged to no branch at all. Every stock query filters on this.
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
     locationId: uuid("location_id").references(() => storageLocations.id, {
       onDelete: "set null",
     }),
@@ -170,9 +172,23 @@ export const inventoryBatches = pgTable(
       t.expiryDate,
     ),
     statusIdx: index("batch_status_idx").on(t.status),
-    medicineBatchNoUniq: uniqueIndex("batch_medicine_batchno_uniq").on(
+    // Per-branch stock lookups and expiry sweeps, the two hottest queries.
+    branchMedicineIdx: index("batch_branch_medicine_idx").on(
+      t.branchId,
+      t.medicineId,
+    ),
+    branchExpiryIdx: index("batch_branch_expiry_idx").on(
+      t.branchId,
+      t.expiryDate,
+    ),
+    // Scoped by branch. Was (medicineId, batchNo) globally, which made branch
+    // separation impossible: two branches buying the same drug from the same
+    // distributor receive the identical manufacturer batch number, and the
+    // second branch's GRN died on a duplicate key.
+    medicineBatchNoUniq: uniqueIndex("batch_medicine_batchno_branch_uniq").on(
       t.medicineId,
       t.batchNo,
+      t.branchId,
     ),
   }),
 );
@@ -187,6 +203,12 @@ export const stockMovements = pgTable(
     medicineId: uuid("medicine_id")
       .notNull()
       .references(() => medicines.id, { onDelete: "restrict" }),
+    // Carried on the ledger row itself rather than derived through the batch:
+    // per-branch movement reports are a hot path and would otherwise need a
+    // three-table join on an append-only table that grows fastest of all.
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "restrict" }),
     movementType: varchar("movement_type", { length: 50 }).notNull(),
     quantity: integer("quantity").notNull(),
     referenceId: uuid("reference_id"),
@@ -202,6 +224,10 @@ export const stockMovements = pgTable(
   (t) => ({
     batchIdx: index("stock_movement_batch_idx").on(t.batchId),
     createdAtIdx: index("stock_movement_created_at_idx").on(t.createdAt),
+    branchCreatedAtIdx: index("stock_movement_branch_created_at_idx").on(
+      t.branchId,
+      t.createdAt,
+    ),
   }),
 );
 
@@ -227,6 +253,10 @@ export const inventoryBatchesRelations = relations(
       fields: [inventoryBatches.medicineId],
       references: [medicines.id],
     }),
+    branch: one(branches, {
+      fields: [inventoryBatches.branchId],
+      references: [branches.id],
+    }),
     location: one(storageLocations, {
       fields: [inventoryBatches.locationId],
       references: [storageLocations.id],
@@ -237,9 +267,9 @@ export const inventoryBatchesRelations = relations(
 export const storageLocationsRelations = relations(
   storageLocations,
   ({ one, many }) => ({
-    warehouse: one(warehouses, {
-      fields: [storageLocations.warehouseId],
-      references: [warehouses.id],
+    branch: one(branches, {
+      fields: [storageLocations.branchId],
+      references: [branches.id],
     }),
     batches: many(inventoryBatches),
   }),

@@ -5,6 +5,7 @@ import { useForm, useFieldArray } from "react-hook-form";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Plus, Trash2, AlertCircle, CheckCircle2, Search, ChevronDown } from "lucide-react";
 import { apiClient } from "@/lib/api-client";
+import { BranchSelect } from "@/components/shared/branch-select";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -23,12 +24,6 @@ interface Batch {
   reservedQty: number;
 }
 
-interface Warehouse {
-  id: string;
-  name: string;
-  code: string;
-}
-
 interface TransferItemInput {
   medicineId: string;
   medicineName: string;
@@ -38,8 +33,8 @@ interface TransferItemInput {
 }
 
 interface TransferFormData {
-  fromWarehouseId: string;
-  toWarehouseId: string;
+  fromBranchId: string;
+  toBranchId: string;
   notes: string;
   items: TransferItemInput[];
 }
@@ -49,47 +44,8 @@ interface Props {
   onCancel?: () => void;
 }
 
-// ─── Warehouse selector ───────────────────────────────────────────────────────
-
-function WarehouseSelect({
-  value,
-  onChange,
-  placeholder,
-  error,
-}: {
-  value: string;
-  onChange: (id: string) => void;
-  placeholder: string;
-  error?: boolean;
-}) {
-  const { data } = useQuery<Warehouse[]>({
-    queryKey: ["warehouses"],
-    queryFn: () =>
-      apiClient.get("/inventory/warehouses").then((r: any) => r.data ?? r ?? []),
-    staleTime: 60_000,
-  });
-
-  const warehouses: Warehouse[] = data ?? [];
-
-  return (
-    <select
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      className={[
-        "w-full rounded-lg border px-3 py-2 text-sm bg-white",
-        "focus:outline-none focus:ring-2 focus:ring-emerald-100 focus:border-emerald-400",
-        error ? "border-red-300 bg-red-50/30" : "border-slate-200",
-      ].join(" ")}
-    >
-      <option value="">{placeholder}</option>
-      {warehouses.map((w) => (
-        <option key={w.id} value={w.id}>
-          {w.name} ({w.code})
-        </option>
-      ))}
-    </select>
-  );
-}
+// Branch selection now uses the shared BranchSelect — the local warehouse
+// picker went with the warehouse layer.
 
 // ─── Medicine search combobox ─────────────────────────────────────────────────
 
@@ -248,8 +204,8 @@ export function TransferForm({ onSuccess, onCancel }: Props) {
   const { control, handleSubmit, setValue, watch, formState: { errors, isSubmitting } } =
     useForm<TransferFormData>({
       defaultValues: {
-        fromWarehouseId: "",
-        toWarehouseId: "",
+        fromBranchId: "",
+        toBranchId: "",
         notes: "",
         items: [{ medicineId: "", medicineName: "", batchId: "", batchNo: "", requestedQty: 1 }],
       },
@@ -261,8 +217,8 @@ export function TransferForm({ onSuccess, onCancel }: Props) {
   const mutation = useMutation({
     mutationFn: (data: TransferFormData) =>
       apiClient.post("/distribution/transfers", {
-        fromWarehouseId: data.fromWarehouseId,
-        toWarehouseId: data.toWarehouseId,
+        fromBranchId: data.fromBranchId,
+        toBranchId: data.toBranchId,
         notes: data.notes || undefined,
         items: data.items.map((item) => ({
           medicineId: item.medicineId,
@@ -287,38 +243,38 @@ export function TransferForm({ onSuccess, onCancel }: Props) {
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} noValidate>
-      {/* Warehouses */}
+      {/* Branches */}
       <div className="px-6 py-5 space-y-4 border-b border-slate-100">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1.5">
-              From Warehouse <span className="text-red-500">*</span>
+              From Branch <span className="text-red-500">*</span>
             </label>
-            <WarehouseSelect
-              value={watch("fromWarehouseId")}
-              onChange={(id) => setValue("fromWarehouseId", id)}
-              placeholder="Select source warehouse"
-              error={!!errors.fromWarehouseId}
+            <BranchSelect
+              value={watch("fromBranchId")}
+              onChange={(id) => setValue("fromBranchId", id)}
+              placeholder="Select source branch"
+              error={!!errors.fromBranchId}
             />
-            {errors.fromWarehouseId && (
+            {errors.fromBranchId && (
               <p className="text-[11px] text-red-500 mt-1 flex items-center gap-1">
-                <AlertCircle size={10} /> {errors.fromWarehouseId.message}
+                <AlertCircle size={10} /> {errors.fromBranchId.message}
               </p>
             )}
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1.5">
-              To Warehouse <span className="text-red-500">*</span>
+              To Branch <span className="text-red-500">*</span>
             </label>
-            <WarehouseSelect
-              value={watch("toWarehouseId")}
-              onChange={(id) => setValue("toWarehouseId", id)}
-              placeholder="Select destination warehouse"
-              error={!!errors.toWarehouseId}
+            <BranchSelect
+              value={watch("toBranchId")}
+              onChange={(id) => setValue("toBranchId", id)}
+              placeholder="Select destination branch"
+              error={!!errors.toBranchId}
             />
-            {errors.toWarehouseId && (
+            {errors.toBranchId && (
               <p className="text-[11px] text-red-500 mt-1 flex items-center gap-1">
-                <AlertCircle size={10} /> {errors.toWarehouseId.message}
+                <AlertCircle size={10} /> {errors.toBranchId.message}
               </p>
             )}
           </div>

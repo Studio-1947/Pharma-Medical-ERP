@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 
@@ -28,6 +28,8 @@ export class StockMovementRepository {
     data: {
       batchId: string;
       medicineId: string;
+      /** Branch whose stock moved. Required — the ledger is read per branch. */
+      branchId: string;
       movementType: MovementType;
       quantity: number;
       referenceId?: string;
@@ -54,6 +56,7 @@ export class StockMovementRepository {
     rows: {
       batchId: string;
       medicineId: string;
+      branchId: string;
       movementType: MovementType;
       quantity: number;
       referenceId?: string;
@@ -68,11 +71,16 @@ export class StockMovementRepository {
     return db.insert(schema.stockMovements).values(rows).returning();
   }
 
-  async findByMedicine(medicineId: string, limit = 50) {
+  /** Movement history for a medicine, optionally narrowed to one branch. */
+  async findByMedicine(medicineId: string, limit = 50, branchId?: string) {
+    const conditions = [eq(schema.stockMovements.medicineId, medicineId)];
+    if (branchId) {
+      conditions.push(eq(schema.stockMovements.branchId, branchId));
+    }
     return this.db
       .select()
       .from(schema.stockMovements)
-      .where(eq(schema.stockMovements.medicineId, medicineId))
+      .where(and(...conditions))
       .orderBy(desc(schema.stockMovements.createdAt))
       .limit(limit);
   }
