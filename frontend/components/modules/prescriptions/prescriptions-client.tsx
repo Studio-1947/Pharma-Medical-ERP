@@ -14,6 +14,7 @@ import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
 import { PrescriptionScanUpload } from "./prescription-scan-upload";
 import { PrescriptionScanViewer } from "./prescription-scan-viewer";
+import { MedicineAutocomplete, type MedicineOption } from "./medicine-autocomplete";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +37,8 @@ interface Prescription {
 }
 
 interface RxItem {
+  /** Set once the row is pinned to a catalogue medicine; absent for free text. */
+  medicineId?: string;
   medicineName: string;
   dosage: string;
   frequency: string;
@@ -168,6 +171,35 @@ function CreatePrescriptionModal({
     setItems((prev) => prev.map((item, i) => (i === idx ? { ...item, [field]: value } : item)));
   }
 
+  /** Typing by hand unpins the row from the catalogue entry it used to match. */
+  function handleNameChange(idx: number, text: string) {
+    setItems((prev) =>
+      prev.map((item, i) => (i === idx ? { ...item, medicineName: text, medicineId: undefined } : item)),
+    );
+  }
+
+  function handleMedicineSelect(idx: number, m: MedicineOption) {
+    setItems((prev) => {
+      const next = prev.map((item, i) =>
+        i === idx
+          ? {
+              ...item,
+              medicineId: m.id,
+              medicineName: m.name,
+              // Strength is the dosage in all but name; pre-filling it saves the
+              // prescriber retyping "500mg" they just selected. Never overwrite
+              // a dosage they already entered.
+              dosage: item.dosage || m.strength || "",
+            }
+          : item,
+      );
+      // Keep a spare row ready so a multi-drug prescription is one continuous
+      // pass instead of a click on "Add Medicine" between every entry.
+      const isLast = idx === prev.length - 1;
+      return isLast ? [...next, blankItem()] : next;
+    });
+  }
+
   function addItem() { setItems((prev) => [...prev, blankItem()]); }
   function removeItem(idx: number) { setItems((prev) => prev.filter((_, i) => i !== idx)); }
 
@@ -180,6 +212,7 @@ function CreatePrescriptionModal({
     const rxItems = items
       .filter((i) => i.medicineName.trim())
       .map((i) => ({
+        medicineId: i.medicineId,
         medicineName: i.medicineName.trim(),
         dosage: i.dosage || undefined,
         frequency: i.frequency || undefined,
@@ -380,12 +413,12 @@ function CreatePrescriptionModal({
                 {items.map((item, idx) => (
                   <tr key={idx}>
                     <td className="px-2 py-1.5">
-                      <input
-                        type="text"
+                      <MedicineAutocomplete
                         value={item.medicineName}
-                        onChange={(e) => handleItemChange(idx, "medicineName", e.target.value)}
-                        placeholder="Medicine name"
-                        className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                        linked={!!item.medicineId}
+                        onChange={(text) => handleNameChange(idx, text)}
+                        onSelect={(m) => handleMedicineSelect(idx, m)}
+                        placeholder="Type to search medicines..."
                       />
                     </td>
                     <td className="px-2 py-1.5">

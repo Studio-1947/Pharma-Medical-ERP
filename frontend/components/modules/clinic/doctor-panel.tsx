@@ -5,10 +5,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
-import { useDebounce } from "@/hooks/use-debounce";
 import { useClinicTokens, useClinicToken, useUpdateClinicToken } from "@/queries/clinic.queries";
 import { localDateString } from "@/lib/date";
 import { PrescriptionScanUpload } from "@/components/modules/prescriptions/prescription-scan-upload";
+import { MedicineAutocomplete, type MedicineOption } from "@/components/modules/prescriptions/medicine-autocomplete";
 import {
   Stethoscope, Clock, PhoneCall, CheckCircle2, User, AlertTriangle,
   Plus, Trash2, Upload, FileText, History,
@@ -42,52 +42,25 @@ function queueStatusIcon(status: string) {
 function MedicineRow({
   item,
   onChange,
+  onSelectMedicine,
   onRemove,
   removable,
 }: {
   item: RxItem;
   onChange: (patch: Partial<RxItem>) => void;
+  onSelectMedicine: (m: MedicineOption) => void;
   onRemove: () => void;
   removable: boolean;
 }) {
-  const [showDropdown, setShowDropdown] = useState(false);
-  const debouncedName = useDebounce(item.medicineName, 250);
-
-  const { data } = useQuery({
-    queryKey: ["clinic-medicine-search", debouncedName],
-    queryFn: () => apiClient.get("/inventory/medicines", { params: { search: debouncedName, limit: 8 } }) as Promise<any>,
-    enabled: debouncedName.length >= 2 && !item.medicineId,
-  });
-  const raw = data as any;
-  const results: any[] = Array.isArray(raw?.data?.data) ? raw.data.data : Array.isArray(raw?.data) ? raw.data : [];
-
   return (
     <tr>
-      <td className="px-2 py-1.5 relative">
-        <input
-          type="text"
+      <td className="px-2 py-1.5">
+        <MedicineAutocomplete
           value={item.medicineName}
-          onChange={(e) => { onChange({ medicineName: e.target.value, medicineId: undefined }); setShowDropdown(true); }}
-          onFocus={() => setShowDropdown(true)}
-          placeholder="Search medicine..."
-          className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+          linked={!!item.medicineId}
+          onChange={(text) => onChange({ medicineName: text, medicineId: undefined })}
+          onSelect={onSelectMedicine}
         />
-        {showDropdown && results.length > 0 && (
-          <div className="absolute z-10 left-2 right-2 mt-1 bg-white border rounded-lg shadow-lg max-h-40 overflow-y-auto">
-            {results.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => { onChange({ medicineName: m.name, medicineId: m.id }); setShowDropdown(false); }}
-                className="w-full text-left px-2 py-1.5 text-xs hover:bg-muted/50 transition-colors flex items-center justify-between"
-              >
-                <span className="font-medium">{m.name}</span>
-                {m.scheduleType && m.scheduleType !== "otc" && (
-                  <span className="text-[10px] px-1 py-0.5 rounded bg-orange-100 text-orange-700">{m.scheduleType}</span>
-                )}
-              </button>
-            ))}
-          </div>
-        )}
       </td>
       <td className="px-2 py-1.5">
         <input
@@ -177,6 +150,19 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
   function updateItem(idx: number, patch: Partial<RxItem>) {
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   }
+
+  function selectMedicine(idx: number, m: MedicineOption) {
+    setItems((prev) => {
+      const next = prev.map((it, i) =>
+        i === idx
+          ? { ...it, medicineId: m.id, medicineName: m.name, dosage: it.dosage || m.strength || "" }
+          : it,
+      );
+      // Spare row kept ready so a multi-drug prescription is one continuous pass.
+      return idx === prev.length - 1 ? [...next, blankItem()] : next;
+    });
+  }
+
   function addItem() { setItems((prev) => [...prev, blankItem()]); }
   function removeItem(idx: number) { setItems((prev) => prev.filter((_, i) => i !== idx)); }
 
@@ -361,6 +347,7 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
                       key={idx}
                       item={item}
                       onChange={(patch) => updateItem(idx, patch)}
+                      onSelectMedicine={(m) => selectMedicine(idx, m)}
                       onRemove={() => removeItem(idx)}
                       removable={items.length > 1}
                     />
