@@ -338,6 +338,17 @@ export class InventoryRepository {
   /** Map category names to ids for bulk import, creating any that are new.
    *  Returns a lowercase-keyed map so callers can look up case-insensitively.
    *  onConflictDoNothing covers two imports racing on the same new name. */
+  /** All shelf categories, for the medicine form's category picker. */
+  async findCategories() {
+    return this.db
+      .select({
+        id: schema.medicineCategories.id,
+        name: schema.medicineCategories.name,
+      })
+      .from(schema.medicineCategories)
+      .orderBy(asc(schema.medicineCategories.name));
+  }
+
   async findOrCreateCategoryIds(names: string[]): Promise<Map<string, string>> {
     const wanted = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
     if (wanted.length === 0) return new Map();
@@ -561,6 +572,10 @@ export class InventoryRepository {
   async bulkCreateBatches(
     rows: {
       medicineId: string;
+      /** Branch the imported stock lands in. Declared explicitly: it is also
+       *  copied onto each movement row, and the movement insert runs against an
+       *  untyped `db`, so nothing else would catch it going missing. */
+      branchId: string;
       locationId?: string;
       supplierId?: string;
       batchNo: string;
@@ -597,22 +612,28 @@ export class InventoryRepository {
           .returning({
             id: schema.inventoryBatches.id,
             medicineId: schema.inventoryBatches.medicineId,
+            branchId: schema.inventoryBatches.branchId,
             quantity: schema.inventoryBatches.quantity,
           });
         count += inserted.length;
 
-        const movements = (inserted as { id: string; medicineId: string; quantity: number }[])
+        const movements = (
+          inserted as { id: string; medicineId: string; branchId: string; quantity: number }[]
+        )
           .filter((b) => b.quantity > 0)
           .map((b) => ({
             batchId: b.id,
             medicineId: b.medicineId,
+            // Read back off the inserted batch rather than recomputed, so the
+            // ledger can never disagree with the stock it describes.
+            branchId: b.branchId,
             movementType: "purchase",
             quantity: b.quantity,
             referenceType: "CSV_IMPORT",
             performedBy,
             notes: "Opening stock from catalogue import",
           }));
-        for (const mChunk of chunkForColumns(movements, 7)) {
+        for (const mChunk of chunkForColumns(movements, 8)) {
           await db.insert(schema.stockMovements).values(mChunk);
         }
       }
