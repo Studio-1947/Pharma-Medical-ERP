@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, ilike, isNull, or, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 import type { CreatePrescriptionDto, UpdatePrescriptionDto, QueryPrescriptionDto, VerifyPrescriptionDto } from "@pharmerp/types";
@@ -26,8 +26,22 @@ export class PrescriptionsRepository {
 
     const [items, [countRow]] = await Promise.all([
       this.db
-        .select()
+        // The patient is joined in rather than left to the caller: this list is
+        // rendered as a table keyed by patient name, and without the join every
+        // row showed "--" because only patientId came back.
+        .select({
+          ...getTableColumns(schema.prescriptions),
+          patient: {
+            id: schema.patients.id,
+            name: schema.patients.name,
+            phone: schema.patients.phone,
+          },
+        })
         .from(schema.prescriptions)
+        .leftJoin(
+          schema.patients,
+          eq(schema.prescriptions.patientId, schema.patients.id),
+        )
         .where(where)
         .orderBy(desc(schema.prescriptions.createdAt))
         .limit(params.limit)
