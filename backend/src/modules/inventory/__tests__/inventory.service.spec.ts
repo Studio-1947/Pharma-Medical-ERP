@@ -231,3 +231,81 @@ describe("bulkImport - re-importing the same sheet is idempotent", () => {
     expect(res.warnings.some((w) => /Already imported/.test(w.reason))).toBe(true);
   });
 });
+
+describe("bulkImport - Google Sheets schemas validation", () => {
+  it("imports Sheet 1 (gid=202758680) rows cleanly", async () => {
+    const { service, created } = importStub();
+    const sheet1Rows = [
+      {
+        Brand_Name: "Flowyou Eye Drops",
+        Medicine_Name: "Flowyou Eye Drops",
+        Generic_Name: "Moxifloxacin",
+        Composition: "Moxifloxacin Hydrochloride IP",
+        Strength: "0.5% w/v",
+      },
+      {
+        Brand_Name: "Resumeg-10",
+        Medicine_Name: "Resumeg-10",
+        Generic_Name: "Rosuvastatin 10 Tablet",
+        Composition: "Rosuvastatin 10 Tablet",
+        Strength: "10mg",
+        Dosage_Form: "tablet",
+        Pack_Size: "10",
+        Manufacturer: "Salus Pharmaceuticals",
+      },
+      { Brand_Name: "", Medicine_Name: "", Generic_Name: "" }, // blank separator row
+    ];
+
+    const res = await service.bulkImport(sheet1Rows as any, "u");
+    expect(res.errors).toHaveLength(0);
+    expect(res.created).toBe(2);
+    expect(created[0].name).toBe("Flowyou Eye Drops");
+    expect(created[0].genericName).toBe("Moxifloxacin");
+    expect(created[1].name).toBe("Resumeg-10");
+    expect(created[1].manufacturer).toBe("Salus Pharmaceuticals");
+  });
+
+  it("imports Sheet 2 (gid=43138005) 25-column rows with Drawer Mapping cleanly", async () => {
+    const { service, created } = importStub();
+    const sheet2Rows = [
+      {
+        Medicine_ID: "MED00001",
+        "Drawer Mapping": "Cabinet A-1",
+        Brand_Name: "Emgrast",
+        Medicine_Name: "Emgrast 300 mcg Injection",
+        Generic_Name: "Filgrastim",
+        Composition: "Filgrastim (G-CSF) 300 mcg",
+        Strength: "300 mcg",
+        Dosage_Form: "Injection",
+        Pack_Size: "1 Vial",
+        Manufacturer: "Eris Lifesciences Ltd",
+        Therapeutic_Class: "Colony Stimulating Factor",
+        Category: "Oncology",
+        Schedule: "H",
+        GST_Percent: "5",
+        HSN_Code: "30049099",
+        MRP: "34866.11",
+        Purchase_Rate: "25397.48",
+        Barcode: "8900000079193",
+        Batch_No: "JV17827",
+        Manufacture_Date: "2025-03-07",
+        Expiry_Date: "2027-09-28",
+        Stock: "389",
+        Minimum_Stock: "15",
+        Location: "Injection Rack IV-3, Shelf 3",
+        Supplier: "Himalayan Healthcare Distributors, Siliguri",
+      },
+    ];
+
+    const res = await service.bulkImport(sheet2Rows as any, "u");
+    expect(res.errors).toHaveLength(0);
+    expect(res.created).toBe(1);
+    expect(created[0].sku).toBe("MED00001");
+    expect(created[0].drawerMapping).toBe("Cabinet A-1");
+    expect(created[0].brandName).toBe("Emgrast");
+    expect(created[0].name).toBe("Emgrast 300 mcg Injection");
+    expect(created[0].priceMrp).toBe("34866.11");
+    expect(created[0].purchaseRate).toBe("25397.48");
+    expect(res.batchesCreated).toBe(1);
+  });
+});
