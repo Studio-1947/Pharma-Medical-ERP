@@ -95,6 +95,9 @@ importers:
       decimal.js:
         specifier: ^10.6.0
         version: 10.6.0
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.4.5
       drizzle-orm:
         specifier: ^0.33.0
         version: 0.33.0(@types/pg@8.20.0)(@types/react@18.3.28)(pg@8.20.0)(react@18.3.1)

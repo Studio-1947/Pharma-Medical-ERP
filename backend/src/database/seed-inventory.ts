@@ -1,4 +1,8 @@
-import "dotenv/config";
+try {
+  require("dotenv/config");
+} catch {
+  // Environment variables are injected directly in Cloud Run
+}
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import { and, eq } from "drizzle-orm";
@@ -13,24 +17,25 @@ if (!connectionString) {
 const pool = new Pool({ connectionString });
 const db = drizzle(pool, { schema });
 
-async function seedInventory() {
+export async function runInventorySeed(dbInstance?: any) {
+  const targetDb = dbInstance ?? db;
   console.log("=========================================");
   console.log("  SEEDING MEDICINE CATALOG & INVENTORY   ");
   console.log("=========================================\n");
 
   // 1. Ensure Branches Exist
-  let branches = await db.select().from(schema.branches);
+  let branches = await targetDb.select().from(schema.branches);
   if (branches.length === 0) {
     console.log("No branches found. Inserting default branches...");
-    await db.insert(schema.branches).values([
+    await targetDb.insert(schema.branches).values([
       { name: "Main Branch", code: "BRN01", address: "123 Main Street, Mumbai", phone: "022-12345678", email: "main@pharmerp.com", isHeadOffice: true },
       { name: "Branch 2", code: "BRN02", address: "456 Second Avenue, Mumbai", phone: "022-87654321", email: "branch2@pharmerp.com", isHeadOffice: false },
     ]).onConflictDoNothing();
-    branches = await db.select().from(schema.branches);
+    branches = await targetDb.select().from(schema.branches);
   }
 
-  const brn01 = branches.find((b) => b.code === "BRN01") ?? branches[0]!;
-  const brn02 = branches.find((b) => b.code === "BRN02") ?? branches[1] ?? brn01;
+  const brn01 = branches.find((b: any) => b.code === "BRN01") ?? branches[0]!;
+  const brn02 = branches.find((b: any) => b.code === "BRN02") ?? branches[1] ?? brn01;
 
   console.log(`Using Branches: ${brn01.name} (${brn01.code}) & ${brn02.name} (${brn02.code})`);
 
@@ -43,21 +48,21 @@ async function seedInventory() {
   ];
 
   for (const loc of locationsData) {
-    const [existing] = await db
+    const [existing] = await targetDb
       .select({ id: schema.storageLocations.id })
       .from(schema.storageLocations)
       .where(and(eq(schema.storageLocations.branchId, loc.branchId), eq(schema.storageLocations.label, loc.label)))
       .limit(1);
 
     if (!existing) {
-      await db.insert(schema.storageLocations).values(loc);
+      await targetDb.insert(schema.storageLocations).values(loc);
     }
   }
 
-  const allLocations = await db.select().from(schema.storageLocations);
-  const mainLocation = allLocations.find((l) => l.branchId === brn01.id) ?? allLocations[0]!;
-  const coldLocation = allLocations.find((l) => l.isRefrigerated) ?? mainLocation;
-  const brn02Location = allLocations.find((l) => l.branchId === brn02.id) ?? mainLocation;
+  const allLocations = await targetDb.select().from(schema.storageLocations);
+  const mainLocation = allLocations.find((l: any) => l.branchId === brn01.id) ?? allLocations[0]!;
+  const coldLocation = allLocations.find((l: any) => l.isRefrigerated) ?? mainLocation;
+  const brn02Location = allLocations.find((l: any) => l.branchId === brn02.id) ?? mainLocation;
 
   // 3. Medicine Categories
   console.log("2. Seeding Medicine Categories...");
@@ -73,11 +78,11 @@ async function seedInventory() {
   ];
 
   for (const cat of categoriesData) {
-    await db.insert(schema.medicineCategories).values(cat).onConflictDoNothing();
+    await targetDb.insert(schema.medicineCategories).values(cat).onConflictDoNothing();
   }
 
-  const categories = await db.select().from(schema.medicineCategories);
-  const getCatId = (name: string) => categories.find((c) => c.name === name)?.id;
+  const categories = await targetDb.select().from(schema.medicineCategories);
+  const getCatId = (name: string) => categories.find((c: any) => c.name === name)?.id;
 
   // 4. Comprehensive Medicines Catalog
   console.log("3. Seeding Medicines Catalog...");
@@ -499,13 +504,13 @@ async function seedInventory() {
       .limit(1);
 
     if (!existing) {
-      await db.insert(schema.medicines).values(medData);
+      await targetDb.insert(schema.medicines).values(medData);
     } else {
-      await db.update(schema.medicines).set(medData).where(eq(schema.medicines.id, existing.id));
+      await targetDb.update(schema.medicines).set(medData).where(eq(schema.medicines.id, existing.id));
     }
   }
 
-  const allMedicines = await db.select().from(schema.medicines);
+  const allMedicines = await targetDb.select().from(schema.medicines);
   console.log(`Total Medicines in Catalog: ${allMedicines.length}`);
 
   // 5. Multi-Batch Inventory Seeding (FEFO)
@@ -602,7 +607,7 @@ async function seedInventory() {
           .limit(1);
 
         if (!existingMov) {
-          await db.insert(schema.stockMovements).values({
+          await targetDb.insert(schema.stockMovements).values({
             batchId,
             medicineId: med.id,
             branchId: branch.id,
@@ -622,13 +627,15 @@ async function seedInventory() {
   console.log(`=========================================\n`);
 }
 
-seedInventory()
-  .then(() => {
-    pool.end();
-    process.exit(0);
-  })
-  .catch((err) => {
-    console.error("Inventory seed failed:", err);
-    pool.end();
-    process.exit(1);
-  });
+if (require.main === module) {
+  runInventorySeed()
+    .then(() => {
+      pool.end();
+      process.exit(0);
+    })
+    .catch((err: any) => {
+      console.error("Inventory seed failed:", err);
+      pool.end();
+      process.exit(1);
+    });
+}

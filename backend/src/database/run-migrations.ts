@@ -4,6 +4,9 @@ import { sql } from "drizzle-orm";
 import { Pool } from "pg";
 import { join } from "node:path";
 
+import * as schema from "./schema";
+import { runInventorySeed } from "./seed-inventory";
+
 // Shared constant so every instance contends for the same lock.
 const MIGRATION_LOCK_KEY = 9471001;
 
@@ -23,7 +26,7 @@ export async function runMigrations(): Promise<void> {
   }
 
   const pool = new Pool({ connectionString, max: 1 });
-  const db = drizzle(pool);
+  const db = drizzle(pool, { schema });
   const migrationsFolder = join(process.cwd(), "drizzle", "migrations");
 
   try {
@@ -31,6 +34,16 @@ export async function runMigrations(): Promise<void> {
     try {
       await migrate(db, { migrationsFolder });
       console.log("[migrations] schema up to date");
+
+      // Auto-seed initial medicine catalog & FEFO inventory if database is empty
+      const [medCount] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.medicines);
+
+      if ((medCount?.count ?? 0) === 0) {
+        console.log("[auto-seed] Production DB has 0 medicines. Running initial inventory seed...");
+        await runInventorySeed(db);
+      }
     } finally {
       await db.execute(sql`SELECT pg_advisory_unlock(${MIGRATION_LOCK_KEY}::bigint)`);
     }

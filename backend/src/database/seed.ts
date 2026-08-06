@@ -1,4 +1,8 @@
-import "dotenv/config";
+try {
+  require("dotenv/config");
+} catch {
+  // Environment variables are injected directly in Cloud Run
+}
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import argon2 from "argon2";
