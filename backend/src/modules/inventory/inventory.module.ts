@@ -10,6 +10,7 @@ import { StockMovementRepository } from "./stock-movement.repository";
 import { AlertsRepository } from "./alerts.repository";
 import { BarcodeService } from "./barcode.service";
 import { AlertsController } from "./alerts.controller";
+import { CategoriesController } from "./categories.controller";
 import { ExpiryScanProcessor, EXPIRY_SCAN_QUEUE } from "./jobs/expiry-scan.processor";
 import { ReorderCheckProcessor, REORDER_CHECK_QUEUE } from "./jobs/reorder-check.processor";
 
@@ -20,7 +21,12 @@ import { ReorderCheckProcessor, REORDER_CHECK_QUEUE } from "./jobs/reorder-check
       { name: REORDER_CHECK_QUEUE },
     ),
   ],
-  controllers: [InventoryController, BatchController, AlertsController],
+  controllers: [
+    InventoryController,
+    BatchController,
+    AlertsController,
+    CategoriesController,
+  ],
   providers: [
     InventoryService,
     InventoryRepository,

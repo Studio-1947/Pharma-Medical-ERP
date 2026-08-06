@@ -1,11 +1,12 @@
-﻿"use client";
+"use client";
 
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { registerSchema, type RegisterDto, UserRole } from "@pharmerp/types";
 import { apiClient } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
-import { Mail, Lock, User, Briefcase, AlertCircle, Loader2 } from "lucide-react";
+import { Mail, Lock, User, Briefcase, AlertCircle, Loader2, Eye, EyeOff } from "lucide-react";
 
 const roles = [
   { label: "Admin", value: UserRole.ADMIN },
@@ -24,6 +25,7 @@ interface StaffFormProps {
 
 export function StaffForm({ onSuccess, onCancel }: StaffFormProps) {
   const queryClient = useQueryClient();
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
@@ -130,13 +132,21 @@ export function StaffForm({ onSuccess, onCancel }: StaffFormProps) {
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
             <input
-              type="password"
+              type={showPassword ? "text" : "password"}
               {...register("password")}
-              className={`w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all ${
+              className={`w-full border rounded-lg pl-8 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition-all ${
                 errors.password ? "border-red-300 bg-red-50" : "border-slate-200 bg-white"
               }`}
               placeholder="Min. 8 characters"
             />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+            </button>
           </div>
           {errors.password && (
             <p className="text-red-500 text-xs flex items-center gap-1">

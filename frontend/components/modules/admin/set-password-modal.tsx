@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { KeyRound, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { KeyRound, AlertTriangle, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { useSetUserPassword, extractError } from "@/queries/admin.queries";
@@ -32,6 +32,7 @@ function validate(pw: string): string | null {
 export function SetPasswordModal({ open, onClose, user }: Props) {
   const { success: toastSuccess, error: toastError } = useToast();
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [revokeSessions, setRevokeSessions] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mutation = useSetUserPassword();
@@ -39,6 +40,7 @@ export function SetPasswordModal({ open, onClose, user }: Props) {
   useEffect(() => {
     if (!open) return;
     setPassword("");
+    setShowPassword(false);
     setRevokeSessions(true);
     setError(null);
   }, [open]);
@@ -82,18 +84,28 @@ export function SetPasswordModal({ open, onClose, user }: Props) {
           <label className="block text-xs font-medium text-slate-600 mb-1.5">
             New password <span className="text-red-500">*</span>
           </label>
-          <input
-            required
-            type="password"
-            autoComplete="new-password"
-            placeholder="Min 8 chars, one uppercase, one number"
-            className={inputCls(!!error)}
-            value={password}
-            onChange={(e) => {
-              setPassword(e.target.value);
-              setError(null);
-            }}
-          />
+          <div className="relative">
+            <input
+              required
+              type={showPassword ? "text" : "password"}
+              autoComplete="new-password"
+              placeholder="Min 8 chars, one uppercase, one number"
+              className={`${inputCls(!!error)} pr-10`}
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                setError(null);
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
         </div>
 
         <label className="flex items-start gap-2 cursor-pointer">
