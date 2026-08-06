@@ -360,7 +360,7 @@ export class InventoryService {
     for (let i = 0; i < rows.length; i++) {
       const raw = rows[i];
       const rowNum = i + 2; // 1-indexed + header row
-      if (!raw) continue;
+      if (!raw || !Object.values(raw).some((v) => v && String(v).trim())) continue;
       // Mint only for rows carrying real content, so a trailing blank row does
       // not burn a number; for those, "name: Required" is clearer feedback
       // than "SKU is required" when the row is empty anyway.
