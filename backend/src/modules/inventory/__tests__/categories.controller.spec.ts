@@ -21,6 +21,6 @@ describe("CategoriesController", () => {
     const res = await controller.listCategories();
     expect(mockService.listCategories).toHaveBeenCalled();
     expect(res.data).toHaveLength(2);
-    expect(res.data[0].name).toBe("Antibiotics");
+    expect(res.data![0]!.name).toBe("Antibiotics");
   });
 });
