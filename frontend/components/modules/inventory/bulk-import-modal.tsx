@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -15,37 +15,37 @@ import {
 // Sample CSV definition
 // ---------------------------------------------------------------------------
 // Mirrors the catalogue sheet's column order. The backend normalizes header
-// spelling, so the older snake_case template (name, sku, price_mrp, ...) still
-// imports — this is just the shape we hand out.
+// spelling, so older/alternative headers still import — this matches the exact
+// 25-column order from the Google Sheets catalogue.
 const CSV_COLUMNS = [
-  "Medicine_ID", "Brand_Name", "Medicine_Name", "Generic_Name", "Composition",
-  "Strength", "Dosage_Form", "Pack_Size", "Manufacturer", "Therapeutic_Class",
-  "Category", "Schedule", "GST_Percent", "HSN_Code", "MRP", "Purchase_Rate",
-  "Barcode", "Batch_No", "Manufacture_Date", "Expiry_Date", "Stock",
-  "Minimum_Stock", "Location", "Supplier", "Drawer Mapping",
+  "Medicine_ID", "Drawer Mapping", "Brand_Name", "Medicine_Name", "Generic_Name",
+  "Composition", "Strength", "Dosage_Form", "Pack_Size", "Manufacturer",
+  "Therapeutic_Class", "Category", "Schedule", "GST_Percent", "HSN_Code",
+  "MRP", "Purchase_Rate", "Barcode", "Batch_No", "Manufacture_Date",
+  "Expiry_Date", "Stock", "Minimum_Stock", "Location", "Supplier",
 ] as const;
 
 const SAMPLE_ROWS = [
   [
-    "MED00001", "Dolo", "Dolo 650 mg Tablet", "Paracetamol", "Paracetamol 650 mg",
-    "650 mg", "Tablet", "15 Tablets", "Micro Labs Ltd", "Analgesic & Antipyretic",
-    "Analgesics", "", "12", "30049099", "31.50", "24.20",
-    "8901234560001", "PB47201", "2026-01-15", "2028-01-28", "240",
-    "20", "Rack A-1, Shelf 2", "North Bengal Pharma Agency", "",
+    "MED00001", "", "Dolo", "Dolo 650 mg Tablet", "Paracetamol",
+    "Paracetamol 650 mg", "650 mg", "Tablet", "15 Tablets", "Micro Labs Ltd",
+    "Analgesic & Antipyretic", "Analgesics", "", "12", "30049099",
+    "31.50", "24.20", "8901234560001", "PB47201", "2026-01-15",
+    "2028-01-28", "240", "20", "Rack A-1, Shelf 2", "North Bengal Pharma Agency",
   ],
   [
-    "MED00002", "Zady", "Zady 250 mg Tablet", "Azithromycin", "Azithromycin 250 mg",
-    "250 mg", "Tablet", "10 Tablets", "Albert David Ltd", "Macrolide Antibiotic",
-    "Antibiotics", "H", "12", "30049099", "29.99", "23.00",
-    "8901234560002", "WC99552", "2026-01-05", "2028-01-28", "405",
-    "5", "Rack G-2, Shelf 5", "Siliguri Medical Distributors", "",
+    "MED00002", "", "Zady", "Zady 250 mg Tablet", "Azithromycin",
+    "Azithromycin 250 mg", "250 mg", "Tablet", "10 Tablets", "Albert David Ltd",
+    "Macrolide Antibiotic", "Antibiotics", "H", "12", "30049099",
+    "29.99", "23.00", "8901234560002", "WC99552", "2026-01-05",
+    "2028-01-28", "405", "5", "Rack G-2, Shelf 5", "Siliguri Medical Distributors",
   ],
   [
-    "", "Alprax", "Alprax 0.25 mg Tablet", "Alprazolam", "Alprazolam 0.25 mg",
-    "0.25 mg", "Tablet", "15 Tablets", "Torrent Pharmaceuticals Ltd", "Benzodiazepine",
-    "Psychiatry", "H1", "12", "30049099", "120.00", "92.00",
-    "8901234560003", "TX10884", "2026-03-02", "2028-03-28", "60",
-    "3", "Controlled Cabinet CC-1, Shelf 1", "Teesta Drug House", "",
+    "", "", "Alprax", "Alprax 0.25 mg Tablet", "Alprazolam",
+    "Alprazolam 0.25 mg", "0.25 mg", "Tablet", "15 Tablets", "Torrent Pharmaceuticals Ltd",
+    "Benzodiazepine", "Psychiatry", "H1", "12", "30049099",
+    "120.00", "92.00", "8901234560003", "TX10884", "2026-03-02",
+    "2028-03-28", "60", "3", "Controlled Cabinet CC-1, Shelf 1", "Teesta Drug House",
   ],
 ];
 
@@ -75,22 +75,47 @@ function parseCsv(text: string): Record<string, string>[] {
   const lines = text.trim().split(/\r?\n/);
   if (lines.length < 2) return [];
   const headers = lines[0]!.split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
-  return lines.slice(1).map((line) => {
-    // Handle quoted fields with commas inside
+  const result: Record<string, string>[] = [];
+
+  for (let l = 1; l < lines.length; l++) {
+    const line = lines[l]!;
+    if (!line.trim()) continue; // skip blank lines
+
+    // Handle quoted fields with commas or escaped quotes inside
     const vals: string[] = [];
     let cur = "";
     let inQuote = false;
     for (let i = 0; i < line.length; i++) {
       const ch = line[i];
-      if (ch === '"') { inQuote = !inQuote; continue; }
-      if (ch === "," && !inQuote) { vals.push(cur); cur = ""; continue; }
+      if (ch === '"') {
+        if (inQuote && line[i + 1] === '"') {
+          cur += '"';
+          i++; // skip escaped quote
+          continue;
+        }
+        inQuote = !inQuote;
+        continue;
+      }
+      if (ch === "," && !inQuote) {
+        vals.push(cur);
+        cur = "";
+        continue;
+      }
       cur += ch;
     }
     vals.push(cur);
+
+    // Skip rows where every parsed value is empty
+    if (vals.every((v) => !v.trim())) continue;
+
     const obj: Record<string, string> = {};
-    headers.forEach((h, i) => { obj[h] = (vals[i] ?? "").trim(); });
-    return obj;
-  });
+    headers.forEach((h, i) => {
+      obj[h] = (vals[i] ?? "").trim();
+    });
+    result.push(obj);
+  }
+
+  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -120,6 +145,7 @@ function field(row: Record<string, string>, ...keys: string[]): string {
 const PREVIEW_COLS: { label: string; keys: string[]; required?: boolean }[] = [
   { label: "Name",         keys: ["name", "medicinename", "brandname", "brand"], required: true },
   { label: "SKU",          keys: ["sku", "medicineid", "medicinecode"] },
+  { label: "Drawer",       keys: ["drawermapping", "drawer"] },
   { label: "Generic",      keys: ["genericname"] },
   { label: "Strength",     keys: ["strength"] },
   { label: "Form",         keys: ["dosageform", "form"] },
