@@ -8,7 +8,7 @@ import { registerSchema, type RegisterDto, UserRole } from "@pharmerp/types";
 import { apiClient } from "@/lib/api-client";
 import { usePermissions } from "@/hooks/use-permissions";
 import { useAuthStore } from "@/stores/auth.store";
-import { UserPlus, Users, ShieldAlert } from "lucide-react";
+import { UserPlus, Users, ShieldAlert, Eye, EyeOff } from "lucide-react";
 
 const ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: UserRole.ADMIN, label: "Admin" },
@@ -25,6 +25,7 @@ export default function UsersPage() {
   const { user } = useAuthStore();
   const qc = useQueryClient();
   const [success, setSuccess] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   if (!can("users.manage")) {
     return (
@@ -131,12 +132,22 @@ export default function UsersPage() {
 
         <div className="space-y-1">
           <label className="text-xs font-medium text-gray-600 dark:text-muted-foreground">Temporary Password</label>
-          <input
-            {...register("password")}
-            type="password"
-            className="w-full border border-gray-200 dark:border-border rounded-lg px-3 py-2 text-sm bg-white dark:bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
-            placeholder="Min 8 characters"
-          />
+          <div className="relative">
+            <input
+              {...register("password")}
+              type={showPassword ? "text" : "password"}
+              className="w-full border border-gray-200 dark:border-border rounded-lg pl-3 pr-10 py-2 text-sm bg-white dark:bg-background focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              placeholder="Min 8 characters"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors p-1"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
           {errors.password && <p className="text-red-500 text-xs">{errors.password.message}</p>}
         </div>
 

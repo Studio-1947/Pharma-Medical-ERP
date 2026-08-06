@@ -11,6 +11,8 @@ import {
   UserX,
   AlertCircle,
   CheckCircle2,
+  Eye,
+  EyeOff,
 } from "lucide-react";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { Modal } from "@/components/ui/modal";
@@ -89,6 +91,7 @@ function InviteUserModal({
     password: "",
     branchId: "",
   });
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { data: branchesRaw } = useQuery<any>({
@@ -199,14 +202,24 @@ function InviteUserModal({
           <label className="block text-xs font-medium text-slate-600 mb-1.5">
             Temporary Password <span className="text-red-500">*</span>
           </label>
-          <input
-            required
-            type="password"
-            placeholder="Min 8 characters"
-            minLength={8}
-            className={inputCls()}
-            {...field("password")}
-          />
+          <div className="relative">
+            <input
+              required
+              type={showPassword ? "text" : "password"}
+              placeholder="Min 8 characters"
+              minLength={8}
+              className={`${inputCls()} pr-10`}
+              {...field("password")}
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+              aria-label={showPassword ? "Hide password" : "Show password"}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
         </div>
 
         {error && (

@@ -1,7 +1,7 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
-import { Lock, Shield, Key, Clock, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Lock, Shield, Key, Clock, AlertCircle, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 
@@ -20,6 +20,9 @@ function ChangePasswordForm() {
     newPassword: "",
     confirmPassword: "",
   });
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
@@ -58,37 +61,67 @@ function ChangePasswordForm() {
         <label className="block text-xs font-medium text-slate-600 mb-1.5">
           Current Password
         </label>
-        <input
-          required
-          type="password"
-          value={form.currentPassword}
-          onChange={(e) => setForm((f) => ({ ...f, currentPassword: e.target.value }))}
-          className={inputCls()}
-        />
+        <div className="relative">
+          <input
+            required
+            type={showCurrent ? "text" : "password"}
+            value={form.currentPassword}
+            onChange={(e) => setForm((f) => ({ ...f, currentPassword: e.target.value }))}
+            className={`${inputCls()} pr-10`}
+          />
+          <button
+            type="button"
+            onClick={() => setShowCurrent((v) => !v)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+            aria-label={showCurrent ? "Hide password" : "Show password"}
+          >
+            {showCurrent ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
       </div>
       <div>
         <label className="block text-xs font-medium text-slate-600 mb-1.5">
           New Password
         </label>
-        <input
-          required
-          type="password"
-          value={form.newPassword}
-          onChange={(e) => setForm((f) => ({ ...f, newPassword: e.target.value }))}
-          className={inputCls()}
-        />
+        <div className="relative">
+          <input
+            required
+            type={showNew ? "text" : "password"}
+            value={form.newPassword}
+            onChange={(e) => setForm((f) => ({ ...f, newPassword: e.target.value }))}
+            className={`${inputCls()} pr-10`}
+          />
+          <button
+            type="button"
+            onClick={() => setShowNew((v) => !v)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+            aria-label={showNew ? "Hide password" : "Show password"}
+          >
+            {showNew ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
       </div>
       <div>
         <label className="block text-xs font-medium text-slate-600 mb-1.5">
           Confirm New Password
         </label>
-        <input
-          required
-          type="password"
-          value={form.confirmPassword}
-          onChange={(e) => setForm((f) => ({ ...f, confirmPassword: e.target.value }))}
-          className={inputCls(!!error && form.confirmPassword !== form.newPassword)}
-        />
+        <div className="relative">
+          <input
+            required
+            type={showConfirm ? "text" : "password"}
+            value={form.confirmPassword}
+            onChange={(e) => setForm((f) => ({ ...f, confirmPassword: e.target.value }))}
+            className={`${inputCls(!!error && form.confirmPassword !== form.newPassword)} pr-10`}
+          />
+          <button
+            type="button"
+            onClick={() => setShowConfirm((v) => !v)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+            aria-label={showConfirm ? "Hide password" : "Show password"}
+          >
+            {showConfirm ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
       </div>
 
       {error && (

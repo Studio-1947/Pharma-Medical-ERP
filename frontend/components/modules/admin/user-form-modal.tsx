@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { UserPlus, UserCog, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { UserPlus, UserCog, AlertTriangle, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import {
@@ -63,6 +63,7 @@ export function UserFormModal({ open, onClose, user }: Props) {
   const isEdit = !!user;
   const { success: toastSuccess, error: toastError } = useToast();
   const [form, setForm] = useState<FormState>(EMPTY);
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const { data: branchesRaw } = useBranches();
@@ -205,14 +206,24 @@ export function UserFormModal({ open, onClose, user }: Props) {
             <label className={labelCls}>
               Initial password <span className="text-red-500">*</span>
             </label>
-            <input
-              required
-              type="password"
-              minLength={8}
-              placeholder="Min 8 chars, one uppercase, one number"
-              className={inputCls()}
-              {...field("password")}
-            />
+            <div className="relative">
+              <input
+                required
+                type={showPassword ? "text" : "password"}
+                minLength={8}
+                placeholder="Min 8 chars, one uppercase, one number"
+                className={`${inputCls()} pr-10`}
+                {...field("password")}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+                aria-label={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              </button>
+            </div>
           </div>
         )}
 
