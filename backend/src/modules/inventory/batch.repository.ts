@@ -288,7 +288,7 @@ export class BatchRepository {
     const db = tx ?? this.db;
     const today = new Date().toISOString().split("T")[0]!;
 
-    const batches = await db
+    let batchQuery = db
       .select({
         id: schema.inventoryBatches.id,
         batchNo: schema.inventoryBatches.batchNo,
@@ -307,6 +307,12 @@ export class BatchRepository {
         ),
       )
       .orderBy(asc(schema.inventoryBatches.expiryDate));
+
+    if (tx && typeof (batchQuery as any).for === "function") {
+      batchQuery = (batchQuery as any).for("update");
+    }
+
+    const batches = await batchQuery;
 
     const allocations: Array<{ batchId: string; batchNo: string; expiryDate: string; allocate: number; mrpAtEntry: string }> = [];
     let remaining = needed;
@@ -366,8 +372,8 @@ export class BatchRepository {
     const today = new Date().toISOString().split("T")[0]!;
     const medicineIds = [...new Set(needs.map((n) => n.medicineId))];
 
-    const batches = medicineIds.length
-      ? await db
+    let multiQuery = medicineIds.length
+      ? db
           .select({
             id: schema.inventoryBatches.id,
             medicineId: schema.inventoryBatches.medicineId,
@@ -388,7 +394,13 @@ export class BatchRepository {
             ),
           )
           .orderBy(asc(schema.inventoryBatches.expiryDate))
-      : [];
+      : null;
+
+    if (tx && multiQuery && typeof (multiQuery as any).for === "function") {
+      multiQuery = (multiQuery as any).for("update");
+    }
+
+    const batches = multiQuery ? await multiQuery : [];
 
     // Mutable per-batch running "sellable" counter — shared across every
     // `needs` entry for the same medicine, so two cart lines for the same
@@ -457,5 +469,44 @@ export class BatchRepository {
     await this.db
       .delete(schema.inventoryBatches)
       .where(eq(schema.inventoryBatches.id, id));
+  }
+
+  async reserveStock(batchId: string, quantity: number) {
+    const [updated] = await this.db
+      .update(schema.inventoryBatches)
+      .set({
+        reservedQty: sql`${schema.inventoryBatches.reservedQty} + ${quantity}`,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.inventoryBatches.id, batchId),
+          gte(sql`${schema.inventoryBatches.quantity} - ${schema.inventoryBatches.reservedQty}`, quantity),
+        ),
+      )
+      .returning();
+
+    if (!updated) {
+      throw new UnprocessableEntityException(
+        `Cannot reserve ${quantity} units: batch ${batchId} has insufficient unreserved stock`,
+      );
+    }
+    return updated;
+  }
+
+  async releaseStock(batchId: string, quantity: number) {
+    const [updated] = await this.db
+      .update(schema.inventoryBatches)
+      .set({
+        reservedQty: sql`GREATEST(0, ${schema.inventoryBatches.reservedQty} - ${quantity})`,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.inventoryBatches.id, batchId))
+      .returning();
+
+    if (!updated) {
+      throw new UnprocessableEntityException(`Batch ${batchId} not found`);
+    }
+    return updated;
   }
 }

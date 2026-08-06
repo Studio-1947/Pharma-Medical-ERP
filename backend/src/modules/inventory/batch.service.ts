@@ -169,4 +169,18 @@ export class BatchService {
     const movements = await this.movementRepo.findByBatch(batchId);
     return { data: movements };
   }
+
+  async reserveStock(id: string, quantity: number) {
+    const existing = await this.batchRepo.findBatchById(id);
+    if (!existing) throw new NotFoundException(`Batch ${id} not found`);
+    const updated = await this.batchRepo.reserveStock(id, quantity);
+    return { data: updated, message: "Stock reserved" };
+  }
+
+  async releaseStock(id: string, quantity: number) {
+    const existing = await this.batchRepo.findBatchById(id);
+    if (!existing) throw new NotFoundException(`Batch ${id} not found`);
+    const updated = await this.batchRepo.releaseStock(id, quantity);
+    return { data: updated, message: "Stock reservation released" };
+  }
 }

@@ -22,6 +22,8 @@ import {
   updateBatchStatusSchema,
   adjustBatchQuantitySchema,
   queryBatchSchema,
+  reserveBatchStockSchema,
+  releaseBatchStockSchema,
 } from "@pharmerp/types";
 
 @ApiTags("inventory / batches")
@@ -118,5 +120,21 @@ export class BatchController {
       adjustBatchQuantitySchema.parse(body),
       user.sub,
     );
+  }
+
+  @Post(":id/reserve")
+  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @ApiOperation({ summary: "Reserve stock on a batch for an active cart" })
+  reserve(@Param("id") id: string, @Body() body: unknown) {
+    const dto = reserveBatchStockSchema.parse(body);
+    return this.service.reserveStock(id, dto.quantity);
+  }
+
+  @Post(":id/release")
+  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @ApiOperation({ summary: "Release reserved stock on a batch" })
+  release(@Param("id") id: string, @Body() body: unknown) {
+    const dto = releaseBatchStockSchema.parse(body);
+    return this.service.releaseStock(id, dto.quantity);
   }
 }

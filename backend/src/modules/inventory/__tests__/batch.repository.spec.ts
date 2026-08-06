@@ -146,18 +146,22 @@ describe("BatchRepository (FEFO)", () => {
       const drizzle = { db: mainDb };
       const repo = new BatchRepository(drizzle as any);
 
-      const txDb = {
+      const txDbChain: any = {
         select: vi.fn().mockReturnThis(),
         from: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
-        orderBy: vi.fn().mockResolvedValue([
+        orderBy: vi.fn().mockReturnThis(),
+        for: vi.fn().mockResolvedValue([
           { id: "batch-tx", batchNo: "TX01", expiryDate: "2026-06-01", quantity: 10, reservedQty: 0, mrpAtEntry: "100.00" },
         ]),
+        then: (onRes: any) => Promise.resolve([
+          { id: "batch-tx", batchNo: "TX01", expiryDate: "2026-06-01", quantity: 10, reservedQty: 0, mrpAtEntry: "100.00" },
+        ]).then(onRes),
       };
 
-      const result = await repo.selectBatchesForDispense("med-1", 3, txDb);
+      const result = await repo.selectBatchesForDispense("med-1", 3, txDbChain);
 
-      expect(txDb.select).toHaveBeenCalled();
+      expect(txDbChain.select).toHaveBeenCalled();
       expect(mainDb.select).not.toHaveBeenCalled();
       expect(result[0]!.batchId).toBe("batch-tx");
     });

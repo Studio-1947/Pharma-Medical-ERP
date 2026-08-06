@@ -16,14 +16,24 @@ export class BillingRepository {
     return this.drizzle.db;
   }
 
-  async nextInvoiceNumber(): Promise<string> {
+  async nextInvoiceNumber(branchId?: string, branchCode?: string): Promise<string> {
     const today = new Date().toISOString().split("T")[0]!; // YYYY-MM-DD
-    const key = `invoice_seq:${today}`;
+    let prefix = branchCode;
+    if (!prefix && branchId) {
+      const [b] = await this.db
+        .select({ code: schema.branches.code })
+        .from(schema.branches)
+        .where(eq(schema.branches.id, branchId))
+        .limit(1);
+      prefix = b?.code;
+    }
+    const codePrefix = (prefix || "BRN01").toUpperCase();
+    const key = branchId ? `invoice_seq:${branchId}:${today}` : `invoice_seq:${today}`;
     const seq = await this.redis.incr(key);
     if (seq === 1) {
       await this.redis.expire(key, 86400 * 2);
     }
-    return `INV-${today.replace(/-/g, "")}-${String(seq).padStart(4, "0")}`;
+    return `${codePrefix}-${today.replace(/-/g, "")}-${String(seq).padStart(5, "0")}`;
   }
 
   async createInvoiceWithItems(
