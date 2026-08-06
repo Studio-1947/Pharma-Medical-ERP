@@ -107,7 +107,8 @@ export class ProcurementController {
     const ledger = await this.service.getSupplierLedger(id, query);
 
     if (query.format === "csv") {
-      const csv = parse(ledger.entries);
+      const fields = ["date", "type", "reference", "debit", "credit", "balance"];
+      const csv = parse(ledger.entries, { fields });
       res.header("Content-Type", "text/csv");
       res.header("Content-Disposition", `attachment; filename="ledger-${id}.csv"`);
       return res.send(csv);
