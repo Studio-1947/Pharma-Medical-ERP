@@ -39,8 +39,18 @@ export const queryBatchSchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
+export const reserveBatchStockSchema = z.object({
+  quantity: z.number().int().min(1),
+});
+
+export const releaseBatchStockSchema = z.object({
+  quantity: z.number().int().min(1),
+});
+
 export type CreateBatchDto = z.infer<typeof createBatchSchema>;
 export type UpdateBatchDto = z.infer<typeof updateBatchSchema>;
 export type UpdateBatchStatusDto = z.infer<typeof updateBatchStatusSchema>;
 export type AdjustBatchQuantityDto = z.infer<typeof adjustBatchQuantitySchema>;
 export type QueryBatchDto = z.infer<typeof queryBatchSchema>;
+export type ReserveBatchStockDto = z.infer<typeof reserveBatchStockSchema>;
+export type ReleaseBatchStockDto = z.infer<typeof releaseBatchStockSchema>;

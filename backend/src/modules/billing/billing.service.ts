@@ -337,7 +337,7 @@ export class BillingService {
       }
 
       // 5. Insert Invoice, Items, and Payments
-      const invoiceNo = await this.repo.nextInvoiceNumber();
+      const invoiceNo = await this.repo.nextInvoiceNumber(branchId);
 
       const invoiceData: typeof schema.salesInvoices.$inferInsert = {
         invoiceNo,
@@ -512,7 +512,7 @@ export class BillingService {
 
     const returnTotal = returnLineData.reduce((sum, l) => sum + l.lineTotal, 0);
 
-    const returnInvoiceNo = await this.repo.nextInvoiceNumber();
+    const returnInvoiceNo = await this.repo.nextInvoiceNumber(original.branchId);
 
     // Determine refund payment mode from original invoice
     const refundMode = original.payments?.[0]?.mode ?? "cash";
