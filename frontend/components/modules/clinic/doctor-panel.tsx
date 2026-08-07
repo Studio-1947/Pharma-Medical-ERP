@@ -419,19 +419,19 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
 
         {activeTab === "prescribe" && (
           <div className="space-y-4">
-            <div className="rounded-lg border overflow-hidden">
+            <div className="rounded-xl border border-slate-200 overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-muted text-muted-foreground text-xs">
+                <thead className="bg-slate-100 text-slate-700 text-xs uppercase tracking-wider font-bold">
                   <tr>
-                    <th className="text-left px-3 py-2 font-medium">Medicine</th>
-                    <th className="text-left px-3 py-2 font-medium">Dosage</th>
-                    <th className="text-left px-3 py-2 font-medium">Frequency</th>
-                    <th className="text-left px-3 py-2 font-medium">Duration</th>
-                    <th className="text-left px-3 py-2 font-medium w-20">Qty</th>
+                    <th className="text-left px-3 py-2.5 min-w-[280px]">Medicine Name</th>
+                    <th className="text-left px-3 py-2.5 min-w-[110px]">Dosage</th>
+                    <th className="text-left px-3 py-2.5 min-w-[120px]">Frequency</th>
+                    <th className="text-left px-3 py-2.5 min-w-[110px]">Duration</th>
+                    <th className="text-left px-3 py-2.5 w-20 min-w-[80px]">Qty</th>
                     <th className="w-8" />
                   </tr>
                 </thead>
-                <tbody className="divide-y">
+                <tbody className="divide-y divide-slate-100 bg-white">
                   {items.map((item, idx) => (
                     <MedicineRow
                       key={idx}
