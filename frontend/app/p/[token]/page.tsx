@@ -217,7 +217,15 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
         )}
 
         {/* Footer */}
-        <div className="bg-slate-50 p-4 border-t border-slate-200/80 text-center space-y-2">
+        <div className="bg-slate-50 p-4 border-t border-slate-200/80 text-center space-y-3">
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-extrabold transition-all shadow-md inline-flex items-center justify-center gap-2 print:hidden"
+          >
+            <Download size={14} className="text-emerald-400" /> Save / Print PDF Invoice
+          </button>
+
           <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-slate-600">
             <ShieldCheck size={14} className="text-emerald-600" />
             <span>Official Verified Record — Radha Madhav Medical Hall</span>
