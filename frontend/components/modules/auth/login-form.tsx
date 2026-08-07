@@ -8,7 +8,8 @@ import { loginSchema, type LoginDto } from "@pharmerp/types";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { landingPathForRole } from "@/lib/nav-items";
-import { Eye, EyeOff, Mail, Lock, AlertCircle } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, AlertCircle, ArrowRight } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 export function LoginForm() {
   const router = useRouter();
@@ -36,8 +37,6 @@ export function LoginForm() {
       } catch {
         // Token decode failed — user info will load on next request
       }
-      // Roles land on the screen they actually work in, not a shared dashboard
-      // they may have no grants for.
       router.push(landingPathForRole(role));
     } catch (err: any) {
       const errorData = err?.response?.data;
@@ -53,58 +52,58 @@ export function LoginForm() {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
       <div className="space-y-1.5">
-        <label className="block text-sm font-medium text-gray-700 dark:text-foreground">
+        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
           Email address
         </label>
         <div className="relative">
-          <Mail size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Mail size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="email"
             {...register("email")}
-            className="w-full border border-gray-200 dark:border-border bg-white dark:bg-background rounded-xl pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all placeholder:text-gray-400"
+            className="w-full border border-slate-200 bg-white rounded-xl pl-10 pr-4 py-2.5 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all placeholder:text-slate-400 shadow-2xs"
             placeholder="you@example.com"
             autoComplete="email"
           />
         </div>
         {errors.email && (
-          <p className="text-red-500 text-xs mt-1">{errors.email.message}</p>
+          <p className="text-rose-600 text-xs font-semibold mt-1">{errors.email.message}</p>
         )}
       </div>
 
       <div className="space-y-1.5">
-        <label className="block text-sm font-medium text-gray-700 dark:text-foreground">
+        <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
           Password
         </label>
         <div className="relative">
-          <Lock size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <Lock size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type={showPassword ? "text" : "password"}
             {...register("password")}
-            className="w-full border border-gray-200 dark:border-border bg-white dark:bg-background rounded-xl pl-9 pr-10 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all placeholder:text-gray-400"
+            className="w-full border border-slate-200 bg-white rounded-xl pl-10 pr-10 py-2.5 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all placeholder:text-slate-400 shadow-2xs"
             placeholder="Enter your password"
             autoComplete="current-password"
           />
           <button
             type="button"
             onClick={() => setShowPassword((v) => !v)}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+            className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
             tabIndex={-1}
           >
-            {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
         </div>
         {errors.password && (
-          <p className="text-red-500 text-xs mt-1">{errors.password.message}</p>
+          <p className="text-rose-600 text-xs font-semibold mt-1">{errors.password.message}</p>
         )}
       </div>
 
       {errors.root && (
-        <div className="flex items-start gap-3 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl text-sm">
-          <AlertCircle size={16} className="mt-0.5 shrink-0" />
-          <div className="space-y-1">
-            <p className="font-medium">{errors.root.message}</p>
+        <div className="flex items-start gap-3 bg-rose-50 border border-rose-200 text-rose-700 px-4 py-3 rounded-xl text-xs font-medium animate-in fade-in">
+          <AlertCircle size={17} className="mt-0.5 shrink-0" />
+          <div className="space-y-1 min-w-0">
+            <p className="font-semibold">{errors.root.message}</p>
             {(errors.root as any).originalError && (
-              <p className="text-xs opacity-80 font-mono">
+              <p className="text-[11px] opacity-90 font-mono break-all">
                 {(errors.root as any).originalError}
               </p>
             )}
@@ -112,17 +111,21 @@ export function LoginForm() {
         </div>
       )}
 
-      <button
+      <Button
         type="submit"
-        disabled={isSubmitting}
-        className="w-full bg-emerald-700 hover:bg-emerald-800 text-white py-2.5 rounded-xl font-semibold text-sm disabled:opacity-60 transition-colors mt-2"
+        variant="primary"
+        size="lg"
+        isLoading={isSubmitting}
+        rightIcon={!isSubmitting ? <ArrowRight size={16} /> : undefined}
+        className="w-full justify-center shadow-md shadow-emerald-600/15 mt-2"
       >
-        {isSubmitting ? "Signing in..." : "Sign in"}
-      </button>
+        Sign In to Portal
+      </Button>
 
-      <p className="text-center text-sm text-gray-500 dark:text-muted-foreground">
-        Contact your administrator to get access.
+      <p className="text-center text-xs font-medium text-slate-400 pt-2">
+        Protected ERP Portal • Contact administrator for access
       </p>
     </form>
   );
 }
+
