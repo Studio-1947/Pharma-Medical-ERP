@@ -39,8 +39,8 @@ export function Breadcrumbs() {
   // Strip leading slash, split into segments, filter empty strings
   const segments = pathname.replace(/^\//, "").split("/").filter(Boolean);
 
-  // Single segment or root — show nothing (header title is enough)
-  if (segments.length <= 1) return null;
+  // Single segment or root — show current top section badge
+  if (segments.length === 0) return null;
 
   // Build cumulative href per segment
   const crumbs = segments.map((seg, i) => ({
@@ -50,26 +50,27 @@ export function Breadcrumbs() {
   }));
 
   return (
-    <nav aria-label="Breadcrumb" className="flex items-center gap-1 text-sm">
+    <nav aria-label="Breadcrumb" className="flex items-center gap-1.5 text-xs">
       <button
         onClick={() => navigate("/dashboard")}
-        className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+        className="p-1.5 rounded-lg bg-slate-100/80 hover:bg-slate-200/80 text-slate-500 hover:text-slate-900 transition-colors shrink-0 flex items-center justify-center"
         aria-label="Home"
+        title="Dashboard"
       >
-        <Home size={14} />
+        <Home size={13} />
       </button>
 
       {crumbs.map((crumb) => (
-        <span key={crumb.href} className="flex items-center gap-1 min-w-0">
-          <ChevronRight size={13} className="text-muted-foreground/50 shrink-0" />
+        <span key={crumb.href} className="flex items-center gap-1.5 min-w-0">
+          <ChevronRight size={13} className="text-slate-400 shrink-0" />
           {crumb.isLast ? (
-            <span className="font-medium text-foreground truncate">
+            <span className="font-bold text-slate-900 bg-emerald-50 text-emerald-800 border border-emerald-200/60 px-2.5 py-1 rounded-lg truncate shadow-2xs">
               {crumb.label}
             </span>
           ) : (
             <button
               onClick={() => navigate(crumb.href)}
-              className="text-muted-foreground hover:text-foreground transition-colors truncate"
+              className="font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 px-2 py-1 rounded-lg transition-colors truncate"
             >
               {crumb.label}
             </button>
@@ -79,3 +80,4 @@ export function Breadcrumbs() {
     </nav>
   );
 }
+

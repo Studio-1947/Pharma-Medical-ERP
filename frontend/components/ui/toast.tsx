@@ -2,7 +2,7 @@
 
 import * as ToastPrimitive from "@radix-ui/react-toast";
 import { createContext, useContext, useReducer, useCallback, ReactNode } from "react";
-import { X, CheckCircle, AlertCircle, Info, AlertTriangle } from "lucide-react";
+import { X, CheckCircle2, AlertCircle, Info, AlertTriangle } from "lucide-react";
 
 type ToastVariant = "success" | "error" | "info" | "warning";
 
@@ -40,17 +40,24 @@ function reducer(state: Toast[], action: Action): Toast[] {
 }
 
 const ICONS: Record<ToastVariant, ReactNode> = {
-  success: <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />,
-  error: <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />,
-  info: <Info className="w-4 h-4 text-emerald-500 shrink-0" />,
-  warning: <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0" />,
+  success: <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />,
+  error: <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />,
+  info: <Info className="w-5 h-5 text-cyan-600 shrink-0" />,
+  warning: <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />,
 };
 
-const BORDER: Record<ToastVariant, string> = {
-  success: "border-green-200",
-  error: "border-red-200",
-  info: "border-emerald-200",
-  warning: "border-amber-200 bg-amber-50",
+const BORDER_STYLES: Record<ToastVariant, string> = {
+  success: "border-emerald-200/80 bg-white/95 shadow-emerald-950/5",
+  error: "border-rose-200/80 bg-white/95 shadow-rose-950/5",
+  info: "border-cyan-200/80 bg-white/95 shadow-cyan-950/5",
+  warning: "border-amber-200/80 bg-amber-50/95 shadow-amber-950/5",
+};
+
+const ICON_BG: Record<ToastVariant, string> = {
+  success: "bg-emerald-50 text-emerald-600",
+  error: "bg-rose-50 text-rose-600",
+  info: "bg-cyan-50 text-cyan-600",
+  warning: "bg-amber-100/60 text-amber-600",
 };
 
 export function ToastProvider({ children }: { children: ReactNode }) {
@@ -90,7 +97,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     <ToastContext.Provider value={{ toast, success, error, info, warning }}>
       <ToastPrimitive.Provider swipeDirection="right">
         {children}
-        <ToastPrimitive.Viewport className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2 w-80 outline-none" />
+        <ToastPrimitive.Viewport className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2.5 w-84 max-w-[calc(100vw-2.5rem)] outline-none" />
         {toasts.map((t) => (
           <ToastPrimitive.Root
             key={t.id}
@@ -98,24 +105,26 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             onOpenChange={(open) => {
               if (!open) dispatch({ type: "REMOVE", id: t.id });
             }}
-            className={`border ${BORDER[t.variant]} bg-white rounded-lg shadow-lg p-4 flex items-start gap-3 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-bottom-5`}
+            className={`group relative border ${BORDER_STYLES[t.variant]} backdrop-blur-md rounded-2xl shadow-xl p-4 flex items-start gap-3.5 transition-all data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-bottom-5 overflow-hidden`}
           >
-            {ICONS[t.variant]}
-            <div className="flex-1 min-w-0">
-              <ToastPrimitive.Title className="text-sm font-semibold text-gray-900 leading-tight">
+            <div className={`p-2 rounded-xl ${ICON_BG[t.variant]} shrink-0`}>
+              {ICONS[t.variant]}
+            </div>
+            <div className="flex-1 min-w-0 pt-0.5">
+              <ToastPrimitive.Title className="text-sm font-bold text-slate-900 leading-tight">
                 {t.title}
               </ToastPrimitive.Title>
               {t.description && (
-                <ToastPrimitive.Description className="text-xs text-gray-500 mt-0.5 leading-snug">
+                <ToastPrimitive.Description className="text-xs font-medium text-slate-500 mt-1 leading-snug">
                   {t.description}
                 </ToastPrimitive.Description>
               )}
             </div>
             <ToastPrimitive.Close
-              className="shrink-0 text-gray-400 hover:text-gray-600 transition-colors"
+              className="shrink-0 p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
               aria-label="Close"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4" />
             </ToastPrimitive.Close>
           </ToastPrimitive.Root>
         ))}
@@ -129,3 +138,4 @@ export function useToast(): ToastContextValue {
   if (!ctx) throw new Error("useToast must be used inside ToastProvider");
   return ctx;
 }
+

@@ -8,36 +8,33 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { permissionForPath } from "@/lib/nav-items";
 import { useNavigation } from "@/lib/navigation-context";
 import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
-import { ShieldOff } from "lucide-react";
+import { ShieldOff, ArrowLeft } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 /**
  * Blocks a route the current role has no permission for.
- *
- * Hiding the sidebar link was never a control — typing the URL loaded the page
- * regardless, so a cashier could open the Doctor Panel and a doctor the
- * settings screen. The API is the real boundary and rejects those calls, but
- * rendering a screen full of failing requests reads as a broken app rather than
- * a closed door.
  */
 function AccessDenied() {
   const { navigate } = useNavigation();
 
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center px-6">
-      <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-4">
-        <ShieldOff className="w-6 h-6 text-muted-foreground" />
+    <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6">
+      <div className="w-16 h-16 rounded-2xl bg-rose-50 border border-rose-100 flex items-center justify-center mb-5 text-rose-600 shadow-sm">
+        <ShieldOff className="w-8 h-8" />
       </div>
-      <h1 className="text-lg font-semibold">You do not have access to this page</h1>
-      <p className="text-sm text-muted-foreground mt-1 max-w-sm">
-        Your role does not include this module. Contact an administrator if you
-        believe this is a mistake.
+      <h1 className="text-xl font-bold text-slate-900 tracking-tight">Access Restricted</h1>
+      <p className="text-sm font-medium text-slate-500 mt-2 max-w-md leading-relaxed">
+        Your role does not have permission to view this module. Please contact an administrator if you need access.
       </p>
-      <button
+      <Button
+        variant="primary"
+        size="md"
+        className="mt-6"
+        leftIcon={<ArrowLeft size={16} />}
         onClick={() => navigate("/dashboard")}
-        className="mt-5 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
       >
-        Back to dashboard
-      </button>
+        Return to Dashboard
+      </Button>
     </div>
   );
 }
@@ -53,24 +50,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   }, [pathname]);
 
   const required = permissionForPath(pathname);
-  // `role` is empty until the auth store rehydrates from localStorage. Denying
-  // during that window would flash AccessDenied on every hard reload, so an
-  // unresolved role falls through to the page, which the API still guards.
   const allowed = !required || !role || can(required);
 
   return (
-    <div className="flex h-dvh overflow-hidden relative">
+    <div className="flex h-dvh overflow-hidden relative bg-slate-100">
       <Sidebar mobileOpen={mobileNavOpen} onMobileClose={() => setMobileNavOpen(false)} />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Header onMenuClick={() => setMobileNavOpen(true)} />
-        {/* Outside the permission gate on purpose: while impersonating, `role`
-            is the target's, so /admin renders AccessDenied. The Stop button has
-            to stay reachable or the operator is stranded. */}
         <ImpersonationBanner />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50">
-          {allowed ? children : <AccessDenied />}
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-slate-50 via-slate-100/60 to-emerald-50/20">
+          <div className="max-w-7xl mx-auto space-y-6">
+            {allowed ? children : <AccessDenied />}
+          </div>
         </main>
       </div>
     </div>
   );
 }
+
