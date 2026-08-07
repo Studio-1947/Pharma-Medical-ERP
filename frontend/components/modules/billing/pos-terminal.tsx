@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera } from "lucide-react";
 import { useCartStore } from "@/stores/cart.store";
 import { PaymentModal } from "./payment-modal";
+import { RxPickerModal } from "./rx-picker-modal";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { queueOfflineInvoice, syncOfflineQueue } from "@/lib/pos-db";
@@ -30,6 +31,7 @@ export function PosTerminal() {
   const { branchId: activeBranchId } = useActiveBranchId();
   const [search, setSearch] = useState("");
   const [payOpen, setPayOpen] = useState(false);
+  const [rxPickerOpen, setRxPickerOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [printOpen, setPrintOpen] = useState(false);
@@ -332,7 +334,7 @@ export function PosTerminal() {
   // Suspend global scan capture while any modal is open so a stray scan
   // can't mutate the cart mid-payment.
   useBarcodeScanner(handleBarcodeScan, {
-    enabled: !payOpen && !cameraOpen && !printOpen && !clearConfirm && !isPatientModalOpen,
+    enabled: !payOpen && !rxPickerOpen && !cameraOpen && !printOpen && !clearConfirm && !isPatientModalOpen,
   });
 
   // ── Online/offline ──────────────────────────────────────────────────────────
@@ -478,26 +480,49 @@ export function PosTerminal() {
 
       {/* Schedule H warning banner */}
       {needsRx && (
-        <div className="flex flex-col gap-2 bg-amber-50 border border-amber-200 rounded-xl p-3">
-          <div className="flex items-center gap-2 text-amber-700 text-sm font-semibold">
-            <AlertTriangle size={15} /> Cart contains Schedule H / controlled medicines — a verified prescription is required
+        <div className={`flex flex-col gap-2.5 rounded-2xl p-4 border transition-all ${prescriptionId?.trim() ? "bg-emerald-50/90 border-emerald-200" : "bg-amber-50/90 border-amber-200"}`}>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm font-bold">
+              <AlertTriangle size={17} className={prescriptionId?.trim() ? "text-emerald-600" : "text-amber-600"} />
+              <span className={prescriptionId?.trim() ? "text-emerald-900" : "text-amber-900"}>
+                Cart contains Schedule H / controlled medicines — verified prescription required
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRxPickerOpen(true)}
+              className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs font-bold rounded-xl shadow-sm hover:from-emerald-500 hover:to-teal-500 transition-all shrink-0 flex items-center gap-1.5"
+            >
+              <FileText size={14} />
+              <span>{prescriptionId?.trim() ? "Change Verified Rx" : "Select Verified Rx"}</span>
+            </button>
           </div>
+
           <div className="flex items-center gap-2">
-            <FileText size={14} className="text-amber-600 shrink-0" />
+            <FileText size={14} className={prescriptionId?.trim() ? "text-emerald-600 shrink-0" : "text-amber-600 shrink-0"} />
             <input
               value={prescriptionId ?? ""}
               onChange={(e) => setPrescriptionId(e.target.value || null)}
-              placeholder="Paste verified Prescription ID (UUID)..."
-              className="flex-1 border border-amber-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white font-mono"
+              placeholder="Or paste verified Prescription ID (UUID)..."
+              className="flex-1 border border-slate-200/80 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/40 bg-white font-mono shadow-2xs"
             />
             {prescriptionId && (
-              <button onClick={() => setPrescriptionId(null)} className="text-amber-500 hover:text-amber-700">
+              <button
+                type="button"
+                onClick={() => setPrescriptionId(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                title="Unlink Prescription"
+              >
                 <X size={14} />
               </button>
             )}
           </div>
+
           {prescriptionId?.trim() && (
-            <span className="text-xs text-green-700 font-medium">Prescription linked</span>
+            <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-bold bg-white/80 border border-emerald-200/60 px-2.5 py-1 rounded-lg w-fit">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Verified Rx Linked: #{prescriptionId}</span>
+            </div>
           )}
         </div>
       )}
@@ -834,6 +859,20 @@ export function PosTerminal() {
         onClose={() => setPayOpen(false)}
         onConfirm={handlePayConfirm}
         loading={createMutation.isPending}
+        needsRx={needsRx}
+        prescriptionId={prescriptionId}
+        onOpenRxPicker={() => setRxPickerOpen(true)}
+      />
+
+      <RxPickerModal
+        open={rxPickerOpen}
+        onClose={() => setRxPickerOpen(false)}
+        onSelectRx={(id) => {
+          setPrescriptionId(id);
+          toastSuccess("Prescription Linked", `Verified prescription linked to checkout.`);
+        }}
+        patientId={patientId}
+        patientName={selectedPatient?.name}
       />
 
       <BarcodeScannerDialog
