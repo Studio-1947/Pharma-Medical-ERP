@@ -12,7 +12,19 @@ export interface DispatchParams {
   id: string;
   number?: string | null;
   doctorName?: string | null;
+  subtotal?: number | string | null;
+  taxAmount?: number | string | null;
   totalAmount?: number | string | null;
+  paymentMode?: string | null;
+  items?: {
+    medicineName?: string | null;
+    quantity: number | string;
+    unitPrice?: number | string | null;
+    lineTotal?: number | string | null;
+    dosage?: string | null;
+    frequency?: string | null;
+    duration?: string | null;
+  }[];
 }
 
 /**
@@ -52,15 +64,39 @@ export function sendViaWhatsApp(params: DispatchParams): boolean {
 
   const phone = formatPhoneNumber(rawPhone);
   const link = getPublicViewUrl(params.type, params.id);
-  const name = params.patientName ? ` *${params.patientName}*` : "";
+  const name = params.patientName ? `\n👤 *Patient*: ${params.patientName}` : "";
 
   let text = "";
   if (params.type === "prescription") {
-    const doc = params.doctorName ? ` from *Dr. ${params.doctorName}*` : "";
-    text = `*Radha Madhav Medical Hall* 🏥\n\nHello${name}, your digital prescription${doc} is ready!\n\n📄 *Prescription ID*: #${params.number || params.id.slice(0, 8)}\n\nTap to view your digital prescription & dosage guide:\n🔗 ${link}\n\n*Thank you for choosing Radha Madhav Medical Hall!*`;
+    const doc = params.doctorName ? `\n🩺 *Doctor*: Dr. ${params.doctorName}` : "";
+    let itemsText = "";
+    if (Array.isArray(params.items) && params.items.length > 0) {
+      const list = params.items
+        .map((it) => `• *${it.medicineName || "Item"}* (${it.dosage || ""}) × ${it.quantity}`)
+        .join("\n");
+      itemsText = `\n\n*PRESCRIBED MEDICINES*:\n${list}`;
+    }
+
+    text = `*Radha Madhav Medical Hall* 🏥\n*Digital Prescription Record*\n\n📄 *Prescription ID*: #${params.number || params.id.slice(0, 8)}${name}${doc}${itemsText}\n\n🔗 *View Digital Copy*: ${link}\n\n*Thank you for choosing Radha Madhav Medical Hall!*`;
   } else {
-    const amt = params.totalAmount ? `\n💰 *Total Amount*: ₹${Number(params.totalAmount).toFixed(2)}` : "";
-    text = `*Radha Madhav Medical Hall* 🏥\n\nHello${name}, thank you for your visit! Your bill receipt is ready.${amt}\n\n🧾 *Invoice No*: #${params.number || params.id.slice(0, 8)}\n\nTap to view your digital tax receipt & invoice:\n🔗 ${link}\n\n*Get well soon!*`;
+    let itemsText = "";
+    if (Array.isArray(params.items) && params.items.length > 0) {
+      const list = params.items
+        .map((it) => {
+          const nameStr = it.medicineName || "Item";
+          const qtyStr = it.quantity;
+          const totStr = Number(it.lineTotal || (Number(it.quantity || 1) * Number(it.unitPrice || 0))).toFixed(2);
+          return `• *${nameStr}* × ${qtyStr} = ₹${totStr}`;
+        })
+        .join("\n");
+      itemsText = `\n\n*PURCHASED ITEMS*:\n${list}`;
+    }
+
+    const sub = params.subtotal ? `\n*Subtotal*: ₹${Number(params.subtotal).toFixed(2)}` : "";
+    const tax = Number(params.taxAmount || 0) > 0 ? `\n*GST Tax*: ₹${Number(params.taxAmount).toFixed(2)}` : "";
+    const total = params.totalAmount ? `\n💰 *TOTAL PAID*: ₹${Number(params.totalAmount).toFixed(2)}` : "";
+
+    text = `*Radha Madhav Medical Hall* 🏥\n*Tax Invoice / Bill of Supply*\n\n🧾 *Invoice No*: #${params.number || params.id.slice(0, 8)}${name}${itemsText}\n──────────────────${sub}${tax}${total}\n\n📄 *View / Download Digital Receipt*:\n🔗 ${link}\n\n*Thank you for choosing Radha Madhav Medical Hall!*\n_Goods once sold will not be taken back without valid reason._`;
   }
 
   const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
