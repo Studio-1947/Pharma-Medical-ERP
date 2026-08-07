@@ -21,9 +21,12 @@ interface Props {
   onConfirm: (mode: string, splits: { mode: string; amount: number; ref?: string }[]) => void;
   onClose: () => void;
   loading?: boolean;
+  needsRx?: boolean;
+  prescriptionId?: string | null;
+  onOpenRxPicker?: () => void;
 }
 
-export function PaymentModal({ open, total, onConfirm, onClose, loading }: Props) {
+export function PaymentModal({ open, total, onConfirm, onClose, loading, needsRx, prescriptionId, onOpenRxPicker }: Props) {
   const [mode, setMode] = useState<string>("cash");
   const [splits, setSplits] = useState<{ mode: string; amount: string; ref: string }[]>([
     { mode: "cash", amount: "", ref: "" },
@@ -115,6 +118,38 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading }: Props
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">Amount Due</p>
             <p className="text-4xl font-black text-slate-900">₹{total.toFixed(2)}</p>
           </div>
+
+          {/* Schedule H Prescription Warning Block inside Modal */}
+          {needsRx && (
+            <div className={`p-3.5 rounded-xl border flex flex-col gap-2.5 ${prescriptionId?.trim() ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}>
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider">
+                  <FileText size={15} className={prescriptionId?.trim() ? "text-emerald-600" : "text-amber-600"} />
+                  <span className={prescriptionId?.trim() ? "text-emerald-800" : "text-amber-800"}>
+                    {prescriptionId?.trim() ? "Verified Rx Linked" : "Prescription Required (Schedule H)"}
+                  </span>
+                </div>
+                {onOpenRxPicker && (
+                  <button
+                    type="button"
+                    onClick={onOpenRxPicker}
+                    className="px-2.5 py-1 rounded-lg text-xs font-bold bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 shadow-2xs transition-colors shrink-0"
+                  >
+                    {prescriptionId?.trim() ? "Change Rx" : "Select Verified Rx"}
+                  </button>
+                )}
+              </div>
+              {prescriptionId?.trim() ? (
+                <p className="text-xs font-medium text-emerald-700 font-mono truncate">
+                  Rx ID: #{prescriptionId}
+                </p>
+              ) : (
+                <p className="text-xs text-amber-700 font-medium">
+                  This checkout contains Schedule H medicines. Click "Select Verified Rx" above to select or link a prescription.
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Error */}
           {error && (
