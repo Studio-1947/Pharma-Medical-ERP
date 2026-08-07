@@ -57,10 +57,10 @@ export function sendViaWhatsApp(params: DispatchParams): boolean {
   let text = "";
   if (params.type === "prescription") {
     const doc = params.doctorName ? ` from *Dr. ${params.doctorName}*` : "";
-    text = `*Apex Healthcare & Pharmacy* 🏥\n\nHello${name}, your digital prescription${doc} is ready!\n\n📄 *Prescription ID*: #${params.number || params.id.slice(0, 8)}\n\nTap to view your digital prescription & dosage guide:\n🔗 ${link}\n\n*Thank you for choosing Apex Healthcare!*`;
+    text = `*Radha Madhav Medical Hall* 🏥\n\nHello${name}, your digital prescription${doc} is ready!\n\n📄 *Prescription ID*: #${params.number || params.id.slice(0, 8)}\n\nTap to view your digital prescription & dosage guide:\n🔗 ${link}\n\n*Thank you for choosing Radha Madhav Medical Hall!*`;
   } else {
     const amt = params.totalAmount ? `\n💰 *Total Amount*: ₹${Number(params.totalAmount).toFixed(2)}` : "";
-    text = `*Apex Healthcare & Pharmacy* 🏥\n\nHello${name}, thank you for your visit! Your bill receipt is ready.${amt}\n\n🧾 *Invoice No*: #${params.number || params.id.slice(0, 8)}\n\nTap to view your digital tax receipt & invoice:\n🔗 ${link}\n\n*Get well soon!*`;
+    text = `*Radha Madhav Medical Hall* 🏥\n\nHello${name}, thank you for your visit! Your bill receipt is ready.${amt}\n\n🧾 *Invoice No*: #${params.number || params.id.slice(0, 8)}\n\nTap to view your digital tax receipt & invoice:\n🔗 ${link}\n\n*Get well soon!*`;
   }
 
   const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
@@ -79,9 +79,9 @@ export function sendViaSms(params: DispatchParams): boolean {
 
   let text = "";
   if (params.type === "prescription") {
-    text = `Apex Healthcare: Your prescription #${params.number || params.id.slice(0, 8)} is ready. View here: ${link}`;
+    text = `Radha Madhav Medical Hall: Your prescription #${params.number || params.id.slice(0, 8)} is ready. View here: ${link}`;
   } else {
-    text = `Apex Healthcare: Your bill receipt #${params.number || params.id.slice(0, 8)} is ready. View here: ${link}`;
+    text = `Radha Madhav Medical Hall: Your bill receipt #${params.number || params.id.slice(0, 8)} is ready. View here: ${link}`;
   }
 
   const url = `sms:${phone}?body=${encodeURIComponent(text)}`;
