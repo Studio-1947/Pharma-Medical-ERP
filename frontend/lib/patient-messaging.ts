@@ -30,19 +30,27 @@ export function formatPhoneNumber(phone: string): string {
  * Builds public view link for prescriptions or invoices
  */
 export function getPublicViewUrl(type: "prescription" | "invoice", id: string): string {
-  if (typeof window !== "undefined") {
-    return `${window.location.origin}/p/${type === "prescription" ? "rx" : "inv"}-${id}`;
-  }
-  return `/p/${type === "prescription" ? "rx" : "inv"}-${id}`;
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : "");
+  return `${baseUrl}/p/${type === "prescription" ? "rx" : "inv"}-${id}`;
 }
 
 /**
  * Dispatches message to WhatsApp via wa.me protocol
  */
 export function sendViaWhatsApp(params: DispatchParams): boolean {
-  if (!params.phone) return false;
+  let rawPhone = params.phone;
 
-  const phone = formatPhoneNumber(params.phone);
+  if (!rawPhone) {
+    if (typeof window !== "undefined") {
+      const input = window.prompt("Enter patient mobile number to send WhatsApp message:");
+      if (!input || !input.trim()) return false;
+      rawPhone = input.trim();
+    } else {
+      return false;
+    }
+  }
+
+  const phone = formatPhoneNumber(rawPhone);
   const link = getPublicViewUrl(params.type, params.id);
   const name = params.patientName ? ` *${params.patientName}*` : "";
 

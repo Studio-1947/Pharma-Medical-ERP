@@ -1219,23 +1219,21 @@ export function PosTerminal() {
               >
                 New Sale
               </button>
-              {lastReceiptPatient?.phone && (
-                <button
-                  onClick={() => {
-                    sendViaWhatsApp({
-                      phone: lastReceiptPatient.phone,
-                      patientName: lastReceiptPatient.name,
-                      type: "invoice",
-                      id: lastInvoice.id,
-                      number: lastInvoice.invoiceNo,
-                      totalAmount: lastInvoice.totalAmount,
-                    });
-                  }}
-                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/10"
-                >
-                  💬 Send WhatsApp
-                </button>
-              )}
+              <button
+                onClick={() => {
+                  sendViaWhatsApp({
+                    phone: lastReceiptPatient?.phone,
+                    patientName: lastReceiptPatient?.name,
+                    type: "invoice",
+                    id: lastInvoice.id,
+                    number: lastInvoice.invoiceNo,
+                    totalAmount: lastInvoice.totalAmount,
+                  });
+                }}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/10"
+              >
+                💬 Send WhatsApp
+              </button>
               <button
                 onClick={printReceipt}
                 className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition inline-flex items-center justify-center gap-1.5 shadow-md"
