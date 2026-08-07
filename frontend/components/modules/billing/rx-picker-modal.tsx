@@ -140,45 +140,45 @@ export function RxPickerModal({ open, onClose, onSelectRx, patientId, patientNam
     >
       <div className="space-y-4">
         {/* Navigation Tabs */}
-        <div className="flex flex-wrap items-center justify-between border-b border-slate-200 gap-2 pb-1">
-          <div className="flex border-b border-transparent">
+        <div className="flex flex-wrap items-center justify-between border-b border-slate-200 gap-2 pb-2">
+          <div className="flex border-b border-transparent gap-1">
             <button
               type="button"
               onClick={() => setTab("search")}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 text-xs font-bold transition-all rounded-t-xl ${
                 tab === "search"
-                  ? "border-emerald-600 text-emerald-700 bg-emerald-50/50 rounded-t-xl"
-                  : "border-transparent text-slate-500 hover:text-slate-900"
+                  ? "border-b-2 border-emerald-600 text-emerald-900 bg-emerald-50/80"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
               }`}
             >
-              <Search size={14} />
+              <Search size={14} className="text-emerald-600" />
               <span>Search Digital Rx</span>
             </button>
 
             <button
               type="button"
               onClick={() => setTab("upload")}
-              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 text-xs font-bold transition-all rounded-t-xl ${
                 tab === "upload"
-                  ? "border-emerald-600 text-emerald-700 bg-emerald-50/50 rounded-t-xl"
-                  : "border-transparent text-slate-500 hover:text-slate-900"
+                  ? "border-b-2 border-emerald-600 text-emerald-900 bg-emerald-50/80"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
               }`}
             >
-              <Upload size={14} />
+              <Upload size={14} className="text-emerald-600" />
               <span>Log Details / Photo (Optional)</span>
             </button>
           </div>
 
           {/* Instant 1-Click Pass for Busy Tills */}
           <Button
-            variant="secondary"
+            variant="primary"
             size="sm"
             isLoading={createPhysicalRxMutation.isPending}
             onClick={() => {
               setDoctorName("External Doctor (Verified on Counter)");
               createPhysicalRxMutation.mutate();
             }}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm border-0 shrink-0"
+            className="shadow-md shrink-0 font-extrabold"
           >
             ⚡ Quick Verify Physical Rx (1-Click)
           </Button>
@@ -188,12 +188,12 @@ export function RxPickerModal({ open, onClose, onSelectRx, patientId, patientNam
           <div className="space-y-4">
             {/* Search input */}
             <div className="relative">
-              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+              <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500" />
               <input
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by Prescription ID, Doctor Name, or Patient..."
-                className="w-full border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 font-medium"
+                className="w-full border border-slate-300 rounded-xl pl-10 pr-4 py-2.5 text-sm bg-white text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 font-semibold shadow-2xs"
               />
             </div>
 
@@ -204,48 +204,48 @@ export function RxPickerModal({ open, onClose, onSelectRx, patientId, patientNam
                   <div key={i} className="h-20 bg-slate-100 rounded-2xl animate-pulse" />
                 ))
               ) : rxList.length === 0 ? (
-                <div className="py-10 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
-                  <Inbox size={32} className="opacity-30" />
-                  <p className="text-sm font-semibold text-slate-700">No verified digital prescriptions found</p>
-                  <p className="text-xs text-slate-400 max-w-sm">
-                    Does the patient have a paper prescription? Switch to the "Log Physical Paper Rx" tab to scan or log it!
+                <div className="py-10 text-center text-slate-500 flex flex-col items-center justify-center gap-2">
+                  <Inbox size={32} className="opacity-40 text-slate-400" />
+                  <p className="text-sm font-bold text-slate-800">No verified digital prescriptions found</p>
+                  <p className="text-xs text-slate-500 max-w-sm font-medium">
+                    Does the patient have a paper prescription? Switch to "Log Details / Photo" or click "⚡ Quick Verify Physical Rx".
                   </p>
                 </div>
               ) : (
                 rxList.map((rx: any) => (
                   <div
                     key={rx.id}
-                    className="p-4 rounded-2xl border border-slate-200/80 bg-white hover:border-emerald-500/60 hover:bg-emerald-50/30 transition-all flex items-center justify-between gap-4 group cursor-pointer shadow-card"
+                    className="p-4 rounded-2xl border border-slate-200 bg-white hover:border-emerald-500/60 hover:bg-emerald-50/40 transition-all flex items-center justify-between gap-4 group cursor-pointer shadow-sm"
                     onClick={() => {
                       onSelectRx(rx.id, rx);
                       onClose();
                     }}
                   >
-                    <div className="space-y-1 min-w-0">
+                    <div className="space-y-1.5 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-slate-900 text-sm font-mono truncate">
+                        <span className="font-black text-slate-950 text-sm font-mono truncate">
                           #{rx.prescriptionNumber || rx.id.slice(0, 8)}
                         </span>
                         <Badge variant="emerald" size="sm" dot>
                           Verified
                         </Badge>
                       </div>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 font-medium">
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-semibold text-slate-700">
                         {rx.doctorName && (
-                          <span className="flex items-center gap-1 text-slate-700 font-semibold">
-                            <Stethoscope size={13} className="text-emerald-600" />
+                          <span className="flex items-center gap-1 text-slate-900 font-bold">
+                            <Stethoscope size={14} className="text-emerald-600" />
                             Dr. {rx.doctorName}
                           </span>
                         )}
                         {rx.patientName && (
-                          <span className="flex items-center gap-1">
-                            <User size={13} className="text-slate-400" />
+                          <span className="flex items-center gap-1 text-slate-700">
+                            <User size={14} className="text-slate-500" />
                             {rx.patientName}
                           </span>
                         )}
                         {rx.createdAt && (
-                          <span className="flex items-center gap-1 text-slate-400">
-                            <Calendar size={13} />
+                          <span className="flex items-center gap-1 text-slate-600 font-semibold">
+                            <Calendar size={14} className="text-slate-400" />
                             {new Date(rx.createdAt).toLocaleDateString("en-IN", {
                               day: "numeric",
                               month: "short",
@@ -264,7 +264,7 @@ export function RxPickerModal({ open, onClose, onSelectRx, patientId, patientNam
                         onSelectRx(rx.id, rx);
                         onClose();
                       }}
-                      className="shrink-0"
+                      className="shrink-0 font-bold"
                     >
                       Link Rx
                     </Button>
