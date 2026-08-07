@@ -15,6 +15,7 @@ import { useDebounce } from "@/hooks/use-debounce";
 import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
 import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
 import { useActiveBranchId } from "@/hooks/use-branch";
+import { sendViaWhatsApp } from "@/lib/patient-messaging";
 
 const CONTROLLED_CLASSES = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"];
 
@@ -1211,16 +1212,31 @@ export function PosTerminal() {
             </div>
 
             {/* Action buttons */}
-            <div className="flex gap-2 px-6 pb-5 pt-3 border-t print:hidden">
+            <div className="flex flex-wrap gap-2 px-6 pb-5 pt-3 border-t print:hidden">
               <button
                 onClick={() => { setPrintOpen(false); setLastInvoice(null); }}
-                className="flex-1 py-2.5 border rounded-lg text-sm font-semibold hover:bg-gray-50 transition"
+                className="flex-1 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
               >
                 New Sale
               </button>
               <button
+                onClick={() => {
+                  sendViaWhatsApp({
+                    phone: lastReceiptPatient?.phone,
+                    patientName: lastReceiptPatient?.name,
+                    type: "invoice",
+                    id: lastInvoice.id,
+                    number: lastInvoice.invoiceNo,
+                    totalAmount: lastInvoice.totalAmount,
+                  });
+                }}
+                className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/10"
+              >
+                💬 Send WhatsApp
+              </button>
+              <button
                 onClick={printReceipt}
-                className="flex-1 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-bold hover:bg-gray-800 transition inline-flex items-center justify-center gap-2"
+                className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition inline-flex items-center justify-center gap-1.5 shadow-md"
               >
                 <Printer size={14} /> Print (Ctrl+P)
               </button>

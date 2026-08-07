@@ -17,6 +17,7 @@ import { PrescriptionScanUpload } from "@/components/modules/prescriptions/presc
 import { MedicineAutocomplete, type MedicineOption } from "@/components/modules/prescriptions/medicine-autocomplete";
 import { PrescriptionDetailModal } from "@/components/modules/prescriptions/prescription-detail-modal";
 import { InvoiceDetailModal } from "@/components/modules/billing/invoice-detail-modal";
+import { sendViaWhatsApp } from "@/lib/patient-messaging";
 import {
   Stethoscope, Clock, PhoneCall, CheckCircle2, User, AlertTriangle,
   Plus, Trash2, Upload, FileText, History, ChevronRight,
@@ -54,66 +55,156 @@ function MedicineRow({
   onSelectMedicine,
   onRemove,
   removable,
+  idx,
 }: {
   item: RxItem;
   onChange: (patch: Partial<RxItem>) => void;
   onSelectMedicine: (m: MedicineOption) => void;
   onRemove: () => void;
   removable: boolean;
+  idx?: number;
 }) {
   return (
-    <tr>
-      <td className="px-2 py-1.5">
-        <MedicineAutocomplete
-          value={item.medicineName}
-          linked={!!item.medicineId}
-          onChange={(text) => onChange({ medicineName: text, medicineId: undefined })}
-          onSelect={onSelectMedicine}
-        />
-      </td>
-      <td className="px-2 py-1.5">
-        <input
-          type="text"
-          value={item.dosage}
-          onChange={(e) => onChange({ dosage: e.target.value })}
-          placeholder="500mg"
-          className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-        />
-      </td>
-      <td className="px-2 py-1.5">
-        <input
-          type="text"
-          value={item.frequency}
-          onChange={(e) => onChange({ frequency: e.target.value })}
-          placeholder="BD / TDS"
-          className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-        />
-      </td>
-      <td className="px-2 py-1.5">
-        <input
-          type="text"
-          value={item.duration}
-          onChange={(e) => onChange({ duration: e.target.value })}
-          placeholder="5 days"
-          className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-        />
-      </td>
-      <td className="px-2 py-1.5">
-        <input
-          type="number"
-          min={1}
-          value={item.quantityPrescribed}
-          onChange={(e) => onChange({ quantityPrescribed: e.target.value === "" ? "" : Number(e.target.value) })}
-          placeholder="10"
-          className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-        />
-      </td>
-      <td className="px-1">
-        <button onClick={onRemove} disabled={!removable} className="p-1 text-slate-400 hover:text-red-500 disabled:opacity-30 transition-colors">
-          <Trash2 size={13} />
-        </button>
-      </td>
-    </tr>
+    <>
+      {/* Desktop Table Row */}
+      <tr className="hidden md:table-row hover:bg-slate-50/60 transition-colors">
+        <td className="px-2 py-2 min-w-[240px]">
+          <MedicineAutocomplete
+            value={item.medicineName}
+            linked={!!item.medicineId}
+            onChange={(text) => onChange({ medicineName: text, medicineId: undefined })}
+            onSelect={onSelectMedicine}
+            placeholder="Search medicine name..."
+          />
+        </td>
+        <td className="px-2 py-2">
+          <input
+            type="text"
+            value={item.dosage}
+            onChange={(e) => onChange({ dosage: e.target.value })}
+            placeholder="e.g. 500mg"
+            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 bg-white"
+          />
+        </td>
+        <td className="px-2 py-2">
+          <input
+            type="text"
+            list="dp-frequency-list"
+            value={item.frequency}
+            onChange={(e) => onChange({ frequency: e.target.value })}
+            placeholder="1-0-1 / BD"
+            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 bg-white"
+          />
+        </td>
+        <td className="px-2 py-2">
+          <input
+            type="text"
+            list="dp-duration-list"
+            value={item.duration}
+            onChange={(e) => onChange({ duration: e.target.value })}
+            placeholder="5 days"
+            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 bg-white"
+          />
+        </td>
+        <td className="px-2 py-2">
+          <input
+            type="number"
+            min={1}
+            value={item.quantityPrescribed}
+            onChange={(e) => onChange({ quantityPrescribed: e.target.value === "" ? "" : Number(e.target.value) })}
+            placeholder="10"
+            className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 bg-white"
+          />
+        </td>
+        <td className="px-2 py-2 text-center">
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={!removable}
+            title="Remove medicine"
+            className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-md disabled:opacity-30 transition-colors"
+          >
+            <Trash2 size={14} />
+          </button>
+        </td>
+      </tr>
+
+      {/* Mobile Card View */}
+      <tr className="md:hidden border-b border-slate-200 last:border-b-0">
+        <td colSpan={6} className="p-3 bg-slate-50/50">
+          <div className="space-y-2.5 bg-white p-3 rounded-xl border border-slate-200/80 shadow-2xs">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-bold text-slate-700">Medicine #{((idx ?? 0) + 1)}</span>
+              <button
+                type="button"
+                onClick={onRemove}
+                disabled={!removable}
+                className="p-1 text-slate-400 hover:text-red-500 disabled:opacity-30"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+
+            <MedicineAutocomplete
+              value={item.medicineName}
+              linked={!!item.medicineId}
+              onChange={(text) => onChange({ medicineName: text, medicineId: undefined })}
+              onSelect={onSelectMedicine}
+              placeholder="Search medicine name..."
+            />
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] font-semibold uppercase text-slate-500">Dosage</label>
+                <input
+                  type="text"
+                  value={item.dosage}
+                  onChange={(e) => onChange({ dosage: e.target.value })}
+                  placeholder="e.g. 500mg"
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold uppercase text-slate-500">Frequency</label>
+                <input
+                  type="text"
+                  list="dp-frequency-list"
+                  value={item.frequency}
+                  onChange={(e) => onChange({ frequency: e.target.value })}
+                  placeholder="1-0-1 / BD"
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="text-[10px] font-semibold uppercase text-slate-500">Duration</label>
+                <input
+                  type="text"
+                  list="dp-duration-list"
+                  value={item.duration}
+                  onChange={(e) => onChange({ duration: e.target.value })}
+                  placeholder="5 days"
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold uppercase text-slate-500">Quantity</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={item.quantityPrescribed}
+                  onChange={(e) => onChange({ quantityPrescribed: e.target.value === "" ? "" : Number(e.target.value) })}
+                  placeholder="10"
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                />
+              </div>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </>
   );
 }
 
@@ -270,9 +361,19 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
       });
       const prescriptionId = rxRes?.data?.id ?? rxRes?.data?.data?.id;
 
+      if (prescriptionId && patient?.phone) {
+        sendViaWhatsApp({
+          phone: patient.phone,
+          patientName: patient.name,
+          doctorName,
+          type: "prescription",
+          id: prescriptionId,
+        });
+      }
+
       await updateMutation.mutateAsync({ status: "completed", prescriptionId });
       qc.invalidateQueries({ queryKey: queryKeys.clinicTokens.all() });
-      toastSuccess("Consultation completed", "Prescription linked to token.");
+      toastSuccess("Consultation completed", "Prescription created & dispatched via WhatsApp.");
       onCompleted();
     } catch (err: any) {
       const message = err?.response?.data?.message ?? "Failed to complete consultation.";
@@ -419,16 +520,33 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
 
         {activeTab === "prescribe" && (
           <div className="space-y-4">
-            <div className="rounded-xl border border-slate-200 overflow-x-auto">
+            <datalist id="dp-frequency-list">
+              <option value="1-0-1 (BD)" />
+              <option value="1-1-1 (TDS)" />
+              <option value="1-0-0 (OD)" />
+              <option value="0-0-1 (HS)" />
+              <option value="STAT" />
+              <option value="PRN" />
+            </datalist>
+            <datalist id="dp-duration-list">
+              <option value="3 days" />
+              <option value="5 days" />
+              <option value="7 days" />
+              <option value="10 days" />
+              <option value="14 days" />
+              <option value="30 days" />
+            </datalist>
+
+            <div className="rounded-xl border border-slate-200 overflow-x-auto shadow-2xs bg-white">
               <table className="w-full text-sm">
-                <thead className="bg-slate-100 text-slate-700 text-xs uppercase tracking-wider font-bold">
+                <thead className="bg-slate-50 text-slate-700 text-xs uppercase tracking-wider font-bold border-b border-slate-200">
                   <tr>
-                    <th className="text-left px-3 py-2.5 min-w-[280px]">Medicine Name</th>
+                    <th className="text-left px-3 py-2.5 min-w-[260px]">Medicine Name</th>
                     <th className="text-left px-3 py-2.5 min-w-[110px]">Dosage</th>
                     <th className="text-left px-3 py-2.5 min-w-[120px]">Frequency</th>
                     <th className="text-left px-3 py-2.5 min-w-[110px]">Duration</th>
                     <th className="text-left px-3 py-2.5 w-20 min-w-[80px]">Qty</th>
-                    <th className="w-8" />
+                    <th className="w-10 text-center" />
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 bg-white">
@@ -445,9 +563,16 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
                 </tbody>
               </table>
             </div>
-            <button onClick={addItem} className="flex items-center gap-1 text-xs text-primary hover:underline">
-              <Plus size={12} /> Add Medicine
-            </button>
+
+            <div className="flex items-center justify-between">
+              <button
+                type="button"
+                onClick={addItem}
+                className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 border border-emerald-200/80 px-3 py-1.5 rounded-lg hover:bg-emerald-100/70 transition-all shadow-2xs"
+              >
+                <Plus size={14} /> Add Medicine
+              </button>
+            </div>
 
             <div className="flex items-center gap-2 pt-1">
               <input id="dp-controlled" type="checkbox" checked={isControlled} onChange={(e) => setIsControlled(e.target.checked)} className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary" />
@@ -546,15 +671,15 @@ export function DoctorPanel() {
   return (
     <div className="flex flex-col h-full">
       <div className="mb-4">
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
+        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
           <Stethoscope size={22} /> Doctor Panel
         </h1>
-        <p className="text-muted-foreground mt-1">Today&apos;s consultation queue.</p>
+        <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">Today&apos;s consultation queue.</p>
       </div>
 
-      <div className="flex-1 flex gap-6 min-h-0 border rounded-xl bg-card shadow-sm overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0 border rounded-xl bg-card shadow-sm overflow-hidden">
         {/* Queue list */}
-        <div className="w-72 shrink-0 border-r flex flex-col">
+        <div className="w-full lg:w-72 shrink-0 border-b lg:border-b-0 lg:border-r flex flex-col max-h-56 lg:max-h-none">
           <div className="overflow-y-auto flex-1 p-3 space-y-4">
             {isLoading ? (
               <div className="animate-pulse space-y-2">
@@ -576,7 +701,7 @@ export function DoctorPanel() {
                         key={t.id}
                         onClick={() => setSelectedTokenId(t.id)}
                         className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
-                          selectedTokenId === t.id ? "border-primary bg-primary/5" : "hover:bg-muted/50"
+                          selectedTokenId === t.id ? "border-primary bg-primary/5 font-semibold" : "hover:bg-muted/50"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
@@ -591,8 +716,6 @@ export function DoctorPanel() {
                           </div>
                         </div>
                         <div className="text-xs text-muted-foreground truncate">{t.patient?.name ?? "--"}</div>
-                        {/* Completed tokens carry how long they took, so the
-                            doctor can see the shape of the day at a glance. */}
                         {t.status === "completed" && t.calledAt && t.completedAt && (
                           <div className="text-[10px] text-muted-foreground/80 tabular-nums mt-0.5">
                             {formatDuration(durationMinutes(t.calledAt, t.completedAt))}
@@ -611,7 +734,7 @@ export function DoctorPanel() {
         {selectedTokenId ? (
           <ConsultationWorkspace tokenId={selectedTokenId} onCompleted={() => setSelectedTokenId(null)} />
         ) : (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+          <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm p-8 text-center">
             Select a token from the queue to begin the consultation.
           </div>
         )}

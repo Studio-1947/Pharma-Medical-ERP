@@ -7,7 +7,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags, ApiConsumes, ApiBody } from "@nes
 import { PrescriptionsService } from "./prescriptions.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { Roles } from "../../common/decorators/roles.decorator";
+import { Roles, Public } from "../../common/decorators/roles.decorator";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
 import { S3Service } from "../../common/s3/s3.service";
 import {
@@ -65,6 +65,13 @@ export class PrescriptionsController {
   @ApiOperation({ summary: "List prescriptions with optional filters" })
   findAll(@Query() q: unknown) {
     return this.service.findAll(queryPrescriptionSchema.parse(q));
+  }
+
+  @Public()
+  @Get("public/:id")
+  @ApiOperation({ summary: "Get public prescription view for patient WhatsApp/SMS link" })
+  findPublicOne(@Param("id") id: string) {
+    return this.service.findOne(id);
   }
 
   @Get(":id")
