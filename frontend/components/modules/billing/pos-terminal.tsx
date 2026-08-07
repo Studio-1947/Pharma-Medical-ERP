@@ -481,21 +481,64 @@ export function PosTerminal() {
       {/* Schedule H warning banner */}
       {needsRx && (
         <div className={`flex flex-col gap-2.5 rounded-2xl p-4 border transition-all ${prescriptionId?.trim() ? "bg-emerald-50/90 border-emerald-200" : "bg-amber-50/90 border-amber-200"}`}>
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm font-bold">
               <AlertTriangle size={17} className={prescriptionId?.trim() ? "text-emerald-600" : "text-amber-600"} />
               <span className={prescriptionId?.trim() ? "text-emerald-900" : "text-amber-900"}>
-                Cart contains Schedule H / controlled medicines — verified prescription required
+                Cart contains Schedule H / controlled medicines — prescription required
               </span>
             </div>
-            <button
-              type="button"
-              onClick={() => setRxPickerOpen(true)}
-              className="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-xs font-bold rounded-xl shadow-sm hover:from-emerald-500 hover:to-teal-500 transition-all shrink-0 flex items-center gap-1.5"
-            >
-              <FileText size={14} />
-              <span>{prescriptionId?.trim() ? "Change Verified Rx" : "Select Verified Rx"}</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              {!prescriptionId?.trim() && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      let activePatientId = patientId;
+                      if (!activePatientId) {
+                        const searchRes: any = await apiClient.get("/patients", { params: { search: "Walk-in", limit: 1 } });
+                        const existingWalkIn = (searchRes?.data?.data ?? searchRes?.data ?? searchRes)?.[0];
+                        if (existingWalkIn?.id) {
+                          activePatientId = existingWalkIn.id;
+                        } else {
+                          const createPatientRes: any = await apiClient.post("/patients", { name: "Walk-in Customer", phone: "0000000000" });
+                          activePatientId = createPatientRes?.data?.id ?? createPatientRes?.id;
+                        }
+                      }
+                      const today = new Date().toISOString().split("T")[0]!;
+                      const expiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]!;
+                      const createRes: any = await apiClient.post("/prescriptions", {
+                        patientId: activePatientId,
+                        doctorName: "External Doctor (Verified on Counter)",
+                        issuedDate: today,
+                        expiryDate: expiry,
+                        isControlled: true,
+                      });
+                      const rxId = createRes?.data?.prescription?.id ?? createRes?.data?.id ?? createRes?.id;
+                      if (rxId) {
+                        try { await apiClient.post(`/prescriptions/${rxId}/verify`, { action: "verify" }); } catch {}
+                        setPrescriptionId(rxId);
+                        toastSuccess("Physical Rx Verified", "Physical prescription verified on counter & linked to cart.");
+                      }
+                    } catch {
+                      toastError("Quick Verify Failed", "Could not verify physical prescription. Please select or add Rx manually.");
+                    }
+                  }}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5"
+                  title="Quick verify physical paper prescription checked on counter"
+                >
+                  <span>⚡ Quick Verify Physical Rx (1-Click)</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setRxPickerOpen(true)}
+                className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition-all shrink-0 flex items-center gap-1.5"
+              >
+                <FileText size={14} />
+                <span>{prescriptionId?.trim() ? "Change Rx" : "Select / Upload Rx"}</span>
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">

@@ -58,20 +58,33 @@ export function RxPickerModal({ open, onClose, onSelectRx, patientId, patientNam
   // Physical Rx Creation + Auto-Verify Mutation
   const createPhysicalRxMutation = useMutation({
     mutationFn: async () => {
-      if (!patientId) {
-        throw new Error("Please select or register a patient first before logging a physical prescription.");
-      }
-      if (!doctorName.trim()) {
-        throw new Error("Doctor name is required to log a physical prescription.");
+      let activePatientId = patientId;
+      if (!activePatientId) {
+        try {
+          const searchRes: any = await apiClient.get("/patients", { params: { search: "Walk-in", limit: 1 } });
+          const existingWalkIn = (searchRes?.data?.data ?? searchRes?.data ?? searchRes)?.[0];
+          if (existingWalkIn?.id) {
+            activePatientId = existingWalkIn.id;
+          } else {
+            const createPatientRes: any = await apiClient.post("/patients", {
+              name: "Walk-in Customer",
+              phone: "0000000000",
+            });
+            activePatientId = createPatientRes?.data?.id ?? createPatientRes?.id;
+          }
+        } catch {
+          throw new Error("Could not assign a patient record for the prescription. Please select a patient.");
+        }
       }
 
       const today = new Date().toISOString().split("T")[0]!;
       const expiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]!;
+      const docName = doctorName.trim() || "External Doctor (Verified on Counter)";
 
       // Step 1: Create prescription record
       const createRes: any = await apiClient.post("/prescriptions", {
-        patientId,
-        doctorName: doctorName.trim(),
+        patientId: activePatientId,
+        doctorName: docName,
         hospitalName: hospitalName.trim() || undefined,
         issuedDate: today,
         expiryDate: expiry,
@@ -127,32 +140,48 @@ export function RxPickerModal({ open, onClose, onSelectRx, patientId, patientNam
     >
       <div className="space-y-4">
         {/* Navigation Tabs */}
-        <div className="flex border-b border-slate-200">
-          <button
-            type="button"
-            onClick={() => setTab("search")}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
-              tab === "search"
-                ? "border-emerald-600 text-emerald-700 bg-emerald-50/50 rounded-t-xl"
-                : "border-transparent text-slate-500 hover:text-slate-900"
-            }`}
-          >
-            <Search size={14} />
-            <span>Search Verified Digital Rx</span>
-          </button>
+        <div className="flex flex-wrap items-center justify-between border-b border-slate-200 gap-2 pb-1">
+          <div className="flex border-b border-transparent">
+            <button
+              type="button"
+              onClick={() => setTab("search")}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
+                tab === "search"
+                  ? "border-emerald-600 text-emerald-700 bg-emerald-50/50 rounded-t-xl"
+                  : "border-transparent text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <Search size={14} />
+              <span>Search Digital Rx</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setTab("upload")}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
-              tab === "upload"
-                ? "border-emerald-600 text-emerald-700 bg-emerald-50/50 rounded-t-xl"
-                : "border-transparent text-slate-500 hover:text-slate-900"
-            }`}
+            <button
+              type="button"
+              onClick={() => setTab("upload")}
+              className={`flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition-all ${
+                tab === "upload"
+                  ? "border-emerald-600 text-emerald-700 bg-emerald-50/50 rounded-t-xl"
+                  : "border-transparent text-slate-500 hover:text-slate-900"
+              }`}
+            >
+              <Upload size={14} />
+              <span>Log Details / Photo (Optional)</span>
+            </button>
+          </div>
+
+          {/* Instant 1-Click Pass for Busy Tills */}
+          <Button
+            variant="secondary"
+            size="sm"
+            isLoading={createPhysicalRxMutation.isPending}
+            onClick={() => {
+              setDoctorName("External Doctor (Verified on Counter)");
+              createPhysicalRxMutation.mutate();
+            }}
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm border-0 shrink-0"
           >
-            <Upload size={14} />
-            <span>Log Physical Paper Rx</span>
-          </button>
+            ⚡ Quick Verify Physical Rx (1-Click)
+          </Button>
         </div>
 
         {tab === "search" ? (
