@@ -64,7 +64,7 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 mb-3 shadow-inner">
             {isRx ? <Stethoscope className="w-6 h-6 text-emerald-300" /> : <Receipt className="w-6 h-6 text-emerald-300" />}
           </div>
-          <h1 className="text-lg font-black tracking-tight">Apex Healthcare & Pharmacy</h1>
+          <h1 className="text-lg font-black tracking-tight">Radha Madhav Medical Hall</h1>
           <p className="text-xs text-emerald-200 font-medium mt-0.5">Digital Patient Healthcare Record</p>
 
           <div className="absolute top-4 right-4">
@@ -120,7 +120,7 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
                   {record.items.map((it: any, idx: number) => (
                     <div key={idx} className="p-3.5 rounded-2xl border border-slate-200 bg-white shadow-2xs space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="text-sm font-extrabold text-slate-900">{it.medicineName}</span>
+                        <span className="text-sm font-extrabold text-slate-900">{it.medicine?.name || it.medicineName || "Medicine Item"}</span>
                         {it.quantityPrescribed && (
                           <span className="text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
                             Qty: {it.quantityPrescribed}
@@ -176,15 +176,22 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
 
               {Array.isArray(record.items) && record.items.length > 0 && (
                 <div className="divide-y divide-slate-100 border border-slate-200 rounded-2xl bg-white overflow-hidden">
-                  {record.items.map((it: any, idx: number) => (
-                    <div key={idx} className="p-3 flex items-center justify-between text-xs font-medium">
-                      <div>
-                        <p className="font-bold text-slate-900">{it.medicineName}</p>
-                        <p className="text-[11px] text-slate-500">Qty: {it.quantity} × ₹{Number(it.unitPrice).toFixed(2)}</p>
+                  {record.items.map((it: any, idx: number) => {
+                    const medicineName = it.medicine?.name || it.medicineName || "Medicine Item";
+                    const itemTotal = Number(
+                      it.lineTotal ?? it.totalAmount ?? (Number(it.quantity || 1) * Number(it.unitPrice || 0))
+                    ).toFixed(2);
+
+                    return (
+                      <div key={idx} className="p-3 flex items-center justify-between text-xs font-medium">
+                        <div>
+                          <p className="font-bold text-slate-900">{medicineName}</p>
+                          <p className="text-[11px] text-slate-500">Qty: {it.quantity} × ₹{Number(it.unitPrice || 0).toFixed(2)}</p>
+                        </div>
+                        <span className="font-extrabold text-slate-900">₹{itemTotal}</span>
                       </div>
-                      <span className="font-extrabold text-slate-900">₹{Number(it.totalAmount).toFixed(2)}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -193,9 +200,9 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
             <div className="p-4 rounded-2xl bg-slate-900 text-white space-y-2">
               <div className="flex justify-between text-xs font-medium text-slate-300">
                 <span>Subtotal</span>
-                <span>₹{Number(record.subtotal || record.totalAmount).toFixed(2)}</span>
+                <span>₹{Number(record.subtotal || record.totalAmount || 0).toFixed(2)}</span>
               </div>
-              {record.taxAmount > 0 && (
+              {Number(record.taxAmount || 0) > 0 && (
                 <div className="flex justify-between text-xs font-medium text-slate-300">
                   <span>GST Tax</span>
                   <span>₹{Number(record.taxAmount).toFixed(2)}</span>
@@ -203,7 +210,7 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
               )}
               <div className="flex justify-between text-sm font-black border-t border-slate-800 pt-2 text-emerald-400">
                 <span>Total Amount Paid</span>
-                <span>₹{Number(record.totalAmount).toFixed(2)}</span>
+                <span>₹{Number(record.totalAmount || 0).toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -213,10 +220,10 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
         <div className="bg-slate-50 p-4 border-t border-slate-200/80 text-center space-y-2">
           <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-slate-600">
             <ShieldCheck size={14} className="text-emerald-600" />
-            <span>Official Verified Record — Apex Medical ERP</span>
+            <span>Official Verified Record — Radha Madhav Medical Hall</span>
           </div>
           <p className="text-[10px] text-slate-400">
-            Thank you for choosing Apex Healthcare. For support, contact your pharmacy counter.
+            Thank you for choosing Radha Madhav Medical Hall. For support, contact your pharmacy counter.
           </p>
         </div>
 

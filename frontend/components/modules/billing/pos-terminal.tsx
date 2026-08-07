@@ -1227,7 +1227,15 @@ export function PosTerminal() {
                     type: "invoice",
                     id: lastInvoice.id,
                     number: lastInvoice.invoiceNo,
+                    subtotal: lastInvoice.subtotal,
+                    taxAmount: lastInvoice.taxAmount,
                     totalAmount: lastInvoice.totalAmount,
+                    items: lastReceiptItems.map((i: any) => ({
+                      medicineName: i.medicine?.name || i.medicineName,
+                      quantity: i.quantity,
+                      unitPrice: i.batch?.sellingPriceMrp || i.unitPrice,
+                      lineTotal: i.lineTotal ?? (Number(i.quantity) * Number(i.batch?.sellingPriceMrp || i.unitPrice || 0)),
+                    })),
                   });
                 }}
                 className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-extrabold transition inline-flex items-center justify-center gap-1.5 shadow-md shadow-emerald-900/10"
