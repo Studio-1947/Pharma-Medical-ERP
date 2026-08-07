@@ -477,6 +477,171 @@ function EditBatchForm({ batch, onClose, onSuccess }: EditBatchFormProps) {
   );
 }
 
+interface AdjustBatchFormProps {
+  batch: Batch;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+const ADJUSTMENT_REASONS = [
+  "Household / Internal Use (No Bill)",
+  "Stock Audit Correction",
+  "Damaged / Broken Package",
+  "Expired Stock Write-Off",
+  "Loose Pill Discrepancy",
+  "Sample / Promotional Distribution",
+  "Other Manual Adjustment",
+];
+
+function AdjustBatchForm({ batch, onClose, onSuccess }: AdjustBatchFormProps) {
+  const { success: toastSuccess, error: toastError } = useToast();
+  const [type, setType] = useState<"decrease" | "increase">("decrease");
+  const [quantity, setQuantity] = useState("1");
+  const [reasonCategory, setReasonCategory] = useState(ADJUSTMENT_REASONS[0]!);
+  const [customNotes, setCustomNotes] = useState("");
+  const [error, setError] = useState("");
+
+  const mutation = useMutation({
+    mutationFn: (payload: object) => apiClient.patch(`/inventory/batches/${batch.id}/adjust`, payload) as any,
+    onSuccess: () => {
+      toastSuccess("Stock adjusted", `Batch ${batch.batchNo} stock updated successfully.`);
+      onSuccess();
+      onClose();
+    },
+    onError: (err: any) => {
+      const msg = err?.response?.data?.message ?? err?.message ?? "Adjustment failed";
+      const str = Array.isArray(msg) ? msg.join(", ") : String(msg);
+      setError(str);
+      toastError("Adjustment failed", str);
+    },
+  });
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    const qty = parseInt(quantity);
+    if (isNaN(qty) || qty <= 0) {
+      setError("Please enter a valid positive quantity.");
+      return;
+    }
+
+    const adjustmentValue = type === "decrease" ? -qty : qty;
+    if (type === "decrease" && qty > batch.quantity) {
+      setError(`Cannot remove ${qty} units. Current stock is ${batch.quantity}.`);
+      return;
+    }
+
+    const finalNotes = customNotes.trim() ? `${reasonCategory} — ${customNotes.trim()}` : reasonCategory;
+
+    mutation.mutate({
+      adjustment: adjustmentValue,
+      notes: finalNotes,
+    });
+  };
+
+  return (
+    <Modal
+      title="Manual Stock Adjustment"
+      subtitle={`Adjusting stock for batch ${batch.batchNo} (Current: ${batch.quantity} units)`}
+      open={true}
+      onClose={onClose}
+      size="md"
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Adjustment Type Selector */}
+        <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-xl border border-slate-200">
+          <button
+            type="button"
+            onClick={() => setType("decrease")}
+            className={`py-2 rounded-lg text-xs font-bold transition-all ${
+              type === "decrease"
+                ? "bg-red-600 text-white shadow-sm"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            − Remove Stock (Household / Loss / Audit)
+          </button>
+          <button
+            type="button"
+            onClick={() => setType("increase")}
+            className={`py-2 rounded-lg text-xs font-bold transition-all ${
+              type === "increase"
+                ? "bg-emerald-600 text-white shadow-sm"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            + Add Stock (Correction / Found)
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              Units to {type === "decrease" ? "Remove" : "Add"} *
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={type === "decrease" ? batch.quantity : 10000}
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              Resulting Stock
+            </label>
+            <div className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-slate-50 font-bold text-slate-800">
+              {Math.max(0, batch.quantity + (type === "decrease" ? -parseInt(quantity || "0") : parseInt(quantity || "0")))} units
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Adjustment Reason *</label>
+          <select
+            value={reasonCategory}
+            onChange={(e) => setReasonCategory(e.target.value)}
+            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white font-medium"
+          >
+            {ADJUSTMENT_REASONS.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Additional Notes (Optional)</label>
+          <input
+            type="text"
+            placeholder="e.g. 5 loose tabs taken for household use"
+            value={customNotes}
+            onChange={(e) => setCustomNotes(e.target.value)}
+            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
+        </div>
+
+        {error && (
+          <p className="text-xs font-semibold text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</p>
+        )}
+
+        <div className="flex justify-end gap-3 pt-2">
+          <button type="button" onClick={onClose}
+            className="px-4 py-2 text-sm border rounded-xl hover:bg-muted transition-colors font-medium">
+            Cancel
+          </button>
+          <button type="submit" disabled={mutation.isPending}
+            className="px-4 py-2 text-sm bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 disabled:opacity-50 transition-all shadow-sm">
+            {mutation.isPending ? "Updating..." : "Confirm Adjustment"}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 interface Props {
   medicineId?: string;
   medicine?: Medicine;
@@ -487,6 +652,7 @@ export function BatchList({ medicineId, medicine }: Props) {
   const [status, setStatus] = useState("");
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Batch | null>(null);
+  const [adjustTarget, setAdjustTarget] = useState<Batch | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
@@ -649,6 +815,13 @@ export function BatchList({ medicineId, medicine }: Props) {
                         ) : (
                           <div className="inline-flex items-center gap-2">
                             <button
+                              onClick={() => setAdjustTarget(b)}
+                              title="Manual stock adjustment (Household, Loss, Audit)"
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md hover:bg-amber-100 transition-colors font-medium"
+                            >
+                              Adjust
+                            </button>
+                            <button
                               onClick={() => setEditTarget(b)}
                               title="Edit batch"
                               className="inline-flex items-center gap-1 px-2 py-1 text-xs text-primary border border-primary/20 rounded-md hover:bg-primary/5 transition-colors"
@@ -720,6 +893,14 @@ export function BatchList({ medicineId, medicine }: Props) {
         <EditBatchForm
           batch={editTarget}
           onClose={() => setEditTarget(null)}
+          onSuccess={handleRefresh}
+        />
+      )}
+
+      {adjustTarget && (
+        <AdjustBatchForm
+          batch={adjustTarget}
+          onClose={() => setAdjustTarget(null)}
           onSuccess={handleRefresh}
         />
       )}
