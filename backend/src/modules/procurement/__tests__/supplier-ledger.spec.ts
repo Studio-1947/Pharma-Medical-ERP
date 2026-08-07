@@ -47,7 +47,7 @@ describe("Supplier Ledger Audit", () => {
   });
 
   it("computes supplier ledger debit, credit, and running balance correctly", async () => {
-    const ledger = await service.getSupplierLedger("sup-1", { page: 1, limit: 20 });
+    const ledger = await service.getSupplierLedger("sup-1", { format: "json" });
     
     expect(ledger.supplierId).toBe("sup-1");
     expect(ledger.entries).toHaveLength(2);
