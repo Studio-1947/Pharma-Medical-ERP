@@ -9,6 +9,7 @@ import {
   IndianRupee,
   ArrowRight,
   TrendingUp,
+  Sparkles,
 } from "lucide-react";
 import { useNavigation } from "@/lib/navigation-context";
 import {
@@ -23,62 +24,14 @@ import {
 import { apiClient } from "@/lib/api-client";
 import { usePermissions } from "@/hooks/use-permissions";
 import { DoctorDashboard } from "@/components/modules/dashboard/doctor-dashboard";
+import { StatCard } from "@/components/ui/stat-card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 function fmt(n: number) {
   if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
   if (n >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
   return `₹${n.toFixed(0)}`;
-}
-
-function KpiCard({
-  label,
-  value,
-  sub,
-  icon,
-  accent,
-}: {
-  label: string;
-  value: string | number;
-  sub?: string;
-  icon: React.ReactNode;
-  accent: "emerald" | "teal" | "amber" | "red";
-}) {
-  const styles = {
-    emerald: {
-      card: "bg-gradient-to-br from-emerald-500 to-emerald-600",
-      icon: "bg-white/20",
-      sub: "text-emerald-100",
-    },
-    teal: {
-      card: "bg-gradient-to-br from-teal-500 to-teal-600",
-      icon: "bg-white/20",
-      sub: "text-teal-100",
-    },
-    amber: {
-      card: "bg-gradient-to-br from-amber-400 to-orange-500",
-      icon: "bg-white/20",
-      sub: "text-amber-100",
-    },
-    red: {
-      card: "bg-gradient-to-br from-rose-500 to-red-600",
-      icon: "bg-white/20",
-      sub: "text-rose-100",
-    },
-  }[accent];
-
-  return (
-    <div className={`${styles.card} rounded-2xl p-5 text-white relative overflow-hidden`}>
-      <div className="absolute -right-4 -bottom-4 w-24 h-24 rounded-full bg-white/5" />
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="text-sm font-medium text-white/75 mb-1">{label}</p>
-          <p className="text-3xl font-bold tracking-tight">{value}</p>
-          {sub && <p className={`text-xs mt-1 ${styles.sub}`}>{sub}</p>}
-        </div>
-        <div className={`${styles.icon} p-2.5 rounded-xl`}>{icon}</div>
-      </div>
-    </div>
-  );
 }
 
 function AlertRow({
@@ -96,24 +49,23 @@ function AlertRow({
   return (
     <button
       onClick={() => navigate(href)}
-      className="flex items-center justify-between w-full py-2.5 px-2 hover:bg-emerald-50 rounded-lg transition-colors group"
+      className="flex items-center justify-between w-full py-3 px-3 hover:bg-slate-50/80 rounded-xl transition-all border border-transparent hover:border-slate-200/60 group select-none"
     >
-      <span className={`text-sm ${urgent ? "text-red-600 font-medium" : "text-slate-600"}`}>
+      <span className={`text-xs font-semibold ${urgent ? "text-rose-600" : "text-slate-700"}`}>
         {label}
       </span>
       <div className="flex items-center gap-2">
-        <span
-          className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
-            urgent
-              ? "bg-red-100 text-red-700"
-              : "bg-emerald-100 text-emerald-700"
-          }`}
+        <Badge
+          variant={urgent ? "error" : "emerald"}
+          size="sm"
+          dot={urgent}
+          pulse={urgent}
         >
           {value}
-        </span>
+        </Badge>
         <ArrowRight
-          size={12}
-          className="text-slate-300 opacity-0 group-hover:opacity-100 transition-opacity"
+          size={14}
+          className="text-slate-400 opacity-0 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all"
         />
       </div>
     </button>
@@ -123,15 +75,15 @@ function AlertRow({
 const CustomTooltip = ({ active, payload, label }: any) => {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-slate-100 rounded-xl shadow-lg px-4 py-3 text-sm">
-      <p className="text-slate-400 text-xs mb-1">
+    <div className="bg-white/95 backdrop-blur-md border border-slate-200 rounded-2xl shadow-xl px-4 py-3 text-xs">
+      <p className="text-slate-400 font-semibold mb-1">
         {new Date(label).toLocaleDateString("en-IN", {
           day: "numeric",
           month: "short",
           year: "numeric",
         })}
       </p>
-      <p className="font-semibold text-emerald-700">{fmt(payload[0].value)}</p>
+      <p className="font-extrabold text-emerald-700 text-sm">{fmt(payload[0].value)}</p>
     </div>
   );
 };
@@ -139,9 +91,6 @@ const CustomTooltip = ({ active, payload, label }: any) => {
 export default function DashboardPage() {
   const { role } = usePermissions();
 
-  // `role` is empty until the auth store rehydrates from localStorage. Rendering
-  // the pharmacy dashboard in that window would fire four requests a doctor is
-  // not allowed to make, then swap the screen out from under them.
   if (!role) return <DashboardSkeleton />;
   if (role === "doctor") return <DoctorDashboard />;
 
@@ -151,13 +100,13 @@ export default function DashboardPage() {
 function DashboardSkeleton() {
   return (
     <div className="space-y-6 animate-pulse">
-      <div className="h-9 w-56 bg-slate-100 rounded-lg" />
+      <div className="h-10 w-60 bg-slate-200/70 rounded-xl" />
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {[1, 2, 3, 4].map((i) => <div key={i} className="h-28 bg-slate-100 rounded-2xl" />)}
+        {[1, 2, 3, 4].map((i) => <div key={i} className="h-32 bg-slate-200/70 rounded-2xl" />)}
       </div>
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        <div className="xl:col-span-2 h-72 bg-slate-100 rounded-2xl" />
-        <div className="h-72 bg-slate-100 rounded-2xl" />
+        <div className="xl:col-span-2 h-80 bg-slate-200/70 rounded-2xl" />
+        <div className="h-80 bg-slate-200/70 rounded-2xl" />
       </div>
     </div>
   );
@@ -211,90 +160,100 @@ function PharmacyDashboard() {
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
-            Good morning
-          </h1>
-          <p className="text-sm text-slate-400 mt-0.5">{dateLabel}</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
+              Pharmacy Control Center
+            </h1>
+            <Badge variant="emerald" size="sm" dot pulse>
+              Live Sync
+            </Badge>
+          </div>
+          <p className="text-xs font-medium text-slate-500 mt-1">{dateLabel}</p>
         </div>
-        <button
+        <Button
+          variant="primary"
+          size="md"
+          leftIcon={<Receipt size={16} />}
           onClick={() => navigate("/billing/pos")}
-          className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold rounded-xl shadow-sm hover:from-emerald-700 hover:to-teal-700 transition-all"
         >
-          <Receipt size={14} />
-          Open POS
-        </button>
+          Open POS Terminal
+        </Button>
       </div>
 
-      {/* KPI cards */}
+      {/* Modern KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <KpiCard
-          label="Today's Sales"
-          value={todaySales > 0 ? fmt(todaySales) : "--"}
-          sub="Confirmed invoices"
-          icon={<IndianRupee size={20} />}
-          accent="emerald"
+        <StatCard
+          title="Today's Sales"
+          value={todaySales > 0 ? fmt(todaySales) : "₹0"}
+          description="Confirmed billing sales"
+          icon={<IndianRupee size={22} />}
+          color="emerald"
         />
-        <KpiCard
-          label="Invoices Today"
-          value={todayInvoices > 0 ? todayInvoices : "--"}
-          sub="Bills raised today"
-          icon={<Receipt size={20} />}
-          accent="teal"
+        <StatCard
+          title="Invoices Raised"
+          value={todayInvoices > 0 ? todayInvoices : "0"}
+          description="Bills generated today"
+          icon={<Receipt size={22} />}
+          color="teal"
         />
-        <KpiCard
-          label="Low Stock Items"
-          value={lowStockItems.length > 0 ? lowStockItems.length : "--"}
-          sub="Below reorder level"
-          icon={<AlertTriangle size={20} />}
-          accent="amber"
+        <StatCard
+          title="Low Stock Alert"
+          value={lowStockItems.length > 0 ? lowStockItems.length : "0"}
+          description="Items below reorder limit"
+          icon={<AlertTriangle size={22} />}
+          color="amber"
         />
-        <KpiCard
-          label="Expiring in 30 Days"
-          value={expiringBatches.length > 0 ? expiringBatches.length : "--"}
-          sub="Batches near expiry"
-          icon={<Clock size={20} />}
-          accent="red"
+        <StatCard
+          title="Expiring Batches"
+          value={expiringBatches.length > 0 ? expiringBatches.length : "0"}
+          description="Batches expiring in 30d"
+          icon={<Clock size={22} />}
+          color="rose"
         />
       </div>
 
-      {/* Chart + alerts */}
+      {/* Chart + Action Cards */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
         {/* Revenue area chart */}
-        <div className="xl:col-span-2 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+        <div className="xl:col-span-2 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-card flex flex-col justify-between">
           <div className="flex items-center justify-between mb-5">
             <div>
-              <h2 className="text-sm font-bold text-slate-800">Revenue Trend</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Last 14 days</p>
+              <h2 className="text-base font-bold text-slate-900">Revenue Performance</h2>
+              <p className="text-xs font-medium text-slate-500 mt-0.5">Daily sales trend (Last 14 days)</p>
             </div>
-            <button
+            <Button
+              variant="outline"
+              size="sm"
+              rightIcon={<ArrowRight size={14} />}
               onClick={() => navigate("/analytics")}
-              className="flex items-center gap-1 text-xs font-medium text-emerald-600 hover:text-emerald-700 transition-colors"
             >
-              Full analytics <ArrowRight size={12} />
-            </button>
+              Full Analytics
+            </Button>
           </div>
 
           {trendRows.length === 0 ? (
-            <div className="h-52 flex flex-col items-center justify-center text-slate-300 gap-2">
-              <TrendingUp size={32} strokeWidth={1.5} />
-              <p className="text-sm">No sales data yet.</p>
-              <p className="text-xs">Complete a billing transaction to see the chart.</p>
+            <div className="h-60 flex flex-col items-center justify-center text-slate-400 gap-2.5">
+              <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                <TrendingUp size={24} />
+              </div>
+              <p className="text-sm font-semibold text-slate-700">No sales data recorded yet</p>
+              <p className="text-xs text-slate-400">Complete a POS billing transaction to render trends.</p>
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={210}>
-              <AreaChart data={trendRows} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+            <ResponsiveContainer width="100%" height={230}>
+              <AreaChart data={trendRows} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <defs>
                   <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.2} />
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.25} />
                     <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                 <XAxis
                   dataKey="date"
-                  tick={{ fontSize: 11, fill: "#94a3b8" }}
+                  tick={{ fontSize: 11, fill: "#64748b" }}
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={(v) =>
@@ -305,7 +264,7 @@ function PharmacyDashboard() {
                   }
                 />
                 <YAxis
-                  tick={{ fontSize: 11, fill: "#94a3b8" }}
+                  tick={{ fontSize: 11, fill: "#64748b" }}
                   axisLine={false}
                   tickLine={false}
                   tickFormatter={fmt}
@@ -316,68 +275,79 @@ function PharmacyDashboard() {
                   type="monotone"
                   dataKey="revenue"
                   stroke="#10b981"
-                  strokeWidth={2.5}
+                  strokeWidth={3}
                   fill="url(#revenueGrad)"
                   dot={false}
-                  activeDot={{ r: 4, fill: "#10b981", strokeWidth: 0 }}
+                  activeDot={{ r: 5, fill: "#10b981", stroke: "#ffffff", strokeWidth: 2 }}
                 />
               </AreaChart>
             </ResponsiveContainer>
           )}
         </div>
 
-        {/* Alerts + quick actions */}
-        <div className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm flex flex-col">
-          <h2 className="text-sm font-bold text-slate-800 mb-1">Action Required</h2>
-          <p className="text-xs text-slate-400 mb-4">Items that need your attention</p>
+        {/* Action Center */}
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-card flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Action Required</h2>
+                <p className="text-xs font-medium text-slate-500 mt-0.5">Inventory & sales highlights</p>
+              </div>
+            </div>
 
-          <div className="flex-1 space-y-0.5">
-            <AlertRow
-              label="Low stock products"
-              value={lowStockItems.length || "None"}
-              href="/inventory"
-              urgent={lowStockItems.length > 0}
-            />
-            <AlertRow
-              label="Batches expiring in 30d"
-              value={expiringBatches.length || "None"}
-              href="/inventory"
-              urgent={expiringBatches.length > 5}
-            />
-            <AlertRow
-              label="Today's invoices"
-              value={todayInvoices || "--"}
-              href="/billing"
-            />
-            <AlertRow
-              label="Open transfers"
-              value="--"
-              href="/distribution"
-            />
+            <div className="space-y-1">
+              <AlertRow
+                label="Low Stock Medicines"
+                value={lowStockItems.length || "0"}
+                href="/inventory"
+                urgent={lowStockItems.length > 0}
+              />
+              <AlertRow
+                label="Expiring Batches (30d)"
+                value={expiringBatches.length || "0"}
+                href="/inventory"
+                urgent={expiringBatches.length > 5}
+              />
+              <AlertRow
+                label="Today's Invoices"
+                value={todayInvoices || "0"}
+                href="/billing"
+              />
+              <AlertRow
+                label="Pending Transfers"
+                value="0"
+                href="/distribution"
+              />
+            </div>
           </div>
 
-          {/* Quick actions */}
-          <div className="mt-5 pt-4 border-t border-slate-100 space-y-2">
-            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest mb-3">
-              Quick Actions
+          {/* Quick Actions */}
+          <div className="mt-6 pt-5 border-t border-slate-100 space-y-2.5">
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">
+              Quick Management Shortcuts
             </p>
-            <button
+            <Button
+              variant="primary"
+              size="md"
+              className="w-full justify-center"
+              leftIcon={<Receipt size={16} />}
               onClick={() => navigate("/billing/pos")}
-              className="flex items-center gap-2 w-full px-3.5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold rounded-xl hover:from-emerald-700 hover:to-teal-700 transition-all shadow-sm"
             >
-              <Receipt size={14} />
               Open POS Terminal
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="outline"
+              size="md"
+              className="w-full justify-center"
+              leftIcon={<Package size={16} />}
               onClick={() => navigate("/procurement")}
-              className="flex items-center gap-2 w-full px-3.5 py-2.5 border border-slate-200 text-slate-600 text-sm font-medium rounded-xl hover:bg-slate-50 hover:border-emerald-200 hover:text-emerald-700 transition-all"
             >
-              <Package size={14} />
               Create Purchase Order
-            </button>
+            </Button>
           </div>
         </div>
       </div>
     </div>
   );
 }
+

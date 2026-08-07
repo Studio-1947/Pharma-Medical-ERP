@@ -7,7 +7,7 @@ import { clsx } from "clsx";
 import { useNavigation } from "@/lib/navigation-context";
 import { usePermissions } from "@/hooks/use-permissions";
 import { NAV_ITEMS } from "@/lib/nav-items";
-import { PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, X, Sparkles } from "lucide-react";
 
 interface SidebarProps {
   mobileOpen?: boolean;
@@ -34,69 +34,69 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       {/* Mobile drawer backdrop */}
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[2px] lg:hidden"
+          className="fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm lg:hidden transition-opacity"
           onClick={onMobileClose}
           aria-hidden="true"
         />
       )}
     <aside
       className={clsx(
-        "flex flex-col bg-gradient-to-b from-emerald-900 via-teal-900 to-cyan-950 text-white overflow-visible",
+        "flex flex-col bg-gradient-to-b from-slate-950 via-slate-900 to-emerald-950 text-white border-r border-slate-800/60 shadow-xl overflow-visible",
         // Mobile: fixed off-canvas drawer. Desktop (lg+): static column.
-        "fixed inset-y-0 left-0 z-50 w-64 transition-transform duration-300 ease-in-out",
+        "fixed inset-y-0 left-0 z-50 w-64 transition-all duration-300 ease-in-out",
         mobileOpen ? "translate-x-0" : "-translate-x-full",
-        "lg:relative lg:translate-x-0 lg:shrink-0 lg:transition-all",
+        "lg:relative lg:translate-x-0 lg:shrink-0",
         collapsed ? "lg:w-16" : "lg:w-64",
       )}
     >
-      {/* Decorative orbs */}
-      <div className="absolute -top-16 -left-16 w-48 h-48 rounded-full bg-white/5 pointer-events-none" />
-      <div className="absolute bottom-0 -right-12 w-40 h-40 rounded-full bg-teal-600/10 pointer-events-none" />
+      {/* Background ambient lighting */}
+      <div className="absolute top-0 -left-12 w-48 h-48 rounded-full bg-emerald-500/10 blur-2xl pointer-events-none" />
+      <div className="absolute bottom-0 -right-12 w-40 h-40 rounded-full bg-cyan-500/10 blur-2xl pointer-events-none" />
 
       {/* Brand header */}
-      <div className="relative h-16 flex items-center border-b border-white/10 overflow-hidden">
+      <div className="relative h-16 flex items-center border-b border-white/10 px-4 shrink-0 overflow-hidden">
         {collapsed ? (
           /* Collapsed: logo icon only */
           <div className="flex w-full justify-center">
             <Image
               src="/logo.svg"
               alt="Radha Madhav Medical Hall"
-              width={32}
-              height={32}
-              className="rounded-lg"
+              width={34}
+              height={34}
+              className="rounded-xl ring-2 ring-emerald-500/30 shadow-md"
               priority
             />
           </div>
         ) : (
           /* Expanded: logo + name + collapse button */
-          <div className="flex items-center gap-3 px-4 w-full">
+          <div className="flex items-center gap-3 w-full">
             <Image
               src="/logo.svg"
               alt="Radha Madhav Medical Hall"
-              width={32}
-              height={32}
-              className="rounded-lg shrink-0"
+              width={34}
+              height={34}
+              className="rounded-xl ring-2 ring-emerald-500/30 shadow-md shrink-0"
               priority
             />
             <div className="flex-1 min-w-0">
-              <p className="text-[13px] font-bold leading-tight text-white truncate">
+              <p className="text-[13px] font-extrabold tracking-tight leading-tight text-white truncate">
                 Radha Madhav
               </p>
-              <p className="text-[11px] text-emerald-300/80 leading-tight">
-                Medical Hall
+              <p className="text-[10px] font-semibold text-emerald-400 leading-tight uppercase tracking-wider">
+                Medical Hall ERP
               </p>
             </div>
             <button
               onClick={() => setCollapsed(true)}
               title="Collapse sidebar"
-              className="hidden lg:block shrink-0 p-1.5 rounded-lg hover:bg-white/15 text-emerald-300/70 hover:text-white transition-colors"
+              className="hidden lg:flex shrink-0 p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
             >
               <PanelLeftClose size={16} />
             </button>
             <button
               onClick={onMobileClose}
               aria-label="Close menu"
-              className="lg:hidden shrink-0 p-1.5 rounded-lg hover:bg-white/15 text-emerald-300/70 hover:text-white transition-colors"
+              className="lg:hidden shrink-0 p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
             >
               <X size={18} />
             </button>
@@ -105,11 +105,9 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       </div>
 
       {/* Nav */}
-      <nav className="relative flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
+      <nav className="relative flex-1 overflow-y-auto py-3 px-2 space-y-1">
         {visibleItems.map(({ href, label, icon: Icon }) => {
           const active = pathname.startsWith(href);
-          // "optimistic active" — treat the item as active the instant it is
-          // clicked, before the route commits, so the sidebar never looks stale.
           const isNavigatingHere = isPending && active;
           return (
             <button
@@ -117,36 +115,36 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               onClick={() => { navigate(href); onMobileClose?.(); }}
               title={collapsed ? label : undefined}
               className={clsx(
-                "relative w-full flex items-center rounded-lg text-sm font-medium transition-all group",
-                collapsed ? "justify-center px-0 py-2.5" : "justify-start text-left gap-3 px-3 py-2.5",
+                "relative w-full flex items-center rounded-xl text-xs font-semibold transition-all group select-none",
+                collapsed ? "justify-center px-0 py-3" : "justify-start text-left gap-3 px-3 py-2.5",
                 active
-                  ? "bg-white/15 text-white shadow-sm"
-                  : "text-emerald-100/70 hover:bg-white/10 hover:text-white",
+                  ? "bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-white border border-emerald-500/30 shadow-sm"
+                  : "text-slate-400 hover:bg-white/5 hover:text-slate-200 border border-transparent",
               )}
             >
               <Icon
-                size={16}
+                size={17}
                 className={clsx(
                   "shrink-0 transition-colors",
-                  active ? "text-emerald-300" : "text-emerald-400/70 group-hover:text-emerald-300",
+                  active ? "text-emerald-400" : "text-slate-400 group-hover:text-slate-200",
                   isNavigatingHere && "animate-pulse",
                 )}
               />
               {!collapsed && (
                 <>
-                  <span className="truncate flex-1">{label}</span>
+                  <span className="truncate flex-1 tracking-wide">{label}</span>
                   {active && (
                     <span
                       className={clsx(
-                        "w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0",
-                        isNavigatingHere && "animate-pulse",
+                        "w-2 h-2 rounded-full bg-emerald-400 shadow-glow shrink-0",
+                        isNavigatingHere && "animate-ping",
                       )}
                     />
                   )}
                 </>
               )}
               {collapsed && active && (
-                <span className="absolute right-0.5 top-1/2 -translate-y-1/2 w-1 h-5 rounded-full bg-emerald-400" />
+                <span className="absolute right-1 top-1/2 -translate-y-1/2 w-1.5 h-6 rounded-full bg-emerald-400 shadow-glow" />
               )}
             </button>
           );
@@ -155,10 +153,14 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
 
       {/* Footer */}
       {!collapsed && (
-        <div className="relative px-4 py-3 border-t border-white/10">
-          <p className="text-[10px] text-emerald-400/50">
-            Pharmacy Management System
-          </p>
+        <div className="relative px-4 py-3 border-t border-white/10 bg-slate-950/40">
+          <div className="flex items-center justify-between text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            <span>PharmaERP v1.0</span>
+            <span className="flex items-center gap-1 text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Live
+            </span>
+          </div>
         </div>
       )}
 
@@ -167,12 +169,13 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
         <button
           onClick={() => setCollapsed(false)}
           title="Expand sidebar"
-          className="hidden lg:flex absolute top-1/2 -translate-y-1/2 -right-3 z-50 items-center justify-center w-6 h-10 bg-emerald-700 hover:bg-emerald-600 rounded-r-lg shadow-lg transition-colors border border-white/10"
+          className="hidden lg:flex absolute top-1/2 -translate-y-1/2 -right-3 z-50 items-center justify-center w-6 h-10 bg-slate-800 hover:bg-emerald-600 rounded-r-xl shadow-xl transition-colors border border-slate-700 text-slate-300 hover:text-white"
         >
-          <PanelLeftOpen size={13} className="text-white" />
+          <PanelLeftOpen size={13} />
         </button>
       )}
     </aside>
     </>
   );
 }
+
