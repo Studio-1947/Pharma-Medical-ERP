@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { BillingService } from "./billing.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { Roles } from "../../common/decorators/roles.decorator";
+import { Roles, Public } from "../../common/decorators/roles.decorator";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
 import { resolveBranchScope, requireBranchScope } from "../../common/auth/branch-scope";
 import {
@@ -37,6 +37,11 @@ export class BillingController {
     }
     return this.service.findAll(query);
   }
+
+  @Public()
+  @Get("public/invoices/:id")
+  @ApiOperation({ summary: "Get public invoice view for patient WhatsApp/SMS link" })
+  findPublicOne(@Param("id") id: string) { return this.service.findOne(id); }
 
   @Get("invoices/:id")
   @Roles("admin", "pharmacist", "cashier", "doctor")

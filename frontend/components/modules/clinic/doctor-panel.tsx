@@ -17,6 +17,7 @@ import { PrescriptionScanUpload } from "@/components/modules/prescriptions/presc
 import { MedicineAutocomplete, type MedicineOption } from "@/components/modules/prescriptions/medicine-autocomplete";
 import { PrescriptionDetailModal } from "@/components/modules/prescriptions/prescription-detail-modal";
 import { InvoiceDetailModal } from "@/components/modules/billing/invoice-detail-modal";
+import { sendViaWhatsApp } from "@/lib/patient-messaging";
 import {
   Stethoscope, Clock, PhoneCall, CheckCircle2, User, AlertTriangle,
   Plus, Trash2, Upload, FileText, History, ChevronRight,
@@ -360,9 +361,19 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
       });
       const prescriptionId = rxRes?.data?.id ?? rxRes?.data?.data?.id;
 
+      if (prescriptionId && patient?.phone) {
+        sendViaWhatsApp({
+          phone: patient.phone,
+          patientName: patient.name,
+          doctorName,
+          type: "prescription",
+          id: prescriptionId,
+        });
+      }
+
       await updateMutation.mutateAsync({ status: "completed", prescriptionId });
       qc.invalidateQueries({ queryKey: queryKeys.clinicTokens.all() });
-      toastSuccess("Consultation completed", "Prescription linked to token.");
+      toastSuccess("Consultation completed", "Prescription created & dispatched via WhatsApp.");
       onCompleted();
     } catch (err: any) {
       const message = err?.response?.data?.message ?? "Failed to complete consultation.";
