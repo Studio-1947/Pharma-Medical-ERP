@@ -89,6 +89,7 @@ export class InvoicePdfWorker {
       const doc = new PDFDocument({
         size: "A4",
         margin: 40,
+        bufferPages: true,
         info: {
           Title: `Tax Invoice ${invoice.invoiceNo}`,
           Author: branch?.name ?? "PharmERP",
@@ -102,6 +103,16 @@ export class InvoicePdfWorker {
 
       const PW = doc.page.width - 80; // usable width
       const ML = 40;
+      const PAGE_BOTTOM = doc.page.height - 60; // reserve space for footer
+
+      // Helper: check if we need a new page and return current Y
+      const ensureSpace = (needed: number, currentY: number): number => {
+        if (currentY + needed > PAGE_BOTTOM) {
+          doc.addPage();
+          return 50; // top margin on new page
+        }
+        return currentY;
+      };
 
       // ── Header band ──────────────────────────────────────────────────────
       doc.rect(ML, 30, PW, 70).fill(BLUE);
@@ -110,17 +121,17 @@ export class InvoicePdfWorker {
         .fillColor("white")
         .fontSize(18)
         .font("Helvetica-Bold")
-        .text(branch?.name ?? "PharmERP", ML + 12, 44, { width: PW * 0.55 });
+        .text(branch?.name ?? "PharmERP", ML + 12, 44, { width: PW * 0.55, lineBreak: false });
 
       doc
         .fontSize(8)
         .font("Helvetica")
-        .text(branch?.address ?? "", ML + 12, 64, { width: PW * 0.55 })
+        .text(branch?.address ?? "", ML + 12, 64, { width: PW * 0.55, lineBreak: false })
         .text(
           [branch?.phone, branch?.email].filter(Boolean).join("  |  "),
           ML + 12,
           74,
-          { width: PW * 0.55 },
+          { width: PW * 0.55, lineBreak: false },
         );
 
       doc
@@ -130,12 +141,28 @@ export class InvoicePdfWorker {
         .text("TAX INVOICE", ML + PW * 0.58, 42, {
           width: PW * 0.42,
           align: "right",
+          lineBreak: false,
         });
 
       doc.fillColor(BLACK);
 
+      // ── GSTIN / License row ───────────────────────────────────────────────
+      let gstnY = 104;
+      if (branch?.gstin || branch?.drugLicense20B) {
+        doc
+          .fontSize(7)
+          .font("Helvetica")
+          .fillColor(GRAY);
+        const parts: string[] = [];
+        if (branch?.gstin) parts.push(`GSTIN: ${branch.gstin}`);
+        if (branch?.drugLicense20B) parts.push(`DL 20B: ${branch.drugLicense20B}`);
+        if (branch?.drugLicense21B) parts.push(`DL 21B: ${branch.drugLicense21B}`);
+        doc.text(parts.join("   |   "), ML, gstnY, { width: PW, lineBreak: false });
+        gstnY += 10;
+      }
+
       // ── Invoice meta box ─────────────────────────────────────────────────
-      const metaY = 116;
+      const metaY = gstnY + 4;
       doc.rect(ML, metaY, PW, 58).strokeColor(DIVIDER).lineWidth(1).stroke();
 
       // Left: patient info
@@ -146,20 +173,20 @@ export class InvoicePdfWorker {
         .fontSize(7.5)
         .font("Helvetica-Bold")
         .fillColor(GRAY)
-        .text("BILLED TO", col1X, metaY + 8);
+        .text("BILLED TO", col1X, metaY + 8, { lineBreak: false });
 
       doc
         .fontSize(9)
         .font("Helvetica-Bold")
         .fillColor(BLACK)
-        .text(invoice.patient?.name ?? "Walk-in Customer", col1X, metaY + 18);
+        .text(invoice.patient?.name ?? "Walk-in Customer", col1X, metaY + 18, { lineBreak: false });
 
       if (invoice.patient?.phone) {
         doc
           .fontSize(8)
           .font("Helvetica")
           .fillColor(GRAY)
-          .text(`Ph: ${invoice.patient.phone}`, col1X, metaY + 29);
+          .text(`Ph: ${invoice.patient.phone}`, col1X, metaY + 29, { lineBreak: false });
       }
 
       if (invoice.patient?.address) {
@@ -167,6 +194,7 @@ export class InvoicePdfWorker {
           .fontSize(7.5)
           .text(invoice.patient.address, col1X, metaY + 39, {
             width: PW * 0.45,
+            lineBreak: false,
           });
       }
 
@@ -176,12 +204,12 @@ export class InvoicePdfWorker {
           .font("Helvetica-Bold")
           .fontSize(7.5)
           .fillColor(GRAY)
-          .text(label, col2X, y, { width: 80, align: "left" });
+          .text(label, col2X, y, { width: 80, align: "left", lineBreak: false });
         doc
           .font("Helvetica")
           .fontSize(8.5)
           .fillColor(BLACK)
-          .text(value, col2X + 82, y, { width: PW * 0.42, align: "left" });
+          .text(value, col2X + 82, y, { width: PW * 0.42, align: "left", lineBreak: false });
       };
 
       fieldLabel("Invoice No:", invoice.invoiceNo, metaY + 8);
@@ -192,7 +220,7 @@ export class InvoicePdfWorker {
       }
 
       // ── Items table ───────────────────────────────────────────────────────
-      const tableY = metaY + 68;
+      let tableY = metaY + 68;
       const colWidths = [PW * 0.33, PW * 0.14, PW * 0.1, PW * 0.1, PW * 0.1, PW * 0.1, PW * 0.13];
       const headers = ["Medicine", "Batch / Expiry", "Qty", "MRP", "GST%", "Tax", "Total"];
 
@@ -209,6 +237,7 @@ export class InvoicePdfWorker {
           .text(h, cx + 4, tableY + 5, {
             width: colWidths[i]! - 6,
             align: i >= 2 ? "right" : "left",
+            lineBreak: false,
           });
         cx += colWidths[i]!;
       });
@@ -219,6 +248,31 @@ export class InvoicePdfWorker {
 
       items.forEach((item: any, idx: number) => {
         const rowH = 22;
+
+        // Check if there's room; if not, add a page and redraw the table header
+        if (rowY + rowH > PAGE_BOTTOM) {
+          doc.addPage();
+          rowY = 40;
+
+          // Repeat table header on new page
+          doc.rect(ML, rowY, PW, 18).fill(LIGHT);
+          doc.rect(ML, rowY, PW, 18).strokeColor(DIVIDER).lineWidth(0.5).stroke();
+          let hx = ML;
+          headers.forEach((h, i) => {
+            doc
+              .font("Helvetica-Bold")
+              .fontSize(7.5)
+              .fillColor(GRAY)
+              .text(h, hx + 4, rowY + 5, {
+                width: colWidths[i]! - 6,
+                align: i >= 2 ? "right" : "left",
+                lineBreak: false,
+              });
+            hx += colWidths[i]!;
+          });
+          rowY += 18;
+        }
+
         if (idx % 2 === 0) {
           doc.rect(ML, rowY, PW, rowH).fill("#ffffff");
         } else {
@@ -256,6 +310,7 @@ export class InvoicePdfWorker {
             .text(col.text, cx + 4, rowY + 4, {
               width: colWidths[i]! - 6,
               align: col.align as any,
+              lineBreak: false,
             });
           cx += colWidths[i]!;
         });
@@ -264,22 +319,23 @@ export class InvoicePdfWorker {
       });
 
       // ── Totals section ────────────────────────────────────────────────────
-      rowY += 8;
+      rowY = ensureSpace(100, rowY + 8);
       const totLineX = ML + PW * 0.58;
       const totValX = ML + PW * 0.82;
       const totW = PW * 0.2;
 
       const totLine = (label: string, value: string, bold = false, color = BLACK) => {
+        rowY = ensureSpace(16, rowY);
         doc
           .font(bold ? "Helvetica-Bold" : "Helvetica")
           .fontSize(bold ? 9 : 8)
           .fillColor(GRAY)
-          .text(label, totLineX, rowY, { width: PW * 0.22, align: "left" });
+          .text(label, totLineX, rowY, { width: PW * 0.22, align: "left", lineBreak: false });
         doc
           .font(bold ? "Helvetica-Bold" : "Helvetica")
           .fontSize(bold ? 9 : 8)
           .fillColor(color)
-          .text(value, totValX, rowY, { width: totW, align: "right" });
+          .text(value, totValX, rowY, { width: totW, align: "right", lineBreak: false });
         rowY += 14;
       };
 
@@ -313,16 +369,17 @@ export class InvoicePdfWorker {
       }
 
       // ── Payment details ───────────────────────────────────────────────────
-      rowY += 8;
       if (invoice.payments?.length) {
+        rowY = ensureSpace(30, rowY + 8);
         doc
           .font("Helvetica-Bold")
           .fontSize(8)
           .fillColor(GRAY)
-          .text("Payment Details:", ML, rowY);
+          .text("Payment Details:", ML, rowY, { lineBreak: false });
         rowY += 12;
 
         invoice.payments.forEach((p: any) => {
+          rowY = ensureSpace(14, rowY);
           doc
             .font("Helvetica")
             .fontSize(7.5)
@@ -331,35 +388,43 @@ export class InvoicePdfWorker {
               `${(p.mode ?? "").toUpperCase()}  ${rupee(p.amount)}${p.referenceNo ? `  (Ref: ${p.referenceNo})` : ""}`,
               ML + 10,
               rowY,
+              { lineBreak: false },
             );
           rowY += 12;
         });
       }
 
-      // ── Footer ────────────────────────────────────────────────────────────
-      const footerY = doc.page.height - 55;
-      doc.rect(ML, footerY, PW, 0.5).fill(DIVIDER);
+      // ── Footer — render on every page ──────────────────────────────────────
+      const pages = doc.bufferedPageRange();
+      for (let i = 0; i < pages.count; i++) {
+        doc.switchToPage(i);
 
-      doc
-        .fontSize(7)
-        .font("Helvetica")
-        .fillColor(GRAY)
-        .text(
-          "This is a computer-generated invoice. No signature required.",
-          ML,
-          footerY + 8,
-          { width: PW * 0.6, align: "left" },
+        const footerY = doc.page.height - 50;
+        doc.rect(ML, footerY, PW, 0.5).fill(DIVIDER);
+
+        doc
+          .fontSize(7)
+          .font("Helvetica")
+          .fillColor(GRAY)
+          .text(
+            "This is a computer-generated invoice. No signature required.",
+            ML,
+            footerY + 6,
+            { width: PW * 0.6, align: "left", lineBreak: false },
+          );
+
+        doc.text(
+          `Page ${i + 1} of ${pages.count}  •  Generated on ${new Date().toLocaleString("en-IN")}`,
+          ML + PW * 0.4,
+          footerY + 6,
+          { width: PW * 0.6, align: "right", lineBreak: false },
         );
+      }
 
-      doc.text(
-        `Generated on ${new Date().toLocaleString("en-IN")}`,
-        ML + PW * 0.6,
-        footerY + 8,
-        { width: PW * 0.4, align: "right" },
-      );
-
-      // Rx stamp if prescription-linked
+      // Rx stamp on last page if prescription-linked
       if (invoice.prescriptionId) {
+        doc.switchToPage(pages.count - 1);
+        const rxY = doc.page.height - 38;
         doc
           .fontSize(7.5)
           .font("Helvetica-Bold")
@@ -367,8 +432,8 @@ export class InvoicePdfWorker {
           .text(
             "Rx — Dispensed against verified prescription",
             ML,
-            footerY + 20,
-            { width: PW },
+            rxY,
+            { width: PW, lineBreak: false },
           );
       }
 
