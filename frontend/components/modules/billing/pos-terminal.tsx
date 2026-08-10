@@ -670,7 +670,7 @@ export function PosTerminal() {
                         className="w-full text-left px-4 py-3 hover:bg-emerald-50 text-sm text-emerald-600 font-medium flex items-center gap-2 bg-slate-50/50"
                       >
                         <Plus size={14} />
-                        <span>Register "{patientSearch}" as a new patient</span>
+                        <span>Register &quot;{patientSearch}&quot; as a new patient</span>
                       </button>
                     </div>
                   )}

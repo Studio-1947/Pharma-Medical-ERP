@@ -1,0 +1,20 @@
+{
+  "name": "PharmERP — Medical Pharmacy ERP",
+  "short_name": "PharmERP",
+  "description": "Multi-branch Pharmacy ERP with POS Billing, Schedule H Compliance, and Batch Inventory Management",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#ffffff",
+  "theme_color": "#059669",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["medical", "business", "productivity"]
+}

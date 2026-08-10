@@ -1,11 +1,15 @@
-import { Injectable } from "@nestjs/common";
-import { desc, eq, and, isNull } from "drizzle-orm";
+import { Injectable, Optional } from "@nestjs/common";
+import { desc, eq, and } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
+import { NotificationsGateway } from "./notifications.gateway";
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly drizzle: DrizzleService) {}
+  constructor(
+    private readonly drizzle: DrizzleService,
+    @Optional() private readonly notificationsGateway?: NotificationsGateway,
+  ) {}
 
   private get db() {
     return this.drizzle.db;
@@ -71,6 +75,16 @@ export class NotificationsService {
     resourceId?: string;
   }) {
     const [row] = await this.db.insert(schema.notifications).values(data).returning();
+
+    // Push real-time WebSocket event via Socket.IO
+    if (this.notificationsGateway && row) {
+      if (data.userId) {
+        this.notificationsGateway.emitToUser(data.userId, "notification.new", row);
+      } else {
+        this.notificationsGateway.broadcast("notification.new", row);
+      }
+    }
+
     return row;
   }
 }

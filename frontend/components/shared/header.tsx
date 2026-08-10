@@ -1,12 +1,13 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth.store";
-import { apiClient, queryKeys } from "@/lib/api-client";
-import { LogOut, Bell, Menu, Search } from "lucide-react";
+import { apiClient } from "@/lib/api-client";
+import { LogOut, Menu, Search } from "lucide-react";
 import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { BranchSwitcher } from "@/components/shared/branch-switcher";
+import { HeaderNotificationsDropdown } from "@/components/shared/header-notifications-dropdown";
+import { useNotificationsSocket } from "@/hooks/use-notifications-socket";
 import { useNavigation } from "@/lib/navigation-context";
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
@@ -14,14 +15,8 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const router = useRouter();
   const { navigate } = useNavigation();
 
-  const { data: countData } = useQuery<any>({
-    queryKey: queryKeys.notifications.unreadCount(),
-    queryFn: () => apiClient.get("/notifications/unread-count"),
-    refetchInterval: 60_000,
-    retry: false,
-  });
-
-  const unread: number = countData?.count ?? 0;
+  // Initialize real-time Socket.IO notification push listener
+  useNotificationsSocket();
 
   const handleLogout = async () => {
     try {
@@ -73,19 +68,8 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         {/* Active branch — renders for super_admin only */}
         <BranchSwitcher />
 
-        {/* Notifications */}
-        <button
-          onClick={() => navigate("/notifications")}
-          className="relative p-2 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-colors border border-transparent hover:border-slate-200/60"
-          title="Notifications"
-        >
-          <Bell size={18} />
-          {unread > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[18px] h-4 px-1 rounded-full bg-emerald-600 text-white text-[10px] font-extrabold flex items-center justify-center leading-none ring-2 ring-white animate-pulse">
-              {unread > 99 ? "99+" : unread}
-            </span>
-          )}
-        </button>
+        {/* Real-time Notifications Popover Dropdown */}
+        <HeaderNotificationsDropdown />
 
         {/* Divider */}
         <div className="w-px h-6 bg-slate-200/80 mx-1" />
@@ -116,4 +100,3 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     </header>
   );
 }
-

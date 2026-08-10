@@ -848,7 +848,7 @@ export function BatchList({ medicineId, medicine }: Props) {
                 {(data as any).data?.length === 0 && (
                   <tr>
                     <td colSpan={8} className="text-center py-12 text-muted-foreground">
-                      No batches found. Use "Add Stock" to receive inventory.
+                      No batches found. Use &quot;Add Stock&quot; to receive inventory.
                     </td>
                   </tr>
                 )}

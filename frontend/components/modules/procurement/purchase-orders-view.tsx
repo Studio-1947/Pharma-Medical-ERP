@@ -482,7 +482,7 @@ export function PurchaseOrdersView() {
         </div>
       ) : pos.length === 0 ? (
         <div className="text-center py-12 text-muted-foreground border rounded-xl bg-white backdrop-blur-md bg-opacity-60">
-          No purchase orders found. Click "Create Draft PO" to get started.
+          No purchase orders found. Click &quot;Create Draft PO&quot; to get started.
         </div>
       ) : (
         <div className="bg-card rounded-xl border shadow-sm overflow-hidden bg-white backdrop-blur-md bg-opacity-70">

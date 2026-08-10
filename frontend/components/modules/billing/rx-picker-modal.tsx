@@ -208,7 +208,7 @@ export function RxPickerModal({ open, onClose, onSelectRx, patientId, patientNam
                   <Inbox size={32} className="opacity-40 text-slate-400" />
                   <p className="text-sm font-bold text-slate-800">No verified digital prescriptions found</p>
                   <p className="text-xs text-slate-500 max-w-sm font-medium">
-                    Does the patient have a paper prescription? Switch to "Log Details / Photo" or click "⚡ Quick Verify Physical Rx".
+                    Does the patient have a paper prescription? Switch to &quot;Log Details / Photo&quot; or click &quot;⚡ Quick Verify Physical Rx&quot;.
                   </p>
                 </div>
               ) : (

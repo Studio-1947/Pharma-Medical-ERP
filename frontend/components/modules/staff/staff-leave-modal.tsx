@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -174,8 +174,8 @@ export function StaffLeaveModal({ userId, userName, open, onClose }: Props) {
           <AlertCircle className="w-8 h-8 text-amber-400" />
           <p className="font-semibold text-slate-700">No employee record found</p>
           <p className="text-sm text-slate-400 max-w-xs">
-            This staff account doesn't have a linked employee record yet. Create one under the
-            "Employee Records" tab first.
+            This staff account doesn&apos;t have a linked employee record yet. Create one under the
+            &quot;Employee Records&quot; tab first.
           </p>
         </div>
       ) : (
