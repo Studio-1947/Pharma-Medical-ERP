@@ -10,7 +10,8 @@ services:
       - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./ssl:/etc/nginx/ssl:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
     depends_on:
       - backend
       - frontend
@@ -23,7 +24,7 @@ services:
       dockerfile: backend/Dockerfile
     container_name: pharmerp_backend
     restart: unless-stopped
-    env_file: ./backend/.env.production
+    env_file: .env.production
     environment:
       NODE_ENV: production
     depends_on:
@@ -45,6 +46,7 @@ services:
       dockerfile: frontend/Dockerfile
     container_name: pharmerp_frontend
     restart: unless-stopped
+    env_file: .env.production
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: /api/v1
@@ -62,7 +64,7 @@ services:
     image: postgres:16-alpine
     container_name: pharmerp_postgres_prod
     restart: unless-stopped
-    env_file: ./backend/.env.production
+    env_file: .env.production
     environment:
       POSTGRES_DB: ${DB_NAME:-pharmerp}
       POSTGRES_USER: ${DB_USER:-pharmerp}
@@ -76,6 +78,30 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  postgres_backup:
+    image: prodrigestivill/postgres-backup-local:16-alpine
+    container_name: pharmerp_postgres_backup
+    restart: unless-stopped
+    user: root
+    env_file: .env.production
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_DB: ${DB_NAME:-pharmerp}
+      POSTGRES_USER: ${DB_USER:-pharmerp}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      SCHEDULE: "0 2 * * *"
+      BACKUP_KEEP_DAYS: 14
+      BACKUP_KEEP_WEEKS: 4
+      BACKUP_KEEP_MONTHS: 6
+      HEALTHCHECK_PORT: 8080
+    volumes:
+      - ./backups/postgres:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - pharmerp_net
 
   redis:
     image: redis:7-alpine
@@ -131,3 +157,4 @@ volumes:
   redis_prod_data:
   clickhouse_prod_data:
   minio_prod_data:
+
