@@ -12,25 +12,36 @@ export interface TaxBreakdown {
 @Injectable()
 export class TaxService {
   /**
-   * Calculates GST for a retail line item (MRP is tax-inclusive as per Indian GST Rules).
-   * Extracts taxable base value and tax amount from the final line total.
-   * Splitting: Intra-state = CGST (50%) + SGST (50%); Inter-state = IGST (100%).
+   * Calculates GST split for a line item.
+   * If taxInclusive is false (default), unitPrice is tax-exclusive base price.
+   * If taxInclusive is true, unitPrice is tax-inclusive MRP.
    */
   calculateLineTax(
-    mrpUnitPrice: number,
+    unitPrice: number,
     quantity: number,
     discountPct: number,
     taxPct: number,
     interState = false,
+    taxInclusive = false,
   ): { lineTotal: number; taxAmount: number; breakdown: TaxBreakdown } {
-    const grossMrp = new Decimal(mrpUnitPrice).times(quantity);
-    const discount = grossMrp.times(discountPct).dividedBy(100);
-    const lineTotal = grossMrp.minus(discount);
+    let taxableAmount: Decimal;
+    let totalTax: Decimal;
+    let lineTotal: Decimal;
 
-    // Reverse GST Formula: Taxable Value = Line Total / (1 + GST% / 100)
-    const gstRateFactor = new Decimal(1).plus(new Decimal(taxPct).dividedBy(100));
-    const taxableAmount = lineTotal.dividedBy(gstRateFactor);
-    const totalTax = lineTotal.minus(taxableAmount);
+    if (taxInclusive) {
+      const grossMrp = new Decimal(unitPrice).times(quantity);
+      const discount = grossMrp.times(discountPct).dividedBy(100);
+      lineTotal = grossMrp.minus(discount);
+      const gstRateFactor = new Decimal(1).plus(new Decimal(taxPct).dividedBy(100));
+      taxableAmount = lineTotal.dividedBy(gstRateFactor);
+      totalTax = lineTotal.minus(taxableAmount);
+    } else {
+      const gross = new Decimal(unitPrice).times(quantity);
+      const discount = gross.times(discountPct).dividedBy(100);
+      taxableAmount = gross.minus(discount);
+      totalTax = taxableAmount.times(taxPct).dividedBy(100);
+      lineTotal = taxableAmount.plus(totalTax);
+    }
 
     const halfTax = totalTax.dividedBy(2);
 
