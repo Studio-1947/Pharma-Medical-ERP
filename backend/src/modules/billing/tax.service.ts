@@ -12,40 +12,49 @@ export interface TaxBreakdown {
 @Injectable()
 export class TaxService {
   /**
-   * Calculates GST split for a line item.
-   * Assumes intra-state (CGST + SGST). Pass interState=true for IGST.
+   * Calculates GST for a retail line item (MRP is tax-inclusive as per Indian GST Rules).
+   * Extracts taxable base value and tax amount from the final line total.
+   * Splitting: Intra-state = CGST (50%) + SGST (50%); Inter-state = IGST (100%).
    */
   calculateLineTax(
-    unitPrice: number,
+    mrpUnitPrice: number,
     quantity: number,
     discountPct: number,
     taxPct: number,
     interState = false,
   ): { lineTotal: number; taxAmount: number; breakdown: TaxBreakdown } {
-    const gross = new Decimal(unitPrice).times(quantity);
-    const discount = gross.times(discountPct).dividedBy(100);
-    const taxableAmount = gross.minus(discount);
-    const totalTax = taxableAmount.times(taxPct).dividedBy(100);
-    const lineTotal = taxableAmount.plus(totalTax);
+    const grossMrp = new Decimal(mrpUnitPrice).times(quantity);
+    const discount = grossMrp.times(discountPct).dividedBy(100);
+    const lineTotal = grossMrp.minus(discount);
+
+    // Reverse GST Formula: Taxable Value = Line Total / (1 + GST% / 100)
+    const gstRateFactor = new Decimal(1).plus(new Decimal(taxPct).dividedBy(100));
+    const taxableAmount = lineTotal.dividedBy(gstRateFactor);
+    const totalTax = lineTotal.minus(taxableAmount);
+
     const halfTax = totalTax.dividedBy(2);
 
     const breakdown: TaxBreakdown = interState
       ? {
-          taxableAmount: taxableAmount.toNumber(),
+          taxableAmount: taxableAmount.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
           cgst: 0,
           sgst: 0,
-          igst: totalTax.toNumber(),
-          totalTax: totalTax.toNumber(),
+          igst: totalTax.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+          totalTax: totalTax.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
         }
       : {
-          taxableAmount: taxableAmount.toNumber(),
-          cgst: halfTax.toNumber(),
-          sgst: halfTax.toNumber(),
+          taxableAmount: taxableAmount.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+          cgst: halfTax.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+          sgst: halfTax.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
           igst: 0,
-          totalTax: totalTax.toNumber(),
+          totalTax: totalTax.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
         };
 
-    return { lineTotal: lineTotal.toNumber(), taxAmount: totalTax.toNumber(), breakdown };
+    return {
+      lineTotal: lineTotal.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+      taxAmount: totalTax.toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+      breakdown,
+    };
   }
 
   /**
@@ -64,6 +73,10 @@ export class TaxService {
       (s, l) => new Decimal(s).plus(l.lineTotal).toNumber(),
       0,
     );
-    return { subtotal, taxAmount, totalAmount };
+    return {
+      subtotal: new Decimal(subtotal).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+      taxAmount: new Decimal(taxAmount).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+      totalAmount: new Decimal(totalAmount).toDecimalPlaces(2, Decimal.ROUND_HALF_UP).toNumber(),
+    };
   }
 }
