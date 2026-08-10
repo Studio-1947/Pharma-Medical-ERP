@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, BadRequestException } from "@nestjs/common";
 import { eq } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
@@ -81,5 +81,22 @@ export class BranchesService {
       .where(eq(schema.branches.id, id))
       .returning();
     return branch;
+  }
+
+  async remove(id: string) {
+    try {
+      const [deleted] = await this.db
+        .delete(schema.branches)
+        .where(eq(schema.branches.id, id))
+        .returning();
+      return deleted;
+    } catch (err: any) {
+      if (err?.code === "23503") {
+        throw new BadRequestException(
+          "Cannot delete branch with active inventory, sales invoices, or assigned staff. Deactivate the branch instead.",
+        );
+      }
+      throw err;
+    }
   }
 }
