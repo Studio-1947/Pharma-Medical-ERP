@@ -27,6 +27,7 @@ COPY --from=build /deploy .
 # Migration SQL is read at boot by runMigrations(); guarantee it's present
 # regardless of what `pnpm deploy` prunes.
 COPY --from=build /app/backend/drizzle ./drizzle
+COPY --from=build /app/backend/scripts ./scripts
 ENV NODE_ENV=production
 EXPOSE 4000
 CMD ["node", "dist/main"]

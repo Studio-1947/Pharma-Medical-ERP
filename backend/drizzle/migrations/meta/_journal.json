@@ -169,6 +169,13 @@
       "when": 1785924699434,
       "tag": "0023_branch_alerts_and_token_branch_notnull",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1786355000000,
+      "tag": "0024_branch_gstin_licensing",
+      "breakpoints": true
     }
   ]
 }
