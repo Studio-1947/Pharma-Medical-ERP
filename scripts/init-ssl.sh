@@ -9,17 +9,8 @@ if [ -f "./.env.production" ]; then
   export $(grep -v '^#' ./.env.production | xargs)
 fi
 
-DOMAIN="${DUCKDNS_DOMAIN:-}"
-EMAIL="${SSL_EMAIL:-admin@${DOMAIN}.duckdns.org}"
-
-if [ -z "${DOMAIN}" ]; then
-  read -p "Enter your DuckDNS subdomain name (without .duckdns.org): " DOMAIN
-fi
-
-if [ -z "${EMAIL}" ]; then
-  read -p "Enter your notification email address for Let's Encrypt: " EMAIL
-fi
-
+DOMAIN="${DUCKDNS_DOMAIN:-rdm-erp}"
+EMAIL="${SSL_EMAIL:-localdesigncommunity@gmail.com}"
 FULL_DOMAIN="${DOMAIN}.duckdns.org"
 
 echo "============================================================"

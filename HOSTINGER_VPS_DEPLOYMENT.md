@@ -52,21 +52,22 @@ Complete, step-by-step production deployment guide for running **Pharma-Medical 
 
 ---
 
-## 3. Step 2: DuckDNS Domain Setup
+## 3. Step 2: DuckDNS Domain Details
 
-1. Log in to [duckdns.org](https://www.duckdns.org).
-2. Create a subdomain (e.g. `pharmerp` -> full domain: `pharmerp.duckdns.org`).
-3. Set the IP address of your domain to `187.127.185.82`.
-4. Copy your **DuckDNS Token** from the top of the DuckDNS dashboard.
+* **DuckDNS Subdomain**: `rdm-erp`
+* **Full Public Domain**: `rdm-erp.duckdns.org`
+* **Account Email**: `localdesigncommunity@gmail.com`
+* **DuckDNS Token**: `f31057c7-fa09-4b76-a8af-e1d30b9c982a`
+* **Target IPv4**: `187.127.185.82`
 
 ---
 
 ## 4. Step 3: Clone Codebase & Configure Environment
 
-1. **Clone your repository on the VPS**:
+1. **Clone your private GitHub repository on the VPS**:
    ```bash
    cd /opt
-   git clone <your-git-repository-url> pharmerp
+   git clone git@github.com:Studio-1947/Pharma-Medical-ERP.git pharmerp
    cd pharmerp
    ```
 
@@ -85,9 +86,9 @@ Complete, step-by-step production deployment guide for running **Pharma-Medical 
    NODE_ENV=production
 
    # Domain & SSL Settings
-   DUCKDNS_DOMAIN=your-duckdns-subdomain
-   DUCKDNS_TOKEN=your-duckdns-token
-   SSL_EMAIL=your-email@example.com
+   DUCKDNS_DOMAIN=rdm-erp
+   DUCKDNS_TOKEN=f31057c7-fa09-4b76-a8af-e1d30b9c982a
+   SSL_EMAIL=localdesigncommunity@gmail.com
 
    # PostgreSQL Database Configuration
    DB_HOST=postgres
@@ -105,7 +106,7 @@ Complete, step-by-step production deployment guide for running **Pharma-Medical 
    # JWT & Security Secrets
    JWT_SECRET=GenerateSuperSecretJWTKeyAtLeast32CharsLong!
    JWT_EXPIRES_IN=7d
-   CORS_ORIGINS=https://your-duckdns-subdomain.duckdns.org,http://187.127.185.82
+   CORS_ORIGINS=https://rdm-erp.duckdns.org,http://187.127.185.82
 
    # MinIO Object Storage
    MINIO_ENDPOINT=minio
@@ -114,11 +115,11 @@ Complete, step-by-step production deployment guide for running **Pharma-Medical 
    MINIO_SECRET_KEY=GenerateStrongMinioSecretKey123!
    MINIO_BUCKET_NAME=pharmerp-uploads
 
-   # ClickHouse Analytics (Optional)
-   CLICKHOUSE_HOST=clickhouse
-   CLICKHOUSE_PORT=8123
-   CLICKHOUSE_PASSWORD=GenerateStrongClickHousePassword123!
+   # GCP Cloud SQL Sync (Optional for daily GCP data preservation)
+   # GCP_DATABASE_URL=postgresql://user:pass@gcp-cloudsql-ip:5432/pharmerp
+   # AUTO_RESTORE_GCP_TO_HOSTINGER=true
    ```
+
 
 ---
 
@@ -276,7 +277,62 @@ Upon pushing code to `main`:
 
 ---
 
-## 10. Useful Operational Commands
+## 10. Step 9: Zero Data-Loss & Automated Daily GCP Backup Preservation
+
+To ensure **100% data preservation** while your GCP account is active (even if your GCP account/subscription expires unexpectedly), we have added an automated daily GCP sync service:
+
+### A. How the Automated Daily GCP Preserver Works:
+The script [`scripts/sync-gcp-daily.sh`](file:///c:/Users/soumi/Desktop/Pharma-Medical-ERP/scripts/sync-gcp-daily.sh) runs automatically every day at **01:00 AM** on your Hostinger VPS:
+1. Connects to your GCP Cloud SQL instance.
+2. Dumps and compresses a complete database snapshot into `/opt/pharmerp/backups/gcp_daily/gcp_preserve_YYYYMMDD_HHMMSS.sql.gz`.
+3. Retains 30 days of daily GCP backups on your Hostinger VPS disk.
+4. *(Optional)* If `AUTO_RESTORE_GCP_TO_HOSTINGER=true` is set in `.env.production`, it will automatically sync the GCP data directly into your Hostinger PostgreSQL database every night!
+
+---
+
+### B. Setting Up the Daily GCP Sync Cron Job on Hostinger VPS:
+
+1. **Add your GCP Database Connection String to `.env.production` on Hostinger VPS**:
+   ```env
+   GCP_DATABASE_URL=postgresql://DB_USER:DB_PASSWORD@GCP_CLOUD_SQL_IP:5432/pharmerp
+   AUTO_RESTORE_GCP_TO_HOSTINGER=true
+   ```
+
+2. **Test the daily sync script manually**:
+   ```bash
+   cd /opt/pharmerp
+   ./scripts/sync-gcp-daily.sh
+   ```
+
+3. **Add the Daily Cron Job on Hostinger VPS**:
+   ```bash
+   crontab -e
+   ```
+   Add this cron rule:
+   ```cron
+   0 1 * * * /opt/pharmerp/scripts/sync-gcp-daily.sh >> /var/log/gcp_daily_sync.log 2>&1
+   ```
+
+---
+
+### C. Manual One-Time GCP Export & Restore Workflow
+If you want to migrate GCP data immediately right now:
+```bash
+# 1. Export from GCP
+./scripts/export-gcp-db.sh "postgresql://USER:PASSWORD@GCP_CLOUD_SQL_IP:5432/pharmerp"
+
+# 2. Copy to VPS
+scp backups/postgres/gcp_cloudsql_export_*.sql.gz root@187.127.185.82:/opt/pharmerp/backups/postgres/
+
+# 3. Restore on Hostinger VPS
+ssh root@187.127.185.82
+cd /opt/pharmerp
+./scripts/restore-db.sh
+```
+
+---
+
+## 11. Useful Operational Commands
 
 * **View live Backend API logs**:
   ```bash
@@ -293,6 +349,11 @@ Upon pushing code to `main`:
   docker compose -f docker-compose.prod.yml logs -f postgres_backup
   ```
 
+* **View Daily GCP Sync logs**:
+  ```bash
+  cat /var/log/gcp_daily_sync.log
+  ```
+
 * **Restart Application Stack**:
   ```bash
   docker compose -f docker-compose.prod.yml restart
@@ -302,4 +363,6 @@ Upon pushing code to `main`:
   ```bash
   docker compose -f docker-compose.prod.yml down
   ```
+
+
 

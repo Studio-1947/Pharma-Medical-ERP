@@ -8,14 +8,8 @@ if [ -f "./.env.production" ]; then
   export $(grep -v '^#' ./.env.production | xargs)
 fi
 
-DOMAIN="${DUCKDNS_DOMAIN:-}"
-TOKEN="${DUCKDNS_TOKEN:-}"
-
-if [ -z "${DOMAIN}" ] || [ -z "${TOKEN}" ]; then
-  echo "Error: DUCKDNS_DOMAIN and DUCKDNS_TOKEN environment variables must be set!"
-  echo "Example: DUCKDNS_DOMAIN=mypharmerp DUCKDNS_TOKEN=12345678-xxxx-xxxx"
-  exit 1
-fi
+DOMAIN="${DUCKDNS_DOMAIN:-rdm-erp}"
+TOKEN="${DUCKDNS_TOKEN:-f31057c7-fa09-4b76-a8af-e1d30b9c982a}"
 
 echo "[$(date)] Updating DuckDNS domain: ${DOMAIN}.duckdns.org..."
 RESPONSE=$(curl -s "https://www.duckdns.org/update?domains=${DOMAIN}&token=${TOKEN}&ip=")
