@@ -12,10 +12,30 @@ export class PatientsRepository {
   async findPaginated(params: QueryPatientDto) {
     const conditions = [isNull(schema.patients.deletedAt)];
     if (params.search) {
+      const rawSearch = params.search.trim();
+      const normalizedSearch = rawSearch.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+      const tokens = rawSearch.split(/\s+/).filter(Boolean);
+
+      const tokenConditions = tokens.map((t) =>
+        or(
+          ilike(schema.patients.name, `%${t}%`),
+          ilike(schema.patients.phone, `%${t}%`),
+          ilike(schema.patients.insuranceId, `%${t}%`),
+        ),
+      );
+
       conditions.push(
         or(
-          ilike(schema.patients.name, `%${params.search}%`),
-          ilike(schema.patients.phone, `%${params.search}%`),
+          ilike(schema.patients.name, `%${rawSearch}%`),
+          ilike(schema.patients.phone, `%${rawSearch}%`),
+          ilike(schema.patients.insuranceId, `%${rawSearch}%`),
+          ...(normalizedSearch
+            ? [
+                sql`LOWER(REGEXP_REPLACE(${schema.patients.name}, '[^a-zA-Z0-9]', '', 'g')) LIKE ${'%' + normalizedSearch + '%'}`,
+                sql`REGEXP_REPLACE(${schema.patients.phone}, '[^0-9]', '', 'g') LIKE ${'%' + normalizedSearch + '%'}`,
+              ]
+            : []),
+          ...(tokenConditions.length > 0 ? [and(...tokenConditions)] : []),
         ) as any,
       );
     }

@@ -86,14 +86,52 @@ export class InventoryRepository {
       eq(schema.medicines.isActive, params.isActive ?? true),
     ];
     if (params.search) {
-      const searchFilter = or(
-        ilike(schema.medicines.name, `%${params.search}%`),
-        ilike(schema.medicines.brandName, `%${params.search}%`),
-        ilike(schema.medicines.genericName, `%${params.search}%`),
-        ilike(schema.medicines.composition, `%${params.search}%`),
-        eq(schema.medicines.sku, params.search),
-        eq(schema.medicines.barcode, params.search),
+      const rawSearch = params.search.trim();
+      const normalizedSearch = rawSearch.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+
+      // Split rawSearch into tokens (e.g. "pan 40" -> ["pan", "40"], "pan40" -> ["pan", "40", "pan40"])
+      const wordTokens = rawSearch.split(/[^a-zA-Z0-9]+/).filter(Boolean);
+      const splitLetterDigitTokens = rawSearch
+        .replace(/([a-zA-Z]+)(\d+)/g, "$1 $2")
+        .replace(/(\d+)([a-zA-Z]+)/g, "$1 $2")
+        .split(/\s+/)
+        .filter(Boolean);
+      const tokens = Array.from(
+        new Set([...wordTokens, ...splitLetterDigitTokens, rawSearch]),
+      ).filter((t) => t.length > 0);
+
+      // Build tokenized AND condition: every token must appear in at least one field
+      const tokenConditions = tokens.map((t) =>
+        or(
+          ilike(schema.medicines.name, `%${t}%`),
+          ilike(schema.medicines.brandName, `%${t}%`),
+          ilike(schema.medicines.genericName, `%${t}%`),
+          ilike(schema.medicines.composition, `%${t}%`),
+          ilike(schema.medicines.manufacturer, `%${t}%`),
+          ilike(schema.medicines.sku, `%${t}%`),
+          ilike(schema.medicines.barcode, `%${t}%`),
+        ),
       );
+
+      const searchFilter = or(
+        ilike(schema.medicines.name, `%${rawSearch}%`),
+        ilike(schema.medicines.brandName, `%${rawSearch}%`),
+        ilike(schema.medicines.genericName, `%${rawSearch}%`),
+        ilike(schema.medicines.composition, `%${rawSearch}%`),
+        ilike(schema.medicines.sku, `%${rawSearch}%`),
+        ilike(schema.medicines.barcode, `%${rawSearch}%`),
+        ...(normalizedSearch
+          ? [
+              sql`LOWER(REGEXP_REPLACE(${schema.medicines.name}, '[^a-zA-Z0-9]', '', 'g')) LIKE ${'%' + normalizedSearch + '%'}`,
+              sql`LOWER(REGEXP_REPLACE(${schema.medicines.brandName}, '[^a-zA-Z0-9]', '', 'g')) LIKE ${'%' + normalizedSearch + '%'}`,
+              sql`LOWER(REGEXP_REPLACE(${schema.medicines.genericName}, '[^a-zA-Z0-9]', '', 'g')) LIKE ${'%' + normalizedSearch + '%'}`,
+              sql`LOWER(REGEXP_REPLACE(${schema.medicines.composition}, '[^a-zA-Z0-9]', '', 'g')) LIKE ${'%' + normalizedSearch + '%'}`,
+              sql`LOWER(REGEXP_REPLACE(${schema.medicines.sku}, '[^a-zA-Z0-9]', '', 'g')) LIKE ${'%' + normalizedSearch + '%'}`,
+            ]
+          : []),
+        ...(tokenConditions.length > 0 ? [and(...tokenConditions)] : []),
+      );
+
       if (searchFilter) {
         conditions.push(searchFilter);
       }
@@ -106,6 +144,23 @@ export class InventoryRepository {
         eq(schema.medicines.requiresPrescription, params.requiresPrescription),
       );
     }
+
+    const rawClean = params.search ? params.search.trim() : "";
+    const normClean = rawClean.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+
+    const orderByClause = params.search
+      ? [
+          sql`CASE
+            WHEN LOWER(${schema.medicines.sku}) = LOWER(${rawClean}) THEN 0
+            WHEN LOWER(${schema.medicines.barcode}) = LOWER(${rawClean}) THEN 0
+            WHEN LOWER(REGEXP_REPLACE(${schema.medicines.name}, '[^a-zA-Z0-9]', '', 'g')) = ${normClean} THEN 1
+            WHEN LOWER(${schema.medicines.name}) LIKE LOWER(${rawClean + "%"}) THEN 2
+            WHEN LOWER(REGEXP_REPLACE(${schema.medicines.name}, '[^a-zA-Z0-9]', '', 'g')) LIKE LOWER(${normClean + "%"}) THEN 3
+            ELSE 4
+          END ASC`,
+          asc(schema.medicines.name),
+        ]
+      : [asc(schema.medicines.name)];
 
     const [items, [countRow]] = await Promise.all([
       this.db
@@ -144,7 +199,7 @@ export class InventoryRepository {
         )
         .where(and(...conditions))
         .groupBy(schema.medicines.id)
-        .orderBy(asc(schema.medicines.name))
+        .orderBy(...orderByClause)
         .limit(params.limit)
         .offset((params.page - 1) * params.limit),
       this.db
