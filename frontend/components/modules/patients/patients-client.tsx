@@ -53,12 +53,13 @@ const inputCls =
 const labelCls = "block text-xs font-semibold text-slate-600 mb-1";
 
 function PatientHistoryModal({ patient, onClose }: { patient: Patient | null; onClose: () => void }) {
-  if (!patient) return null;
-
   const { data: invoicesRes, isLoading: loadingInvoices } = useQuery({
-    queryKey: ["patient-invoices", patient.id],
-    queryFn: () => apiClient.get("/billing/invoices", { params: { patientId: patient.id, limit: 10 } }),
+    queryKey: ["patient-invoices", patient?.id],
+    queryFn: () => apiClient.get("/billing/invoices", { params: { patientId: patient!.id, limit: 10 } }),
+    enabled: !!patient,
   });
+
+  if (!patient) return null;
 
   const invoices: any[] = (invoicesRes as any)?.data ?? [];
 
