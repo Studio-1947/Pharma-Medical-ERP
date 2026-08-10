@@ -690,7 +690,7 @@ export function SupplierLedgerModal({
           <div className="space-y-3">
             <div className="flex justify-between items-center">
               <p className="text-xs text-muted-foreground">
-                Record a return from a bill's item list (Bills tab → expand a bill → Return), or resolve one below.
+                Record a return from a bill&apos;s item list (Bills tab → expand a bill → Return), or resolve one below.
               </p>
               {!showReturnForm && (
                 <button
@@ -871,7 +871,7 @@ export function SupplierLedgerModal({
                               onChange={(e) => setResolveForm({ ...resolveForm, grnId: e.target.value })}
                               className="w-full border rounded-lg px-2 py-1.5 text-xs"
                             >
-                              <option value="">On account (later, supplier's convenience)</option>
+                              <option value="">On account (later, supplier&apos;s convenience)</option>
                               {openBills.map((b) => (
                                 <option key={b.grnId} value={b.grnId}>
                                   {b.grnNumber} — balance {inr(b.balance)}

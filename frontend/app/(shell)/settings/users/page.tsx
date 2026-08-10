@@ -27,15 +27,6 @@ export default function UsersPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  if (!can("users.manage")) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 gap-3 text-gray-500">
-        <ShieldAlert size={32} className="text-red-400" />
-        <p className="font-medium">You do not have permission to manage users.</p>
-      </div>
-    );
-  }
-
   // admin role can only create branch-level roles, not another admin
   const availableRoles = role === UserRole.SUPER_ADMIN
     ? ROLE_OPTIONS
@@ -44,7 +35,7 @@ export default function UsersPage() {
   const { data: branches } = useQuery({
     queryKey: ["branches"],
     queryFn: () => apiClient.get("/branches") as Promise<any>,
-    enabled: role === UserRole.SUPER_ADMIN,
+    enabled: role === UserRole.SUPER_ADMIN && can("users.manage"),
   });
 
   const {
@@ -66,6 +57,15 @@ export default function UsersPage() {
       setTimeout(() => setSuccess(null), 4000);
     },
   });
+
+  if (!can("users.manage")) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-3 text-gray-500">
+        <ShieldAlert size={32} className="text-red-400" />
+        <p className="font-medium">You do not have permission to manage users.</p>
+      </div>
+    );
+  }
 
   const errMsg = (mutError as any)?.response?.data?.message ?? (mutError as any)?.message;
 

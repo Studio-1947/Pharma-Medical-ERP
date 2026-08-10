@@ -221,7 +221,7 @@ export function PatientsClient() {
         <div className="text-center py-16 text-muted-foreground">
           <UserPlus className="mx-auto mb-3 opacity-30" size={48} />
           <p className="font-medium">No patients registered yet.</p>
-          <p className="text-sm mt-1">Click "Register Patient" to add the first patient.</p>
+          <p className="text-sm mt-1">Click &quot;Register Patient&quot; to add the first patient.</p>
         </div>
       ) : (
         <div className="bg-card rounded-xl border shadow-sm overflow-hidden">

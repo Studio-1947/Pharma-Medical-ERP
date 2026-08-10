@@ -145,7 +145,7 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading, needsRx
                 </p>
               ) : (
                 <p className="text-xs text-amber-700 font-medium">
-                  This checkout contains Schedule H medicines. Click "Select Verified Rx" above to select or link a prescription.
+                  This checkout contains Schedule H medicines. Click &quot;Select Verified Rx&quot; above to select or link a prescription.
                 </p>
               )}
             </div>
