@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const createPrescriptionSchema = z.object({
+export const basePrescriptionSchema = z.object({
   patientId: z.string().uuid(),
   doctorName: z.string().min(1).max(255),
   doctorRegNo: z.string().max(100).optional(),
@@ -10,6 +10,7 @@ export const createPrescriptionSchema = z.object({
   notes: z.string().optional(),
   isControlled: z.boolean().default(false),
   fileUrl: z.string().optional(),
+  physicalRegisterNo: z.string().max(100).optional(),
   items: z.array(z.object({
     medicineName: z.string().min(1).max(255),
     medicineId: z.string().uuid().optional(),
@@ -20,10 +21,25 @@ export const createPrescriptionSchema = z.object({
   })).optional(),
 });
 
+export const createPrescriptionSchema = basePrescriptionSchema.refine(
+  (data) => {
+    if (data.isControlled) {
+      if (!data.doctorRegNo || !data.doctorRegNo.trim() || data.doctorName.includes("External Doctor")) {
+        return false;
+      }
+    }
+    return true;
+  },
+  {
+    message: "Valid Doctor Name and Doctor Registration Number are required for Schedule H / Controlled prescriptions",
+    path: ["doctorRegNo"],
+  },
+);
+
 // Header-only edit. patientId and items are deliberately excluded: a
 // prescription cannot be re-parented to another patient, and its dispensed
 // items must not be silently swapped out from under the dispensing record.
-export const updatePrescriptionSchema = createPrescriptionSchema
+export const updatePrescriptionSchema = basePrescriptionSchema
   .omit({ patientId: true, items: true })
   .partial();
 

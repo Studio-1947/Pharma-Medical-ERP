@@ -774,7 +774,7 @@ export function PrescriptionsClient() {
     mutationFn: (id: string) => apiClient.delete(`/prescriptions/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.prescriptions.all() });
-      toastSuccess("Prescription deleted", "The prescription record has been removed.");
+      toastSuccess("Prescription archived", "The prescription has been archived (soft-deleted) while preserving compliance audit records.");
       setConfirmDeleteId(null);
     },
     onError: (err: any) => {
@@ -962,7 +962,7 @@ export function PrescriptionsClient() {
                             <button
                               onClick={() => setConfirmDeleteId(rx.id)}
                               className="p-2 hover:bg-red-50 rounded-lg transition-colors text-muted-foreground hover:text-red-600"
-                              title="Delete prescription"
+                              title="Archive prescription (Soft delete)"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>

@@ -124,13 +124,10 @@ export function CrossBranchView() {
         </div>
       </div>
 
-      <div className="flex items-start gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
-        <Info size={15} className="text-slate-500 shrink-0 mt-0.5" />
-        <p className="text-xs text-slate-600">
-          Only the panels below accept a branch filter. Invoices, patients,
-          prescriptions, transfers and purchase orders have no branch parameter
-          on their list endpoints yet — reach those through their own modules,
-          where you already see every branch as a super admin.
+      <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50/50 px-3 py-2.5">
+        <Info size={15} className="text-emerald-600 shrink-0 mt-0.5" />
+        <p className="text-xs text-emerald-800">
+          Showing branch-scoped data for <strong>{branchLabel}</strong>. Invoices, sales summary, employees, and inventory alerts are dynamically filtered to the selected branch.
         </p>
       </div>
 

@@ -490,47 +490,6 @@ export function PosTerminal() {
               </span>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              {!prescriptionId?.trim() && (
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      let activePatientId = patientId;
-                      if (!activePatientId) {
-                        const searchRes: any = await apiClient.get("/patients", { params: { search: "Walk-in", limit: 1 } });
-                        const existingWalkIn = (searchRes?.data?.data ?? searchRes?.data ?? searchRes)?.[0];
-                        if (existingWalkIn?.id) {
-                          activePatientId = existingWalkIn.id;
-                        } else {
-                          const createPatientRes: any = await apiClient.post("/patients", { name: "Walk-in Customer", phone: "0000000000" });
-                          activePatientId = createPatientRes?.data?.id ?? createPatientRes?.id;
-                        }
-                      }
-                      const today = new Date().toISOString().split("T")[0]!;
-                      const expiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]!;
-                      const createRes: any = await apiClient.post("/prescriptions", {
-                        patientId: activePatientId,
-                        doctorName: "External Doctor (Verified on Counter)",
-                        issuedDate: today,
-                        expiryDate: expiry,
-                        isControlled: true,
-                      });
-                      const rxId = createRes?.data?.prescription?.id ?? createRes?.data?.id ?? createRes?.id;
-                      if (rxId) {
-                        try { await apiClient.post(`/prescriptions/${rxId}/verify`, { action: "verify" }); } catch {}
-                        setPrescriptionId(rxId);
-                        toastSuccess("Physical Rx Verified", "Physical prescription verified on counter & linked to cart.");
-                      }
-                    } catch {
-                      toastError("Quick Verify Failed", "Could not verify physical prescription. Please select or add Rx manually.");
-                    }
-                  }}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition-all flex items-center gap-1.5"
-                  title="Quick verify physical paper prescription checked on counter"
-                >
-                  <span>⚡ Quick Verify Physical Rx (1-Click)</span>
-                </button>
-              )}
               <button
                 type="button"
                 onClick={() => setRxPickerOpen(true)}
@@ -822,11 +781,20 @@ export function PosTerminal() {
                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-muted/30">
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-md">
-                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity - 1)} className="w-8 h-8 lg:w-6 lg:h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
+                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity - 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
                         <Minus size={10} />
                       </button>
-                      <span className="w-8 text-center text-xs font-semibold">{item.quantity}</span>
-                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity + 1)} className="w-8 h-8 lg:w-6 lg:h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
+                      <input
+                        type="number"
+                        min={1}
+                        value={item.quantity}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || 1;
+                          updateQty(item.medicineId, item.batchId, Math.max(1, val));
+                        }}
+                        className="w-12 text-center text-xs font-bold bg-white border rounded py-0.5 focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                      />
+                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity + 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
                         <Plus size={10} />
                       </button>
                     </div>
@@ -866,7 +834,13 @@ export function PosTerminal() {
           </div>
 
           <div className="px-4 pb-4 flex gap-2">
-            <button onClick={clear} disabled={items.length === 0} className="flex-1 py-2.5 border rounded-lg text-sm hover:bg-muted transition duration-200 disabled:opacity-40">
+            <button
+              onClick={() => {
+                if (items.length > 0) setClearConfirm(true);
+              }}
+              disabled={items.length === 0}
+              className="flex-1 py-2.5 border rounded-lg text-sm hover:bg-muted transition duration-200 disabled:opacity-40"
+            >
               Clear (F6)
             </button>
             <button

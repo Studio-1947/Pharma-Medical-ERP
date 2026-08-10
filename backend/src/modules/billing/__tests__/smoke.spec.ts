@@ -134,3 +134,52 @@ describe("BillingService — loyalty points validation (BILL-10)", () => {
     expect(() => validateLoyalty(300)).not.toThrow();
   });
 });
+
+// ─── Schedule H Prescription Validation ──────────────────────────────────────
+
+describe("createPrescriptionSchema — Schedule H validation (P0-2)", () => {
+  it("should require doctorRegNo and valid doctorName for controlled prescriptions", async () => {
+    const { createPrescriptionSchema } = await import("@pharmerp/types");
+    const validControlled = {
+      patientId: "123e4567-e89b-12d3-a456-426614174001",
+      doctorName: "Dr. A. K. Sharma",
+      doctorRegNo: "MCI-194820",
+      issuedDate: "2026-08-10",
+      expiryDate: "2026-09-10",
+      isControlled: true,
+    };
+    expect(createPrescriptionSchema.safeParse(validControlled).success).toBe(true);
+
+    const missingRegNo = { ...validControlled, doctorRegNo: "" };
+    expect(createPrescriptionSchema.safeParse(missingRegNo).success).toBe(false);
+
+    const dummyBypassDoc = { ...validControlled, doctorName: "External Doctor (Verified on Counter)" };
+    expect(createPrescriptionSchema.safeParse(dummyBypassDoc).success).toBe(false);
+  });
+});
+
+// ─── Query Limits — Medicines & Suppliers (P0-1) ─────────────────────────────
+
+describe("Query Schemas — max limit up to 1000 (P0-1)", () => {
+  it("should accept query limit up to 1000 for medicines and suppliers", async () => {
+    const { queryMedicineSchema, querySupplierSchema } = await import("@pharmerp/types");
+    
+    const medRes = queryMedicineSchema.safeParse({ limit: 1000 });
+    expect(medRes.success).toBe(true);
+    if (medRes.success) expect(medRes.data.limit).toBe(1000);
+
+    const supRes = querySupplierSchema.safeParse({ limit: 1000 });
+    expect(supRes.success).toBe(true);
+    if (supRes.success) expect(supRes.data.limit).toBe(1000);
+  });
+});
+
+// ─── Client IP Extraction Helper (P0-5) ──────────────────────────────────────
+
+describe("extractClientIp utility (P0-5)", () => {
+  it("should parse x-forwarded-for header list and return first client IP", async () => {
+    const { extractClientIp } = await import("../../../common/utils/client-ip.util");
+    expect(extractClientIp({ headers: { "x-forwarded-for": "203.0.113.195, 70.41.3.18" } })).toBe("203.0.113.195");
+    expect(extractClientIp({ headers: {}, ip: "10.0.0.1" })).toBe("10.0.0.1");
+  });
+});

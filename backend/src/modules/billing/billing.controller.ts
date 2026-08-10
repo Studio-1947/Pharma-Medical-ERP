@@ -35,7 +35,8 @@ export class BillingController {
     if (user.role === "doctor" && !query.patientId) {
       throw new ForbiddenException("Doctors must query invoices for a specific patient");
     }
-    return this.service.findAll(query);
+    const branchId = resolveBranchScope(user, query.branchId);
+    return this.service.findAll({ ...query, branchId });
   }
 
   @Public()

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -14,6 +14,10 @@ interface Branch {
   phone?: string | null;
   email?: string | null;
   state?: string | null;
+  gstin?: string | null;
+  drugLicense20B?: string | null;
+  drugLicense21B?: string | null;
+  licenseeName?: string | null;
   isHeadOffice: boolean;
   isActive: boolean;
 }
@@ -25,6 +29,10 @@ interface BranchFormData {
   phone: string;
   email: string;
   state: string;
+  gstin: string;
+  drugLicense20B: string;
+  drugLicense21B: string;
+  licenseeName: string;
   isHeadOffice: boolean;
 }
 
@@ -55,6 +63,10 @@ function BranchForm({
       phone: branch?.phone ?? "",
       email: branch?.email ?? "",
       state: branch?.state ?? "",
+      gstin: branch?.gstin ?? "",
+      drugLicense20B: branch?.drugLicense20B ?? "",
+      drugLicense21B: branch?.drugLicense21B ?? "",
+      licenseeName: branch?.licenseeName ?? "",
       isHeadOffice: branch?.isHeadOffice ?? false,
     },
   });
@@ -66,6 +78,10 @@ function BranchForm({
         phone: data.phone || undefined,
         email: data.email || undefined,
         state: data.state || undefined,
+        gstin: data.gstin || undefined,
+        drugLicense20B: data.drugLicense20B || undefined,
+        drugLicense21B: data.drugLicense21B || undefined,
+        licenseeName: data.licenseeName || undefined,
       };
       return branch
         ? apiClient.patch(`/branches/${branch.id}`, payload)
@@ -132,6 +148,26 @@ function BranchForm({
         <div className="space-y-1">
           <label className="text-xs font-semibold text-gray-700">Email</label>
           <input {...register("email")} type="email" placeholder="branch@pharma.com" className={inputCls} />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-gray-700">GSTIN</label>
+          <input {...register("gstin")} placeholder="19ABCDE1234F1Z5" className={inputCls} />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-gray-700">Licensee Name</label>
+          <input {...register("licenseeName")} placeholder="Radha Madhav Medical Hall" className={inputCls} />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-gray-700">Drug License 20B (Retail)</label>
+          <input {...register("drugLicense20B")} placeholder="WB/CAL/20B/104928" className={inputCls} />
+        </div>
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-gray-700">Drug License 21B (Wholesale)</label>
+          <input {...register("drugLicense21B")} placeholder="WB/CAL/21B/104929" className={inputCls} />
         </div>
 
         <div className="col-span-2 flex items-center gap-2">
@@ -282,6 +318,24 @@ export function BranchSettings() {
               <div className="flex items-center gap-2 text-slate-600">
                 <Mail size={13} className="shrink-0 text-slate-400" />
                 <span className="text-xs">{branch.email}</span>
+              </div>
+            )}
+            {branch.gstin && (
+              <div className="flex items-center gap-2 text-slate-600">
+                <FileText size={13} className="shrink-0 text-slate-400" />
+                <span className="text-xs font-mono font-semibold">GSTIN: {branch.gstin}</span>
+              </div>
+            )}
+            {branch.drugLicense20B && (
+              <div className="flex items-center gap-2 text-slate-600">
+                <FileText size={13} className="shrink-0 text-slate-400" />
+                <span className="text-xs font-mono">DL 20B: {branch.drugLicense20B}</span>
+              </div>
+            )}
+            {branch.drugLicense21B && (
+              <div className="flex items-center gap-2 text-slate-600">
+                <FileText size={13} className="shrink-0 text-slate-400" />
+                <span className="text-xs font-mono">DL 21B: {branch.drugLicense21B}</span>
               </div>
             )}
           </div>

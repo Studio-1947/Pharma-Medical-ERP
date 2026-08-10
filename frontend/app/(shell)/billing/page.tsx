@@ -491,7 +491,9 @@ export default function BillingPage() {
                 <tr key={inv.id} className="hover:bg-muted/50">
                   <td className="px-4 py-3 font-mono text-xs font-medium">{inv.invoiceNo}</td>
                   <td className="px-4 py-3">
-                    {inv.patient ? (
+                    {inv.patientName ? (
+                      <span className="font-medium text-slate-800">{inv.patientName}</span>
+                    ) : inv.patient ? (
                       <span className="font-medium text-slate-800">
                         {inv.patient.name ?? `${inv.patient.firstName ?? ""} ${inv.patient.lastName ?? ""}`.trim()}
                       </span>

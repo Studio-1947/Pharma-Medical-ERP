@@ -10,6 +10,10 @@ export interface UpsertBranchDto {
   phone?: string;
   email?: string;
   state?: string;
+  gstin?: string;
+  drugLicense20B?: string;
+  drugLicense21B?: string;
+  licenseeName?: string;
   isHeadOffice?: boolean;
 }
 
@@ -47,6 +51,10 @@ export class BranchesService {
         phone: dto.phone,
         email: dto.email,
         state: dto.state,
+        gstin: dto.gstin,
+        drugLicense20B: dto.drugLicense20B,
+        drugLicense21B: dto.drugLicense21B,
+        licenseeName: dto.licenseeName,
         isHeadOffice: dto.isHeadOffice ?? false,
       })
       .returning();

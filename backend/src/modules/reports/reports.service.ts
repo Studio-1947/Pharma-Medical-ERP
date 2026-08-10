@@ -46,7 +46,7 @@ export class ReportsService {
       .where(
         and(
           eq(schema.salesInvoices.branchId, branchId),
-          eq(schema.salesInvoices.status, "confirmed"),
+          inArray(schema.salesInvoices.status, ["confirmed", "paid"]),
           between(schema.salesInvoices.createdAt, new Date(startDate), new Date(endDate)),
         ),
       );
@@ -63,7 +63,7 @@ export class ReportsService {
     since.setHours(0, 0, 0, 0);
 
     const conditions = [
-      eq(schema.salesInvoices.status, "confirmed"),
+      inArray(schema.salesInvoices.status, ["confirmed", "paid"]),
       gte(schema.salesInvoices.createdAt, since),
     ];
     if (branchId) conditions.push(eq(schema.salesInvoices.branchId, branchId));
@@ -94,7 +94,7 @@ export class ReportsService {
     since.setDate(since.getDate() - days);
 
     const conditions = [
-      eq(schema.salesInvoices.status, "confirmed"),
+      inArray(schema.salesInvoices.status, ["confirmed", "paid"]),
       gte(schema.salesInvoices.createdAt, since),
     ];
     if (branchId) conditions.push(eq(schema.salesInvoices.branchId, branchId));
@@ -153,7 +153,7 @@ export class ReportsService {
         .from(schema.salesInvoices)
         .where(
           and(
-            eq(schema.salesInvoices.status, "confirmed"),
+            inArray(schema.salesInvoices.status, ["confirmed", "paid"]),
             between(schema.salesInvoices.createdAt, start, end),
           ),
         )
@@ -239,7 +239,7 @@ export class ReportsService {
     since.setDate(since.getDate() - days);
 
     const conditions = [
-      eq(schema.salesInvoices.status, "confirmed"),
+      inArray(schema.salesInvoices.status, ["confirmed", "paid"]),
       gte(schema.salesInvoices.createdAt, since),
     ];
     if (branchId) conditions.push(eq(schema.salesInvoices.branchId, branchId));
@@ -266,7 +266,7 @@ export class ReportsService {
     since.setDate(since.getDate() - days);
 
     const conditions = [
-      eq(schema.salesInvoices.status, "confirmed"),
+      inArray(schema.salesInvoices.status, ["confirmed", "paid"]),
       gte(schema.salesInvoices.createdAt, since),
     ];
     if (branchId) conditions.push(eq(schema.salesInvoices.branchId, branchId));
@@ -379,7 +379,7 @@ export class ReportsService {
       .where(
         and(
           eq(schema.salesInvoices.branchId, branchId),
-          eq(schema.salesInvoices.status, "confirmed"),
+          inArray(schema.salesInvoices.status, ["confirmed", "paid"]),
           between(schema.salesInvoices.createdAt, start, end),
           inArray(schema.medicines.scheduleClass, ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"]),
         ),

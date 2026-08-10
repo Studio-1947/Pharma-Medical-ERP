@@ -280,15 +280,23 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
           </div>
           <div className="space-y-1">
             <label className="text-sm font-medium">Time Slot</label>
-            <input
-              type="text"
+            <select
               value={timeSlot}
               onChange={(e) => setTimeSlot(e.target.value)}
-              placeholder="10:00 AM - 10:30 AM"
-              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary ${
+              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background ${
                 slotTaken ? "border-red-400 bg-red-50/40" : ""
               }`}
-            />
+            >
+              <option value="">Select a time slot...</option>
+              {TIME_SLOT_OPTIONS.map((slot) => {
+                const isTaken = takenSlots.some((s) => s.toLowerCase() === slot.toLowerCase());
+                return (
+                  <option key={slot} value={slot} disabled={isTaken}>
+                    {slot} {isTaken ? "(Booked)" : ""}
+                  </option>
+                );
+              })}
+            </select>
             {/* Shown before submit so the clash is caught at the desk rather
                 than by a rejected save after everything else is filled in. */}
             {slotTaken ? (
@@ -339,10 +347,25 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
   );
 }
 
+const TIME_SLOT_OPTIONS = [
+  "09:00 AM - 09:30 AM",
+  "09:30 AM - 10:00 AM",
+  "10:00 AM - 10:30 AM",
+  "10:30 AM - 11:00 AM",
+  "11:00 AM - 11:30 AM",
+  "11:30 AM - 12:00 PM",
+  "04:00 PM - 04:30 PM",
+  "04:30 PM - 05:00 PM",
+  "05:00 PM - 05:30 PM",
+  "05:30 PM - 06:00 PM",
+  "06:00 PM - 06:30 PM",
+  "06:30 PM - 07:00 PM",
+];
+
 export function ClinicQueue() {
   const qc = useQueryClient();
   const { error: toastError, success: toastSuccess } = useToast();
-  const [date] = useState(localDateString());
+  const [date, setDate] = useState(localDateString());
   const [doctorFilter, setDoctorFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
 
@@ -371,7 +394,7 @@ export function ClinicQueue() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-gray-900">Clinic Queue</h1>
-          <p className="text-muted-foreground mt-1">Generate and track today&apos;s doctor consultation tokens.</p>
+          <p className="text-muted-foreground mt-1">Generate and track doctor consultation tokens.</p>
         </div>
         <button
           onClick={() => setCreateOpen(true)}
@@ -392,7 +415,12 @@ export function ClinicQueue() {
             <option key={d.id} value={d.id}>{doctorName(d)}</option>
           ))}
         </select>
-        <span className="text-sm text-muted-foreground">{date}</span>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+          className="border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
+        />
       </div>
 
       {isLoading ? (

@@ -7,6 +7,7 @@ import { clsx } from "clsx";
 import { useNavigation } from "@/lib/navigation-context";
 import { usePermissions } from "@/hooks/use-permissions";
 import { NAV_ITEMS } from "@/lib/nav-items";
+import Link from "next/link";
 import { PanelLeftClose, PanelLeftOpen, X, Sparkles } from "lucide-react";
 
 interface SidebarProps {
@@ -17,7 +18,7 @@ interface SidebarProps {
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
   const [desktopCollapsed, setDesktopCollapsed] = useState(false);
-  const { navigate, isPending } = useNavigation();
+  const { isPending } = useNavigation();
   const { can } = usePermissions();
 
   // The collapse feature only exists on desktop; the mobile drawer always
@@ -110,9 +111,10 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
           const active = pathname.startsWith(href);
           const isNavigatingHere = isPending && active;
           return (
-            <button
+            <Link
               key={href}
-              onClick={() => { navigate(href); onMobileClose?.(); }}
+              href={href as any}
+              onClick={() => { onMobileClose?.(); }}
               title={collapsed ? label : undefined}
               className={clsx(
                 "relative w-full flex items-center rounded-xl text-xs font-semibold transition-all group select-none",
@@ -146,7 +148,7 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
               {collapsed && active && (
                 <span className="absolute right-1 top-1/2 -translate-y-1/2 w-1.5 h-6 rounded-full bg-emerald-400 shadow-glow" />
               )}
-            </button>
+            </Link>
           );
         })}
       </nav>

@@ -258,6 +258,28 @@ export class UsersService {
     return { success: true };
   }
 
+  async deactivateDemoAccounts(caller: JwtPayload, meta: RequestMeta = {}) {
+    if (caller.role !== UserRole.SUPER_ADMIN) {
+      throw new ForbiddenException("Only super_admin can bulk deactivate demo accounts");
+    }
+    const demoEmails = [
+      "admin@mederp.com",
+      "pharmacist@mederp.com",
+      "cashier@mederp.com",
+      "doctor@mederp.com",
+      "analyst@mederp.com",
+    ];
+    let deactivatedCount = 0;
+    for (const email of demoEmails) {
+      const user = await this.repo.findByEmail(email);
+      if (user && user.isActive && user.id !== caller.sub) {
+        await this.deactivateUser(user.id, caller, meta);
+        deactivatedCount++;
+      }
+    }
+    return { message: `Deactivated ${deactivatedCount} demo account(s)`, deactivatedCount };
+  }
+
   // -----------------------------------------------------------------------
 
   /** Loads the target and rejects callers who do not outrank it. */

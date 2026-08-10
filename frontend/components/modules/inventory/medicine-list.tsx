@@ -147,6 +147,7 @@ export function MedicineList() {
                   <th className="text-left px-4 py-3 font-medium">SKU</th>
                   <th className="text-left px-4 py-3 font-medium">Unit</th>
                   <th className="text-right px-4 py-3 font-medium">MRP</th>
+                  <th className="text-right px-4 py-3 font-medium">Stock</th>
                   <th className="text-center px-4 py-3 font-medium">Class</th>
                   <th className="text-center px-4 py-3 font-medium">Status</th>
                   <th className="text-center px-4 py-3 font-medium">Actions</th>
@@ -165,6 +166,11 @@ export function MedicineList() {
                     <td className="px-4 py-3">{m.unit}</td>
                     <td className="px-4 py-3 text-right font-medium">
                       ₹{parseFloat(m.priceMrp).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium">
+                      <span className={(m as any).totalStock > 0 ? "text-slate-900 font-bold" : "text-amber-600 font-semibold"}>
+                        {(m as any).totalStock ?? 0}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-center">
                       {m.scheduleClass ? (
