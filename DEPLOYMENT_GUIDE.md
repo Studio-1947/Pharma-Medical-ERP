@@ -193,3 +193,17 @@ gcloud run services list --region=asia-south1
 # Check Artifact Registry
 gcloud artifacts repositories describe pharmerp --location=asia-south1
 ```
+
+---
+
+## 5. Database Schema Sync & Migrations (GCP / Production)
+
+To prevent schema drift errors (e.g. `Database schema mismatch - a pending migration may not be applied`):
+
+1. **Automatic Container Startup Sync**: The backend service (`drizzle.service.ts`) automatically verifies and executes `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...` SQL schema synchronizations on container startup.
+2. **Explicit GCP CI/CD Pipeline Sync Command**:
+```bash
+# Run schema sync for production GCP database before/during deployment
+pnpm db:sync:prod
+```
+3. **Formal Drizzle SQL Migration**: Migration `0024_branch_gstin_licensing.sql` is present under `backend/drizzle/migrations/` and recorded in `_journal.json`.

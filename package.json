@@ -12,6 +12,8 @@
     "db:generate": "pnpm --filter backend drizzle-kit generate",
     "db:push": "pnpm --filter backend drizzle-kit push",
     "db:push:prod": "cross-env DB_TARGET=prod pnpm run db:push",
+    "db:sync": "node backend/scripts/deploy-db-sync.js",
+    "db:sync:prod": "cross-env DB_TARGET=prod node backend/scripts/deploy-db-sync.js",
     "db:migrate": "pnpm --filter backend drizzle-kit migrate",
     "db:migrate:prod": "cross-env DB_TARGET=prod pnpm run db:migrate",
     "db:seed": "pnpm --filter backend db:seed",

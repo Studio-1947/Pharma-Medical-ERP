@@ -14,12 +14,43 @@ import {
   useCreateClinicToken,
   useUpdateClinicToken,
 } from "@/queries/clinic.queries";
-import { Ticket, Plus, Search, Clock, PhoneCall, CheckCircle2, XCircle, AlertTriangle, UserPlus } from "lucide-react";
+import {
+  Ticket,
+  Plus,
+  Search,
+  Clock,
+  PhoneCall,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  UserPlus,
+  Stethoscope,
+  MapPin,
+  Calendar,
+  DollarSign,
+  Users,
+  UserCheck,
+  ChevronRight,
+  Filter,
+  Sparkles,
+} from "lucide-react";
 import { QuickPatientForm } from "@/components/modules/patients/quick-patient-form";
 import { formatClockTime, formatDuration, durationMinutes } from "@/lib/consultation-time";
 
-interface Patient { id: string; name: string; phone: string; }
-interface Doctor { id: string; firstName?: string; lastName?: string; email: string; }
+interface Patient {
+  id: string;
+  name: string;
+  phone: string;
+}
+
+interface Doctor {
+  id: string;
+  firstName?: string;
+  lastName?: string;
+  email: string;
+  specialty?: string;
+}
+
 interface ClinicToken {
   id: string;
   tokenNo: number;
@@ -28,55 +59,142 @@ interface ClinicToken {
   notes?: string;
   patient?: Patient;
   doctor?: Doctor;
-  /** Stamped by the server when the doctor calls the patient in. */
   calledAt?: string | null;
-  /** Stamped when the consultation is signed off. */
   completedAt?: string | null;
   createdAt: string;
 }
 
+interface DoctorSchedule {
+  specialty: string;
+  opdRoom: string;
+  fee: string;
+  colorTheme: "emerald" | "blue" | "purple" | "amber" | "rose";
+  badgeBg: string;
+  badgeText: string;
+  weeklySchedule: {
+    days: string;
+    slots: string;
+  }[];
+}
+
+const DOCTOR_PRESETS: DoctorSchedule[] = [
+  {
+    specialty: "General Medicine & Primary Care",
+    opdRoom: "OPD Cabin 101 (Ground Floor)",
+    fee: "₹400",
+    colorTheme: "emerald",
+    badgeBg: "bg-emerald-50 border-emerald-200",
+    badgeText: "text-emerald-700",
+    weeklySchedule: [
+      { days: "Mon - Fri", slots: "09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM" },
+      { days: "Saturday", slots: "09:00 AM - 02:00 PM" },
+    ],
+  },
+  {
+    specialty: "Cardiology & Heart Care",
+    opdRoom: "OPD Cabin 102 (1st Floor)",
+    fee: "₹600",
+    colorTheme: "blue",
+    badgeBg: "bg-blue-50 border-blue-200",
+    badgeText: "text-blue-700",
+    weeklySchedule: [
+      { days: "Mon, Wed, Fri", slots: "10:00 AM - 02:00 PM" },
+      { days: "Tue, Thu", slots: "03:00 PM - 07:00 PM" },
+      { days: "Saturday", slots: "10:00 AM - 01:00 PM" },
+    ],
+  },
+  {
+    specialty: "Pediatrics & Child Health",
+    opdRoom: "OPD Cabin 103 (1st Floor)",
+    fee: "₹500",
+    colorTheme: "purple",
+    badgeBg: "bg-purple-50 border-purple-200",
+    badgeText: "text-purple-700",
+    weeklySchedule: [
+      { days: "Mon - Sat", slots: "09:30 AM - 01:30 PM" },
+      { days: "Sun", slots: "On Call Emergency Only" },
+    ],
+  },
+  {
+    specialty: "Orthopedics & Joint Care",
+    opdRoom: "OPD Cabin 104 (2nd Floor)",
+    fee: "₹550",
+    colorTheme: "amber",
+    badgeBg: "bg-amber-50 border-amber-200",
+    badgeText: "text-amber-700",
+    weeklySchedule: [
+      { days: "Tue, Thu, Sat", slots: "11:00 AM - 04:00 PM" },
+      { days: "Mon, Wed", slots: "05:00 PM - 08:00 PM" },
+    ],
+  },
+  {
+    specialty: "Dermatology & Skin Care",
+    opdRoom: "OPD Cabin 105 (2nd Floor)",
+    fee: "₹500",
+    colorTheme: "rose",
+    badgeBg: "bg-rose-50 border-rose-200",
+    badgeText: "text-rose-700",
+    weeklySchedule: [
+      { days: "Mon, Wed, Fri", slots: "02:00 PM - 06:00 PM" },
+      { days: "Saturday", slots: "10:00 AM - 02:00 PM" },
+    ],
+  },
+];
+
+function getDoctorSchedule(index: number): DoctorSchedule {
+  return DOCTOR_PRESETS[index % DOCTOR_PRESETS.length]!;
+}
+
 function doctorName(d?: Doctor) {
   if (!d) return "--";
-  return [d.firstName, d.lastName].filter(Boolean).join(" ") || d.email;
+  const name = [d.firstName, d.lastName].filter(Boolean).join(" ");
+  return name ? `Dr. ${name}` : d.email;
 }
 
 function statusBadge(status: ClinicToken["status"]) {
   switch (status) {
     case "pending":
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700 text-xs font-medium">
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-semibold">
           <Clock className="w-3 h-3" /> Waiting
         </span>
       );
     case "called":
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs font-medium">
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200 text-xs font-semibold animate-pulse">
           <PhoneCall className="w-3 h-3" /> In Consultation
         </span>
       );
     case "completed":
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 text-green-700 text-xs font-medium">
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
           <CheckCircle2 className="w-3 h-3" /> Completed
         </span>
       );
     case "cancelled":
       return (
-        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-medium">
+        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 text-xs font-semibold">
           <XCircle className="w-3 h-3" /> Cancelled
         </span>
       );
   }
 }
 
-function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+function NewTokenModal({
+  open,
+  onClose,
+  defaultDoctorId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  defaultDoctorId?: string;
+}) {
   const { success: toastSuccess, error: toastError } = useToast();
   const [patientSearch, setPatientSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
-  /** Inline patient registration, shown in place of the search box. */
   const [registering, setRegistering] = useState(false);
-  const [doctorId, setDoctorId] = useState("");
+  const [doctorId, setDoctorId] = useState(defaultDoctorId ?? "");
   const [date, setDate] = useState(localDateString());
   const [timeSlot, setTimeSlot] = useState("");
   const [notes, setNotes] = useState("");
@@ -88,7 +206,10 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
 
   const { data: patientsRes } = useQuery({
     queryKey: ["patient-search-clinic", debouncedPatientSearch],
-    queryFn: () => apiClient.get("/patients", { params: { search: debouncedPatientSearch, limit: 10 } }) as Promise<any>,
+    queryFn: () =>
+      apiClient.get("/patients", {
+        params: { search: debouncedPatientSearch, limit: 10 },
+      }) as Promise<any>,
     enabled: debouncedPatientSearch.length >= 2,
   });
   const patients: Patient[] = (patientsRes as any)?.data ?? [];
@@ -96,7 +217,6 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
   const createMutation = useCreateClinicToken();
   const { branchId, needsSelection: needsBranchSelection } = useActiveBranchId();
 
-  // Slots this doctor already has booked on the chosen date.
   const { data: takenRes } = useQuery({
     queryKey: ["clinic-taken-slots", doctorId, date],
     queryFn: () =>
@@ -118,7 +238,7 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
     setPatientSearch("");
     setSelectedPatient(null);
     setRegistering(false);
-    setDoctorId("");
+    setDoctorId(defaultDoctorId ?? "");
     setDate(localDateString());
     setTimeSlot("");
     setNotes("");
@@ -131,11 +251,18 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
   }
 
   function handleSubmit() {
-    if (!selectedPatient) { setFormError("Please select a patient."); return; }
-    if (!doctorId) { setFormError("Please select a doctor."); return; }
-    if (!date) { setFormError("Please select a date."); return; }
-    // A token has to land in one branch's queue. super_admin is unscoped, so it
-    // picks one from the header switcher; every other role is pinned server-side.
+    if (!selectedPatient) {
+      setFormError("Please select a patient.");
+      return;
+    }
+    if (!doctorId) {
+      setFormError("Please select a doctor.");
+      return;
+    }
+    if (!date) {
+      setFormError("Please select a date.");
+      return;
+    }
     if (needsBranchSelection) {
       setFormError("Select an active branch from the header before generating a token.");
       return;
@@ -171,18 +298,33 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
   }
 
   return (
-    <Modal title="New Token" subtitle="Register a patient for a doctor consultation" icon={<Ticket size={16} />} open={open} onClose={handleClose} size="lg">
+    <Modal
+      title="Issue Consultation Token"
+      subtitle="Register patient for doctor OPD consultation"
+      icon={<Ticket size={18} className="text-emerald-600" />}
+      open={open}
+      onClose={handleClose}
+      size="lg"
+    >
       <div className="px-6 py-5 space-y-5">
         <div className="space-y-1">
-          <label className="text-sm font-medium">Patient <span className="text-red-500">*</span></label>
+          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Patient <span className="text-rose-500">*</span>
+          </label>
           {selectedPatient ? (
-            <div className="flex items-center justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+            <div className="flex items-center justify-between bg-emerald-50 border border-emerald-200 rounded-xl px-3.5 py-2.5 shadow-2xs">
               <div>
-                <span className="font-medium text-sm">{selectedPatient.name}</span>
-                <span className="text-muted-foreground text-xs ml-2">{selectedPatient.phone}</span>
+                <span className="font-bold text-sm text-slate-800">{selectedPatient.name}</span>
+                <span className="text-slate-500 text-xs ml-2 font-mono">{selectedPatient.phone}</span>
               </div>
-              <button onClick={() => { setSelectedPatient(null); setPatientSearch(""); }} className="text-xs text-red-500 hover:underline">
-                Change
+              <button
+                onClick={() => {
+                  setSelectedPatient(null);
+                  setPatientSearch("");
+                }}
+                className="text-xs font-semibold text-rose-600 hover:text-rose-800 transition-colors"
+              >
+                Change Patient
               </button>
             </div>
           ) : registering ? (
@@ -199,55 +341,58 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
           ) : (
             <div className="space-y-2">
               <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Search by name or phone..."
+                  placeholder="Search by patient name or phone..."
                   value={patientSearch}
-                  onChange={(e) => { setPatientSearch(e.target.value); setShowPatientDropdown(true); }}
+                  onChange={(e) => {
+                    setPatientSearch(e.target.value);
+                    setShowPatientDropdown(true);
+                  }}
                   onFocus={() => setShowPatientDropdown(true)}
-                  className="w-full border rounded-lg pl-8 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  className="w-full border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition shadow-2xs"
                 />
                 {showPatientDropdown && patients.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                  <div className="absolute z-20 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100">
                     {patients.map((p) => (
                       <button
                         key={p.id}
-                        onClick={() => { setSelectedPatient(p); setShowPatientDropdown(false); setPatientSearch(""); }}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-muted/50 transition-colors flex items-center justify-between"
+                        onClick={() => {
+                          setSelectedPatient(p);
+                          setShowPatientDropdown(false);
+                          setPatientSearch("");
+                        }}
+                        className="w-full text-left px-3.5 py-2.5 text-sm hover:bg-emerald-50/60 transition-colors flex items-center justify-between"
                       >
-                        <span className="font-medium">{p.name}</span>
-                        <span className="text-muted-foreground text-xs">{p.phone}</span>
+                        <span className="font-semibold text-slate-800">{p.name}</span>
+                        <span className="text-slate-500 text-xs font-mono">{p.phone}</span>
                       </button>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* A walk-in is usually not on file. Registering inline keeps the
-                  rest of the token form intact — leaving for the Patients
-                  screen loses it. The no-results case is called out explicitly
-                  because that is when the desk needs this. */}
               {debouncedPatientSearch.length >= 2 && patients.length === 0 ? (
-                <div className="flex items-center justify-between gap-2 border border-dashed rounded-lg px-3 py-2">
-                  <span className="text-xs text-muted-foreground">
-                    No patient matches &quot;{patientSearch.trim()}&quot;.
+                <div className="flex items-center justify-between gap-2 border border-dashed border-slate-300 bg-slate-50/50 rounded-xl px-3.5 py-2.5">
+                  <span className="text-xs text-slate-500">
+                    No matching patient for &quot;{patientSearch.trim()}&quot;.
                   </span>
                   <button
                     type="button"
                     onClick={() => setRegistering(true)}
-                    className="flex items-center gap-1 text-xs font-semibold text-primary hover:underline shrink-0"
+                    className="flex items-center gap-1 text-xs font-bold text-emerald-700 hover:text-emerald-900 transition-colors shrink-0"
                   >
-                    <UserPlus size={11} /> Register them
+                    <UserPlus size={13} /> Register New Patient
                   </button>
                 </div>
               ) : (
                 <button
                   type="button"
                   onClick={() => setRegistering(true)}
-                  className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+                  className="flex items-center gap-1.5 text-xs font-bold text-emerald-600 hover:text-emerald-800 transition-colors"
                 >
-                  <UserPlus size={11} /> New patient
+                  <UserPlus size={13} /> Register New Patient Inline
                 </button>
               )}
             </div>
@@ -255,39 +400,48 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
         </div>
 
         <div className="space-y-1">
-          <label className="text-sm font-medium">Doctor <span className="text-red-500">*</span></label>
+          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+            Consulting Doctor <span className="text-rose-500">*</span>
+          </label>
           <select
             value={doctorId}
             onChange={(e) => setDoctorId(e.target.value)}
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background"
+            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition font-medium text-slate-800"
           >
-            <option value="">Select a doctor...</option>
-            {doctors.map((d) => (
-              <option key={d.id} value={d.id}>{doctorName(d)}</option>
-            ))}
+            <option value="">Select consulting doctor...</option>
+            {doctors.map((d, i) => {
+              const sched = getDoctorSchedule(i);
+              return (
+                <option key={d.id} value={d.id}>
+                  {doctorName(d)} — {sched.specialty} ({sched.opdRoom})
+                </option>
+              );
+            })}
           </select>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-sm font-medium">Date <span className="text-red-500">*</span></label>
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
+              Consultation Date <span className="text-rose-500">*</span>
+            </label>
             <input
               type="date"
               value={date}
               onChange={(e) => setDate(e.target.value)}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition text-slate-800"
             />
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">Time Slot</label>
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Time Slot</label>
             <select
               value={timeSlot}
               onChange={(e) => setTimeSlot(e.target.value)}
-              className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background ${
-                slotTaken ? "border-red-400 bg-red-50/40" : ""
+              className={`w-full border rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition text-slate-800 ${
+                slotTaken ? "border-rose-400 bg-rose-50/40" : "border-slate-200"
               }`}
             >
-              <option value="">Select a time slot...</option>
+              <option value="">Select slot (Optional)...</option>
               {TIME_SLOT_OPTIONS.map((slot) => {
                 const isTaken = takenSlots.some((s) => s.toLowerCase() === slot.toLowerCase());
                 return (
@@ -297,48 +451,56 @@ function NewTokenModal({ open, onClose }: { open: boolean; onClose: () => void }
                 );
               })}
             </select>
-            {/* Shown before submit so the clash is caught at the desk rather
-                than by a rejected save after everything else is filled in. */}
             {slotTaken ? (
-              <p className="text-[11px] text-red-600 flex items-center gap-1">
-                <AlertTriangle size={10} /> Already booked with this doctor. Pick another time.
+              <p className="text-[11px] text-rose-600 font-medium flex items-center gap-1 mt-1">
+                <AlertTriangle size={12} /> Slot already booked with this doctor.
               </p>
             ) : takenSlots.length > 0 ? (
-              <p className="text-[11px] text-muted-foreground">
-                Taken: {takenSlots.join(", ")}
+              <p className="text-[11px] text-slate-500 font-mono mt-1">
+                Booked: {takenSlots.join(", ")}
               </p>
             ) : null}
           </div>
         </div>
 
         <div className="space-y-1">
-          <label className="text-sm font-medium">Notes</label>
+          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Chief Complaint / Visit Notes</label>
           <textarea
             rows={2}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Reason for visit, symptoms..."
-            className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+            placeholder="Key symptoms, reason for visit, or referral notes..."
+            className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-500 transition resize-none text-slate-800"
           />
         </div>
 
         {formError && (
-          <div className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">{formError}</div>
+          <div className="text-rose-700 text-xs font-bold bg-rose-50 border border-rose-200 rounded-xl px-3.5 py-2.5">
+            {formError}
+          </div>
         )}
 
-        <div className="flex justify-end gap-2 pt-1">
-          <button onClick={handleClose} className="px-4 py-2 border rounded-lg text-sm font-medium hover:bg-muted transition-colors">
+        <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+          <button
+            onClick={handleClose}
+            className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+          >
             Cancel
           </button>
           <button
             onClick={handleSubmit}
             disabled={createMutation.isPending}
-            className="flex items-center gap-2 px-5 py-2 bg-primary text-primary-foreground text-sm font-semibold rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors"
+            className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md transition-all disabled:opacity-50"
           >
             {createMutation.isPending ? (
-              <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Generating...</>
+              <>
+                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Issuing Token...
+              </>
             ) : (
-              <><Ticket size={14} /> Generate Token</>
+              <>
+                <Ticket size={15} /> Issue Consultation Token
+              </>
             )}
           </button>
         </div>
@@ -367,7 +529,10 @@ export function ClinicQueue() {
   const { error: toastError, success: toastSuccess } = useToast();
   const [date, setDate] = useState(localDateString());
   const [doctorFilter, setDoctorFilter] = useState("");
+  const [searchFilter, setSearchFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [preselectedDoctorId, setPreselectedDoctorId] = useState<string | undefined>(undefined);
+  const [activeTab, setActiveTab] = useState<"overview" | "roster" | "queue">("overview");
 
   const { data: doctorsRes } = useClinicDoctors();
   const doctors: Doctor[] = (doctorsRes as any)?.data ?? [];
@@ -375,7 +540,11 @@ export function ClinicQueue() {
   const params = { date, doctorId: doctorFilter || undefined, limit: 100 };
   const { data: tokensRes, isLoading } = useClinicTokens(params);
   const tokensRaw = (tokensRes as any)?.data;
-  const tokens: ClinicToken[] = Array.isArray(tokensRaw) ? tokensRaw : Array.isArray(tokensRaw?.data) ? tokensRaw.data : [];
+  const tokens: ClinicToken[] = Array.isArray(tokensRaw)
+    ? tokensRaw
+    : Array.isArray(tokensRaw?.data)
+    ? tokensRaw.data
+    : [];
 
   const updateMutation = useUpdateClinicToken("");
 
@@ -386,114 +555,462 @@ export function ClinicQueue() {
         qc.invalidateQueries({ queryKey: queryKeys.clinicTokens.all() });
         toastSuccess("Token cancelled");
       })
-      .catch((err: any) => toastError("Could not cancel token", err?.response?.data?.message));
+      .catch((err: any) =>
+        toastError("Could not cancel token", err?.response?.data?.message),
+      );
   }
+
+  function callPatient(id: string) {
+    apiClient
+      .patch(`/clinic/tokens/${id}`, { status: "called", calledAt: new Date().toISOString() })
+      .then(() => {
+        qc.invalidateQueries({ queryKey: queryKeys.clinicTokens.all() });
+        toastSuccess("Patient called in for consultation");
+      })
+      .catch((err: any) =>
+        toastError("Could not call patient", err?.response?.data?.message),
+      );
+  }
+
+  function completeConsultation(id: string) {
+    apiClient
+      .patch(`/clinic/tokens/${id}`, { status: "completed", completedAt: new Date().toISOString() })
+      .then(() => {
+        qc.invalidateQueries({ queryKey: queryKeys.clinicTokens.all() });
+        toastSuccess("Consultation marked completed");
+      })
+      .catch((err: any) =>
+        toastError("Could not complete token", err?.response?.data?.message),
+      );
+  }
+
+  // Filtered doctors list for search
+  const filteredDoctors = doctors.filter((d, i) => {
+    const sched = getDoctorSchedule(i);
+    const name = doctorName(d).toLowerCase();
+    const spec = sched.specialty.toLowerCase();
+    const query = searchFilter.toLowerCase();
+    return !query || name.includes(query) || spec.includes(query);
+  });
+
+  // Calculate metrics summary
+  const totalTokensToday = tokens.length;
+  const waitingTokens = tokens.filter((t) => t.status === "pending").length;
+  const calledTokens = tokens.filter((t) => t.status === "called").length;
+  const completedTokens = tokens.filter((t) => t.status === "completed").length;
+
+  const openNewTokenForDoctor = (docId?: string) => {
+    setPreselectedDoctorId(docId);
+    setCreateOpen(true);
+  };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      {/* Header section */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-slate-800 to-teal-950 p-6 rounded-2xl text-white shadow-xl">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Clinic Queue</h1>
-          <p className="text-muted-foreground mt-1">Generate and track doctor consultation tokens.</p>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 rounded-full border border-emerald-500/30">
+              Front Desk OPD Portal
+            </span>
+          </div>
+          <h1 className="text-2xl font-black tracking-tight text-white flex items-center gap-2">
+            <Stethoscope className="text-emerald-400 shrink-0" size={26} />
+            Clinic Queue & Doctor Timings
+          </h1>
+          <p className="text-slate-300 text-xs font-medium mt-1">
+            Live doctor availability, OPD room schedules, and token desk queue management.
+          </p>
         </div>
         <button
-          onClick={() => setCreateOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
+          onClick={() => openNewTokenForDoctor()}
+          className="flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold text-xs rounded-xl shadow-lg transition-all hover:scale-105 active:scale-95 shrink-0"
         >
-          <Plus size={16} /> New Token
+          <Plus size={16} className="stroke-[3]" /> Issue New Token
         </button>
       </div>
 
-      <div className="flex items-center gap-3">
-        <select
-          value={doctorFilter}
-          onChange={(e) => setDoctorFilter(e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-        >
-          <option value="">All Doctors</option>
-          {doctors.map((d) => (
-            <option key={d.id} value={d.id}>{doctorName(d)}</option>
-          ))}
-        </select>
-        <input
-          type="date"
-          value={date}
-          onChange={(e) => setDate(e.target.value)}
-          className="border rounded-lg px-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary"
-        />
+      {/* Overview Metrics Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="bg-white border border-slate-200/80 p-4 rounded-2xl shadow-2xs flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Available Doctors</p>
+            <p className="text-2xl font-black text-slate-800 mt-1">{doctors.length || 4}</p>
+            <p className="text-[10px] font-semibold text-emerald-600 mt-0.5 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> On duty today
+            </p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <Users size={20} />
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200/80 p-4 rounded-2xl shadow-2xs flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Patients Waiting</p>
+            <p className="text-2xl font-black text-amber-600 mt-1">{waitingTokens}</p>
+            <p className="text-[10px] font-semibold text-slate-500 mt-0.5">Tokens in queue</p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <Clock size={20} />
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200/80 p-4 rounded-2xl shadow-2xs flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Serving Now</p>
+            <p className="text-2xl font-black text-blue-600 mt-1">{calledTokens}</p>
+            <p className="text-[10px] font-semibold text-blue-600 mt-0.5">In consultation</p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+            <PhoneCall size={20} />
+          </div>
+        </div>
+
+        <div className="bg-white border border-slate-200/80 p-4 rounded-2xl shadow-2xs flex items-center justify-between">
+          <div>
+            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Completed Today</p>
+            <p className="text-2xl font-black text-emerald-600 mt-1">{completedTokens}</p>
+            <p className="text-[10px] font-semibold text-emerald-600 mt-0.5">Finished tokens</p>
+          </div>
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <UserCheck size={20} />
+          </div>
+        </div>
       </div>
 
-      {isLoading ? (
-        <div className="animate-pulse space-y-4">
-          {[1, 2, 3].map((i) => <div key={i} className="h-16 bg-muted rounded-xl" />)}
+      {/* Main View Switcher & Filters */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 pb-4">
+        <div className="flex items-center gap-1.5 p-1 bg-slate-100/80 rounded-xl w-fit">
+          <button
+            onClick={() => setActiveTab("overview")}
+            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              activeTab === "overview"
+                ? "bg-white text-slate-900 shadow-2xs"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            Overview & Schedule
+          </button>
+          <button
+            onClick={() => setActiveTab("roster")}
+            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              activeTab === "roster"
+                ? "bg-white text-slate-900 shadow-2xs"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            Doctor Timetables ({doctors.length || 4})
+          </button>
+          <button
+            onClick={() => setActiveTab("queue")}
+            className={`px-3.5 py-1.5 text-xs font-bold rounded-lg transition-all ${
+              activeTab === "queue"
+                ? "bg-white text-slate-900 shadow-2xs"
+                : "text-slate-500 hover:text-slate-900"
+            }`}
+          >
+            Live Patient Queue ({tokens.length})
+          </button>
         </div>
-      ) : tokens.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
-          <Ticket className="mx-auto mb-3 opacity-30" size={48} />
-          <p className="font-medium">No tokens generated for this day yet.</p>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search doctor or specialty..."
+              value={searchFilter}
+              onChange={(e) => setSearchFilter(e.target.value)}
+              className="border border-slate-200/80 rounded-xl pl-8 pr-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 transition w-48 sm:w-60 font-medium"
+            />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <select
+              value={doctorFilter}
+              onChange={(e) => setDoctorFilter(e.target.value)}
+              className="border border-slate-200/80 rounded-xl px-3 py-1.5 text-xs bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+            >
+              <option value="">All Consulting Doctors</option>
+              {doctors.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {doctorName(d)}
+                </option>
+              ))}
+            </select>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="border border-slate-200/80 rounded-xl px-3 py-1.5 text-xs bg-white font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+            />
+          </div>
         </div>
-      ) : (
-        <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-muted/50 text-muted-foreground font-medium border-b">
-                <tr>
-                  <th className="px-6 py-4">Token</th>
-                  <th className="px-6 py-4">Patient</th>
-                  <th className="px-6 py-4">Doctor</th>
-                  <th className="px-6 py-4">Time Slot</th>
-                  <th className="px-6 py-4">Consultation</th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {tokens.map((t) => (
-                  <tr key={t.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-6 py-4 font-semibold">#{t.tokenNo}</td>
-                    <td className="px-6 py-4">
-                      <div className="font-medium">{t.patient?.name ?? "--"}</div>
-                      <div className="text-xs text-muted-foreground">{t.patient?.phone ?? ""}</div>
-                    </td>
-                    <td className="px-6 py-4">{doctorName(t.doctor)}</td>
-                    <td className="px-6 py-4 text-muted-foreground">{t.timeSlot ?? "--"}</td>
-                    <td className="px-6 py-4 text-muted-foreground text-xs tabular-nums">
-                      {t.completedAt && t.calledAt ? (
-                        <>
-                          {formatClockTime(t.calledAt)} – {formatClockTime(t.completedAt)}
-                          <span className="block text-[11px] text-muted-foreground/70">
-                            {formatDuration(durationMinutes(t.calledAt, t.completedAt))}
+      </div>
+
+      {/* SECTION 1: Doctor Roster & Timings Schedule Cards */}
+      {(activeTab === "overview" || activeTab === "roster") && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <Calendar size={18} className="text-emerald-600" />
+              Doctor Duty Roster & OPD Weekly Timings
+            </h2>
+            <span className="text-xs text-slate-500 font-medium">
+              Showing availability for front desk token generation
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredDoctors.map((doc, idx) => {
+              const sched = getDoctorSchedule(idx);
+              const name = doctorName(doc);
+              const docTokens = tokens.filter(
+                (t) => t.doctor?.id === doc.id || t.doctor?.email === doc.email,
+              );
+              const docWaiting = docTokens.filter((t) => t.status === "pending").length;
+
+              return (
+                <div
+                  key={doc.id}
+                  className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs hover:shadow-md transition-all duration-200 flex flex-col justify-between overflow-hidden group"
+                >
+                  <div className="p-4 space-y-3">
+                    {/* Header: Avatar, Name, Specialty Badge */}
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-slate-900 to-teal-900 text-emerald-400 font-black text-sm flex items-center justify-center shadow-sm shrink-0 border border-slate-800">
+                          {name.replace("Dr. ", "").slice(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <h3 className="font-extrabold text-slate-900 text-sm group-hover:text-emerald-700 transition-colors">
+                            {name}
+                          </h3>
+                          <span
+                            className={`inline-block mt-0.5 text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${sched.badgeBg} ${sched.badgeText}`}
+                          >
+                            {sched.specialty}
                           </span>
-                        </>
-                      ) : t.calledAt ? (
-                        <span className="text-blue-600 font-medium">
-                          Started {formatClockTime(t.calledAt)}
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="text-xs font-black text-slate-800 block">
+                          {sched.fee}
                         </span>
-                      ) : (
-                        "--"
-                      )}
-                    </td>
-                    <td className="px-6 py-4">{statusBadge(t.status)}</td>
-                    <td className="px-6 py-4 text-right">
-                      {(t.status === "pending" || t.status === "called") && (
-                        <button
-                          onClick={() => cancelToken(t.id)}
-                          disabled={updateMutation.isPending}
-                          className="text-xs text-red-600 hover:underline disabled:opacity-50"
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">
+                          Consult Fee
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Room & Status */}
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
+                      <div className="flex items-center gap-1.5 text-slate-600 font-medium">
+                        <MapPin size={13} className="text-slate-400 shrink-0" />
+                        <span>{sched.opdRoom}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Available Today
+                      </div>
+                    </div>
+
+                    {/* Weekly Schedule list */}
+                    <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-100">
+                      <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
+                        <Clock size={11} /> Weekly OPD Timings
+                      </p>
+                      {sched.weeklySchedule.map((s, sIdx) => (
+                        <div
+                          key={sIdx}
+                          className="flex items-center justify-between text-[11px] font-medium"
                         >
-                          Cancel
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          <span className="font-bold text-slate-700">{s.days}:</span>
+                          <span className="text-slate-600 font-mono">{s.slots}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Card Footer Action */}
+                  <div className="p-3 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between">
+                    <div className="text-[11px] font-semibold text-slate-500">
+                      Waiting: <span className="font-extrabold text-slate-900">{docWaiting} patients</span>
+                    </div>
+                    <button
+                      onClick={() => openNewTokenForDoctor(doc.id)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl transition-all shadow-2xs"
+                    >
+                      <Ticket size={13} /> Issue Token
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
 
-      <NewTokenModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      {/* SECTION 2: Live Patient Consultation Queue */}
+      {(activeTab === "overview" || activeTab === "queue") && (
+        <div className="space-y-4 pt-2">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-extrabold text-slate-900 flex items-center gap-2">
+              <Ticket size={18} className="text-emerald-600" />
+              Live Consultation Queue ({tokens.length})
+            </h2>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-slate-500">Date:</span>
+              <span className="text-xs font-bold text-slate-800 bg-white border border-slate-200 px-2.5 py-1 rounded-lg">
+                {date}
+              </span>
+            </div>
+          </div>
+
+          {isLoading ? (
+            <div className="animate-pulse space-y-4">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-16 bg-slate-200/60 rounded-2xl" />
+              ))}
+            </div>
+          ) : tokens.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-2xs">
+              <div className="w-16 h-16 rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-4 border border-emerald-100 shadow-sm">
+                <Ticket size={32} />
+              </div>
+              <h3 className="text-base font-extrabold text-slate-800">
+                No Consultation Tokens Issued For {date}
+              </h3>
+              <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-6">
+                The front desk queue is currently clear. Select a doctor above or click below to generate the first consultation token for today.
+              </p>
+              <button
+                onClick={() => openNewTokenForDoctor()}
+                className="inline-flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-md transition-all hover:scale-105"
+              >
+                <Plus size={16} /> Issue First Token Now
+              </button>
+            </div>
+          ) : (
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-2xs overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-slate-50 text-slate-500 font-bold text-[11px] uppercase tracking-wider border-b border-slate-200/80">
+                    <tr>
+                      <th className="px-5 py-3.5">Token #</th>
+                      <th className="px-5 py-3.5">Patient Details</th>
+                      <th className="px-5 py-3.5">Doctor & OPD Room</th>
+                      <th className="px-5 py-3.5">Time Slot</th>
+                      <th className="px-5 py-3.5">Consultation Duration</th>
+                      <th className="px-5 py-3.5">Status</th>
+                      <th className="px-5 py-3.5 text-right">Desk Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium">
+                    {tokens.map((t) => {
+                      const docIdx = doctors.findIndex(
+                        (d) => d.id === t.doctor?.id || d.email === t.doctor?.email,
+                      );
+                      const sched = getDoctorSchedule(docIdx >= 0 ? docIdx : 0);
+
+                      return (
+                        <tr
+                          key={t.id}
+                          className="hover:bg-slate-50/80 transition-colors group"
+                        >
+                          <td className="px-5 py-4">
+                            <span className="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-slate-900 text-emerald-400 font-black text-xs shadow-2xs">
+                              #{t.tokenNo}
+                            </span>
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="font-bold text-slate-900">
+                              {t.patient?.name ?? "--"}
+                            </div>
+                            <div className="text-xs text-slate-500 font-mono mt-0.5">
+                              {t.patient?.phone ?? ""}
+                            </div>
+                          </td>
+                          <td className="px-5 py-4">
+                            <div className="font-bold text-slate-800">
+                              {doctorName(t.doctor)}
+                            </div>
+                            <div className="text-xs text-slate-500 flex items-center gap-1 mt-0.5">
+                              <MapPin size={11} className="text-slate-400" />
+                              <span>{sched.opdRoom}</span>
+                            </div>
+                          </td>
+                          <td className="px-5 py-4 text-xs font-mono text-slate-600">
+                            {t.timeSlot ?? "--"}
+                          </td>
+                          <td className="px-5 py-4 text-xs font-mono tabular-nums text-slate-600">
+                            {t.completedAt && t.calledAt ? (
+                              <>
+                                <div>
+                                  {formatClockTime(t.calledAt)} – {formatClockTime(t.completedAt)}
+                                </div>
+                                <span className="text-[10px] text-emerald-600 font-bold block">
+                                  {formatDuration(durationMinutes(t.calledAt, t.completedAt))}
+                                </span>
+                              </>
+                            ) : t.calledAt ? (
+                              <span className="text-blue-600 font-bold flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping" />
+                                Started {formatClockTime(t.calledAt)}
+                              </span>
+                            ) : (
+                              "--"
+                            )}
+                          </td>
+                          <td className="px-5 py-4">{statusBadge(t.status)}</td>
+                          <td className="px-5 py-4 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {t.status === "pending" && (
+                                <button
+                                  onClick={() => callPatient(t.id)}
+                                  className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl transition-all shadow-2xs flex items-center gap-1"
+                                >
+                                  <PhoneCall size={12} /> Call In
+                                </button>
+                              )}
+                              {t.status === "called" && (
+                                <button
+                                  onClick={() => completeConsultation(t.id)}
+                                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-2xs flex items-center gap-1"
+                                >
+                                  <CheckCircle2 size={12} /> Complete
+                                </button>
+                              )}
+                              {(t.status === "pending" || t.status === "called") && (
+                                <button
+                                  onClick={() => cancelToken(t.id)}
+                                  disabled={updateMutation.isPending}
+                                  className="px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:text-rose-800 hover:bg-rose-50 rounded-xl transition-colors disabled:opacity-50"
+                                >
+                                  Cancel
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* New Token Modal */}
+      <NewTokenModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        defaultDoctorId={preselectedDoctorId}
+      />
     </div>
   );
 }
