@@ -11,12 +11,6 @@ interface GeneratePdfJobData {
   invoiceId: string;
 }
 
-const BLUE = "#1d4ed8";
-const GRAY = "#64748b";
-const LIGHT = "#f8fafc";
-const BLACK = "#0f172a";
-const DIVIDER = "#e2e8f0";
-
 function rupee(v: string | number | null | undefined): string {
   const n = Number(v ?? 0);
   return `Rs. ${n.toFixed(2)}`;
@@ -84,14 +78,18 @@ export class InvoicePdfWorker {
     }
   }
 
+  // ════════════════════════════════════════════════════════════════════════════
+  //  Cash Memo PDF — matches traditional Radha Madhav Medical Hall layout
+  //  Columns: Qty | Particulars | Batch No. | Mfg. | Exp. | SCH | MRP | Amount
+  // ════════════════════════════════════════════════════════════════════════════
   private buildPdf(invoice: any, branch: any): Promise<Buffer> {
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({
         size: "A4",
-        margin: 40,
+        margin: 30,
         bufferPages: true,
         info: {
-          Title: `Tax Invoice ${invoice.invoiceNo}`,
+          Title: `Cash Memo ${invoice.invoiceNo}`,
           Author: branch?.name ?? "PharmERP",
         },
       });
@@ -101,340 +99,304 @@ export class InvoicePdfWorker {
       doc.on("end", () => resolve(Buffer.concat(buffers)));
       doc.on("error", reject);
 
-      const PW = doc.page.width - 80; // usable width
-      const ML = 40;
-      const PAGE_BOTTOM = doc.page.height - 60; // reserve space for footer
+      const ML = 30;
+      const PW = doc.page.width - ML * 2;
+      const PAGE_BOTTOM = doc.page.height - 50;
+      const BORDER = "#333333";
+      const TXT = "#111111";
+      const LABEL = "#555555";
 
-      // Helper: check if we need a new page and return current Y
-      const ensureSpace = (needed: number, currentY: number): number => {
-        if (currentY + needed > PAGE_BOTTOM) {
-          doc.addPage();
-          return 50; // top margin on new page
-        }
-        return currentY;
+      // ══════════════════════════════════════════════════════════════════════
+      //  OUTER BORDER (double-line)
+      // ══════════════════════════════════════════════════════════════════════
+      doc.rect(ML, 20, PW, doc.page.height - 40)
+        .strokeColor(BORDER).lineWidth(1.5).stroke();
+      doc.rect(ML + 3, 23, PW - 6, doc.page.height - 46)
+        .strokeColor(BORDER).lineWidth(0.5).stroke();
+
+      // ══════════════════════════════════════════════════════════════════════
+      //  HEADER — Shop Name, Subtitle, Address
+      // ══════════════════════════════════════════════════════════════════════
+      let y = 32;
+
+      doc.font("Helvetica-Bold").fontSize(16).fillColor(TXT)
+        .text(branch?.name ?? "RADHA MADHAV MEDICAL HALL", ML, y, {
+          width: PW, align: "center", lineBreak: false,
+        });
+      y += 20;
+
+      doc.font("Helvetica-Bold").fontSize(9).fillColor(LABEL)
+        .text("CHEMIST & DRUGGIST", ML, y, {
+          width: PW, align: "center", lineBreak: false,
+        });
+      y += 13;
+
+      const addressParts = [branch?.address, branch?.state].filter(Boolean).join(", ");
+      if (addressParts) {
+        doc.font("Helvetica").fontSize(8).fillColor(TXT)
+          .text(addressParts, ML, y, {
+            width: PW, align: "center", lineBreak: false,
+          });
+        y += 12;
+      }
+
+      const contactParts = [branch?.phone, branch?.email].filter(Boolean).join("  |  ");
+      if (contactParts) {
+        doc.font("Helvetica").fontSize(7.5).fillColor(LABEL)
+          .text(contactParts, ML, y, {
+            width: PW, align: "center", lineBreak: false,
+          });
+        y += 11;
+      }
+
+      // Divider
+      y += 2;
+      doc.moveTo(ML + 8, y).lineTo(ML + PW - 8, y)
+        .strokeColor(BORDER).lineWidth(1).stroke();
+      y += 6;
+
+      // ── CASH MEMO title ──
+      doc.font("Helvetica-Bold").fontSize(12).fillColor(TXT)
+        .text("CASH MEMO", ML, y, {
+          width: PW, align: "center", lineBreak: false,
+        });
+      y += 18;
+
+      doc.moveTo(ML + 8, y).lineTo(ML + PW - 8, y)
+        .strokeColor(BORDER).lineWidth(0.5).stroke();
+      y += 8;
+
+      // ══════════════════════════════════════════════════════════════════════
+      //  META FIELDS — Memo No, Patient Name, Dr., Date
+      // ══════════════════════════════════════════════════════════════════════
+      const metaLeft = ML + 12;
+      const metaRight = ML + PW * 0.55;
+      const metaValLeft = metaLeft + 85;
+      const metaValRight = metaRight + 45;
+      const lineH = 14;
+
+      const metaField = (label: string, value: string, x: number, valX: number, yPos: number) => {
+        doc.font("Helvetica-Bold").fontSize(8).fillColor(LABEL)
+          .text(label, x, yPos, { lineBreak: false });
+        doc.font("Helvetica").fontSize(8.5).fillColor(TXT)
+          .text(value, valX, yPos, { lineBreak: false });
       };
 
-      // ── Header band ──────────────────────────────────────────────────────
-      doc.rect(ML, 30, PW, 70).fill(BLUE);
+      metaField("Memo No.:", invoice.invoiceNo, metaLeft, metaValLeft, y);
+      metaField("Date:", dateStr(invoice.createdAt), metaRight, metaValRight, y);
+      y += lineH;
 
-      doc
-        .fillColor("white")
-        .fontSize(18)
-        .font("Helvetica-Bold")
-        .text(branch?.name ?? "PharmERP", ML + 12, 44, { width: PW * 0.55, lineBreak: false });
-
-      doc
-        .fontSize(8)
-        .font("Helvetica")
-        .text(branch?.address ?? "", ML + 12, 64, { width: PW * 0.55, lineBreak: false })
-        .text(
-          [branch?.phone, branch?.email].filter(Boolean).join("  |  "),
-          ML + 12,
-          74,
-          { width: PW * 0.55, lineBreak: false },
-        );
-
-      doc
-        .fontSize(16)
-        .font("Helvetica-Bold")
-        .fillColor("white")
-        .text("TAX INVOICE", ML + PW * 0.58, 42, {
-          width: PW * 0.42,
-          align: "right",
-          lineBreak: false,
-        });
-
-      doc.fillColor(BLACK);
-
-      // ── GSTIN / License row ───────────────────────────────────────────────
-      let gstnY = 104;
-      if (branch?.gstin || branch?.drugLicense20B) {
-        doc
-          .fontSize(7)
-          .font("Helvetica")
-          .fillColor(GRAY);
-        const parts: string[] = [];
-        if (branch?.gstin) parts.push(`GSTIN: ${branch.gstin}`);
-        if (branch?.drugLicense20B) parts.push(`DL 20B: ${branch.drugLicense20B}`);
-        if (branch?.drugLicense21B) parts.push(`DL 21B: ${branch.drugLicense21B}`);
-        doc.text(parts.join("   |   "), ML, gstnY, { width: PW, lineBreak: false });
-        gstnY += 10;
-      }
-
-      // ── Invoice meta box ─────────────────────────────────────────────────
-      const metaY = gstnY + 4;
-      doc.rect(ML, metaY, PW, 58).strokeColor(DIVIDER).lineWidth(1).stroke();
-
-      // Left: patient info
-      const col1X = ML + 10;
-      const col2X = ML + PW * 0.5 + 10;
-
-      doc
-        .fontSize(7.5)
-        .font("Helvetica-Bold")
-        .fillColor(GRAY)
-        .text("BILLED TO", col1X, metaY + 8, { lineBreak: false });
-
-      doc
-        .fontSize(9)
-        .font("Helvetica-Bold")
-        .fillColor(BLACK)
-        .text(invoice.patient?.name ?? "Walk-in Customer", col1X, metaY + 18, { lineBreak: false });
-
+      metaField("Patient Name:", invoice.patient?.name ?? "Walk-in Customer", metaLeft, metaValLeft, y);
       if (invoice.patient?.phone) {
-        doc
-          .fontSize(8)
-          .font("Helvetica")
-          .fillColor(GRAY)
-          .text(`Ph: ${invoice.patient.phone}`, col1X, metaY + 29, { lineBreak: false });
+        metaField("Ph:", invoice.patient.phone, metaRight, metaValRight, y);
       }
+      y += lineH;
 
       if (invoice.patient?.address) {
-        doc
-          .fontSize(7.5)
-          .text(invoice.patient.address, col1X, metaY + 39, {
-            width: PW * 0.45,
-            lineBreak: false,
-          });
+        metaField("Address:", invoice.patient.address, metaLeft, metaValLeft, y);
+        y += lineH;
       }
 
-      // Right: invoice details
-      const fieldLabel = (label: string, value: string, y: number) => {
-        doc
-          .font("Helvetica-Bold")
-          .fontSize(7.5)
-          .fillColor(GRAY)
-          .text(label, col2X, y, { width: 80, align: "left", lineBreak: false });
-        doc
-          .font("Helvetica")
-          .fontSize(8.5)
-          .fillColor(BLACK)
-          .text(value, col2X + 82, y, { width: PW * 0.42, align: "left", lineBreak: false });
+      if (invoice.prescriptionId) {
+        metaField("Prescribed by Dr.:", "As per Rx", metaLeft, metaValLeft, y);
+        y += lineH;
+      }
+
+      y += 4;
+
+      // ══════════════════════════════════════════════════════════════════════
+      //  ITEMS TABLE
+      //  Qty | Particulars | Batch No. | Mfg. | Exp. | SCH | MRP | Amount
+      // ══════════════════════════════════════════════════════════════════════
+      const tblX = ML + 6;
+      const tblW = PW - 12;
+      const cols = [
+        { label: "Qty",         w: tblW * 0.06, align: "center" as const },
+        { label: "Particulars", w: tblW * 0.30, align: "left"   as const },
+        { label: "Batch No.",   w: tblW * 0.12, align: "center" as const },
+        { label: "Mfg.",        w: tblW * 0.10, align: "center" as const },
+        { label: "Exp.",        w: tblW * 0.10, align: "center" as const },
+        { label: "SCH",         w: tblW * 0.07, align: "center" as const },
+        { label: "MRP",         w: tblW * 0.10, align: "right"  as const },
+        { label: "Amount",      w: tblW * 0.15, align: "right"  as const },
+      ];
+
+      // Helper: draws table header row and returns the Y after it
+      const drawTableHeader = (headerY: number) => {
+        doc.rect(tblX, headerY, tblW, 18)
+          .strokeColor(BORDER).lineWidth(0.8).stroke();
+
+        let cx = tblX;
+        cols.forEach((col) => {
+          doc.font("Helvetica-Bold").fontSize(7.5).fillColor(TXT)
+            .text(col.label, cx + 3, headerY + 5, {
+              width: col.w - 6, align: col.align, lineBreak: false,
+            });
+          doc.moveTo(cx, headerY).lineTo(cx, headerY + 18)
+            .strokeColor(BORDER).lineWidth(0.3).stroke();
+          cx += col.w;
+        });
+        doc.moveTo(tblX + tblW, headerY).lineTo(tblX + tblW, headerY + 18)
+          .strokeColor(BORDER).lineWidth(0.3).stroke();
+
+        return headerY + 18;
       };
 
-      fieldLabel("Invoice No:", invoice.invoiceNo, metaY + 8);
-      fieldLabel("Date:", dateStr(invoice.createdAt), metaY + 20);
-      fieldLabel("Status:", (invoice.status ?? "").toUpperCase(), metaY + 32);
-      if (invoice.customerGstin) {
-        fieldLabel("Customer GSTIN:", invoice.customerGstin, metaY + 44);
-      }
+      y = drawTableHeader(y);
 
-      // ── Items table ───────────────────────────────────────────────────────
-      let tableY = metaY + 68;
-      const colWidths = [PW * 0.33, PW * 0.14, PW * 0.1, PW * 0.1, PW * 0.1, PW * 0.1, PW * 0.13];
-      const headers = ["Medicine", "Batch / Expiry", "Qty", "MRP", "GST%", "Tax", "Total"];
-
-      // Table header row
-      doc.rect(ML, tableY, PW, 18).fill(LIGHT);
-      doc.rect(ML, tableY, PW, 18).strokeColor(DIVIDER).lineWidth(0.5).stroke();
-
-      let cx = ML;
-      headers.forEach((h, i) => {
-        doc
-          .font("Helvetica-Bold")
-          .fontSize(7.5)
-          .fillColor(GRAY)
-          .text(h, cx + 4, tableY + 5, {
-            width: colWidths[i]! - 6,
-            align: i >= 2 ? "right" : "left",
-            lineBreak: false,
-          });
-        cx += colWidths[i]!;
-      });
-
-      // Item rows
-      let rowY = tableY + 18;
       const items: any[] = invoice.items ?? [];
+      const ROW_H = 20;
 
-      items.forEach((item: any, idx: number) => {
-        const rowH = 22;
-
-        // Check if there's room; if not, add a page and redraw the table header
-        if (rowY + rowH > PAGE_BOTTOM) {
+      items.forEach((item: any) => {
+        // Page break with header repeat
+        if (y + ROW_H > PAGE_BOTTOM) {
           doc.addPage();
-          rowY = 40;
-
-          // Repeat table header on new page
-          doc.rect(ML, rowY, PW, 18).fill(LIGHT);
-          doc.rect(ML, rowY, PW, 18).strokeColor(DIVIDER).lineWidth(0.5).stroke();
-          let hx = ML;
-          headers.forEach((h, i) => {
-            doc
-              .font("Helvetica-Bold")
-              .fontSize(7.5)
-              .fillColor(GRAY)
-              .text(h, hx + 4, rowY + 5, {
-                width: colWidths[i]! - 6,
-                align: i >= 2 ? "right" : "left",
-                lineBreak: false,
-              });
-            hx += colWidths[i]!;
-          });
-          rowY += 18;
+          doc.rect(ML, 20, PW, doc.page.height - 40)
+            .strokeColor(BORDER).lineWidth(1.5).stroke();
+          doc.rect(ML + 3, 23, PW - 6, doc.page.height - 46)
+            .strokeColor(BORDER).lineWidth(0.5).stroke();
+          y = drawTableHeader(30);
         }
 
-        if (idx % 2 === 0) {
-          doc.rect(ML, rowY, PW, rowH).fill("#ffffff");
-        } else {
-          doc.rect(ML, rowY, PW, rowH).fill(LIGHT);
-        }
-        doc.rect(ML, rowY, PW, rowH).strokeColor(DIVIDER).lineWidth(0.3).stroke();
+        // Row border
+        doc.rect(tblX, y, tblW, ROW_H)
+          .strokeColor(BORDER).lineWidth(0.3).stroke();
 
         const med = item.medicine;
-        const taxAmt =
-          Number(item.cgstAmt ?? 0) +
-          Number(item.sgstAmt ?? 0) +
-          Number(item.igstAmt ?? 0);
+        const batchNo = item.batch?.batchNo ?? "--";
+        const mfgDate = item.batch?.manufacturingDate ? dateStr(item.batch.manufacturingDate) : "--";
+        const expDate = item.batch?.expiryDate ? dateStr(item.batch.expiryDate) : "--";
+        const schedule = med?.schedule ?? "--";
+        const mrp = Number(item.unitPrice ?? 0);
+        const lineTotal = Number(item.lineTotal ?? 0);
 
-        const expiryLabel = item.batch?.expiryDate
-          ? `Exp: ${dateStr(item.batch.expiryDate)}`
-          : "";
-        const batchLabel = item.batch?.batchNo ?? item.batchId?.slice(0, 8) ?? "--";
-
-        const rowCols = [
-          { text: med?.name ?? item.medicineId, align: "left" },
-          { text: `${batchLabel}\n${expiryLabel}`, align: "left" },
-          { text: String(item.quantity), align: "right" },
-          { text: rupee(item.unitPrice), align: "right" },
-          { text: `${item.taxPct ?? 0}%`, align: "right" },
-          { text: rupee(taxAmt), align: "right" },
-          { text: rupee(item.lineTotal), align: "right" },
+        const rowData = [
+          { text: String(item.quantity),     align: "center" as const },
+          { text: med?.name ?? "Medicine",   align: "left"   as const },
+          { text: batchNo,                   align: "center" as const },
+          { text: mfgDate,                   align: "center" as const },
+          { text: expDate,                   align: "center" as const },
+          { text: schedule,                  align: "center" as const },
+          { text: `${mrp.toFixed(2)}`,       align: "right"  as const },
+          { text: `${lineTotal.toFixed(2)}`, align: "right"  as const },
         ];
 
-        cx = ML;
-        rowCols.forEach((col, i) => {
-          doc
-            .font("Helvetica")
-            .fontSize(7.5)
-            .fillColor(BLACK)
-            .text(col.text, cx + 4, rowY + 4, {
-              width: colWidths[i]! - 6,
-              align: col.align as any,
-              lineBreak: false,
+        let cx = tblX;
+        rowData.forEach((cell, i) => {
+          doc.font("Helvetica").fontSize(7).fillColor(TXT)
+            .text(cell.text, cx + 3, y + 6, {
+              width: cols[i]!.w - 6, align: cell.align, lineBreak: false,
             });
-          cx += colWidths[i]!;
+          doc.moveTo(cx, y).lineTo(cx, y + ROW_H)
+            .strokeColor(BORDER).lineWidth(0.3).stroke();
+          cx += cols[i]!.w;
         });
+        doc.moveTo(tblX + tblW, y).lineTo(tblX + tblW, y + ROW_H)
+          .strokeColor(BORDER).lineWidth(0.3).stroke();
 
-        rowY += rowH;
+        y += ROW_H;
       });
 
-      // ── Totals section ────────────────────────────────────────────────────
-      rowY = ensureSpace(100, rowY + 8);
-      const totLineX = ML + PW * 0.58;
-      const totValX = ML + PW * 0.82;
-      const totW = PW * 0.2;
-
-      const totLine = (label: string, value: string, bold = false, color = BLACK) => {
-        rowY = ensureSpace(16, rowY);
-        doc
-          .font(bold ? "Helvetica-Bold" : "Helvetica")
-          .fontSize(bold ? 9 : 8)
-          .fillColor(GRAY)
-          .text(label, totLineX, rowY, { width: PW * 0.22, align: "left", lineBreak: false });
-        doc
-          .font(bold ? "Helvetica-Bold" : "Helvetica")
-          .fontSize(bold ? 9 : 8)
-          .fillColor(color)
-          .text(value, totValX, rowY, { width: totW, align: "right", lineBreak: false });
-        rowY += 14;
-      };
-
-      totLine("Subtotal", rupee(invoice.subtotal));
-      if (Number(invoice.discountAmount) > 0) {
-        totLine("Discount", `- ${rupee(invoice.discountAmount)}`);
+      // Empty rows to fill space (minimum 8 visible rows like a cash memo pad)
+      const emptyNeeded = Math.max(0, 8 - items.length);
+      for (let i = 0; i < emptyNeeded; i++) {
+        if (y + ROW_H > PAGE_BOTTOM) break;
+        doc.rect(tblX, y, tblW, ROW_H)
+          .strokeColor(BORDER).lineWidth(0.3).stroke();
+        let cx = tblX;
+        cols.forEach((col) => {
+          doc.moveTo(cx, y).lineTo(cx, y + ROW_H)
+            .strokeColor(BORDER).lineWidth(0.3).stroke();
+          cx += col.w;
+        });
+        doc.moveTo(tblX + tblW, y).lineTo(tblX + tblW, y + ROW_H)
+          .strokeColor(BORDER).lineWidth(0.3).stroke();
+        y += ROW_H;
       }
+
+      // ══════════════════════════════════════════════════════════════════════
+      //  TOTALS — right-aligned below the table
+      // ══════════════════════════════════════════════════════════════════════
+      y += 4;
+      const totLabelX = tblX + tblW * 0.60;
+      const totValX = tblX + tblW * 0.82;
+      const totValW = tblW * 0.18 - 6;
+
+      const totRow = (label: string, value: string, bold = false) => {
+        doc.font(bold ? "Helvetica-Bold" : "Helvetica")
+          .fontSize(bold ? 9 : 8).fillColor(TXT)
+          .text(label, totLabelX, y, { width: tblW * 0.20, align: "left", lineBreak: false });
+        doc.font(bold ? "Helvetica-Bold" : "Helvetica")
+          .fontSize(bold ? 9 : 8).fillColor(TXT)
+          .text(value, totValX, y, { width: totValW, align: "right", lineBreak: false });
+        y += 13;
+      };
 
       // GST breakdown
       const totalCgst = items.reduce((s: number, i: any) => s + Number(i.cgstAmt ?? 0), 0);
       const totalSgst = items.reduce((s: number, i: any) => s + Number(i.sgstAmt ?? 0), 0);
       const totalIgst = items.reduce((s: number, i: any) => s + Number(i.igstAmt ?? 0), 0);
 
-      if (totalCgst > 0) totLine("CGST", rupee(totalCgst));
-      if (totalSgst > 0) totLine("SGST", rupee(totalSgst));
-      if (totalIgst > 0) totLine("IGST", rupee(totalIgst));
+      if (Number(invoice.discountAmount) > 0) {
+        totRow("Discount:", `- ${rupee(invoice.discountAmount)}`);
+      }
+      if (totalCgst > 0) totRow("CGST:", rupee(totalCgst));
+      if (totalSgst > 0) totRow("SGST:", rupee(totalSgst));
+      if (totalIgst > 0) totRow("IGST:", rupee(totalIgst));
 
-      // Separator
-      doc
-        .moveTo(totLineX, rowY)
-        .lineTo(ML + PW, rowY)
-        .strokeColor(DIVIDER)
-        .lineWidth(0.5)
-        .stroke();
-      rowY += 6;
+      // Line above grand total
+      doc.moveTo(totLabelX, y).lineTo(tblX + tblW - 6, y)
+        .strokeColor(BORDER).lineWidth(0.5).stroke();
+      y += 5;
 
-      totLine("GRAND TOTAL", rupee(invoice.totalAmount), true, BLUE);
-      totLine("Amount Paid", rupee(invoice.amountPaid));
+      totRow("TOTAL:", rupee(invoice.totalAmount), true);
+
       if (Number(invoice.amountDue) > 0) {
-        totLine("Balance Due", rupee(invoice.amountDue), false, "#dc2626");
+        totRow("Paid:", rupee(invoice.amountPaid));
+        totRow("Due:", rupee(invoice.amountDue));
       }
 
-      // ── Payment details ───────────────────────────────────────────────────
-      if (invoice.payments?.length) {
-        rowY = ensureSpace(30, rowY + 8);
-        doc
-          .font("Helvetica-Bold")
-          .fontSize(8)
-          .fillColor(GRAY)
-          .text("Payment Details:", ML, rowY, { lineBreak: false });
-        rowY += 12;
-
-        invoice.payments.forEach((p: any) => {
-          rowY = ensureSpace(14, rowY);
-          doc
-            .font("Helvetica")
-            .fontSize(7.5)
-            .fillColor(BLACK)
-            .text(
-              `${(p.mode ?? "").toUpperCase()}  ${rupee(p.amount)}${p.referenceNo ? `  (Ref: ${p.referenceNo})` : ""}`,
-              ML + 10,
-              rowY,
-              { lineBreak: false },
-            );
-          rowY += 12;
-        });
-      }
-
-      // ── Footer — render on every page ──────────────────────────────────────
+      // ══════════════════════════════════════════════════════════════════════
+      //  FOOTER — GSTIN, DL Nos., Sign of Pharmacist (on every page)
+      // ══════════════════════════════════════════════════════════════════════
       const pages = doc.bufferedPageRange();
-      for (let i = 0; i < pages.count; i++) {
-        doc.switchToPage(i);
+      for (let pg = 0; pg < pages.count; pg++) {
+        doc.switchToPage(pg);
 
-        const footerY = doc.page.height - 50;
-        doc.rect(ML, footerY, PW, 0.5).fill(DIVIDER);
+        const footY = doc.page.height - 46;
 
-        doc
-          .fontSize(7)
-          .font("Helvetica")
-          .fillColor(GRAY)
-          .text(
-            "This is a computer-generated invoice. No signature required.",
-            ML,
-            footerY + 6,
-            { width: PW * 0.6, align: "left", lineBreak: false },
-          );
+        doc.moveTo(ML + 8, footY - 6).lineTo(ML + PW - 8, footY - 6)
+          .strokeColor(BORDER).lineWidth(0.5).stroke();
 
-        doc.text(
-          `Page ${i + 1} of ${pages.count}  •  Generated on ${new Date().toLocaleString("en-IN")}`,
-          ML + PW * 0.4,
-          footerY + 6,
-          { width: PW * 0.6, align: "right", lineBreak: false },
-        );
-      }
+        // Left: GSTIN + DL numbers
+        doc.font("Helvetica").fontSize(6.5).fillColor(LABEL);
+        const footLines: string[] = [];
+        if (branch?.gstin) footLines.push(`GSTIN: ${branch.gstin}`);
+        if (branch?.drugLicense20B) footLines.push(`D.L. No: ${branch.drugLicense20B}`);
+        if (branch?.drugLicense21B) footLines.push(branch.drugLicense21B);
 
-      // Rx stamp on last page if prescription-linked
-      if (invoice.prescriptionId) {
-        doc.switchToPage(pages.count - 1);
-        const rxY = doc.page.height - 38;
-        doc
-          .fontSize(7.5)
-          .font("Helvetica-Bold")
-          .fillColor("#7c3aed")
-          .text(
-            "Rx — Dispensed against verified prescription",
-            ML,
-            rxY,
-            { width: PW, lineBreak: false },
-          );
+        let fy = footY;
+        footLines.forEach((line) => {
+          doc.text(line, ML + 12, fy, { lineBreak: false });
+          fy += 9;
+        });
+
+        // Right: Signature line + label
+        const sigX = ML + PW * 0.65;
+        doc.moveTo(sigX + 10, footY + 10).lineTo(sigX + PW * 0.28, footY + 10)
+          .strokeColor(BORDER).lineWidth(0.5).stroke();
+        doc.font("Helvetica").fontSize(7).fillColor(LABEL)
+          .text("Sign of Pharmacist", sigX, footY + 14, {
+            width: PW * 0.30, align: "center", lineBreak: false,
+          });
+
+        // Page number (only if multi-page)
+        if (pages.count > 1) {
+          doc.font("Helvetica").fontSize(6).fillColor(LABEL)
+            .text(`Page ${pg + 1} of ${pages.count}`, ML, doc.page.height - 28, {
+              width: PW, align: "center", lineBreak: false,
+            });
+        }
       }
 
       doc.end();
