@@ -38,7 +38,9 @@ export function RxPickerModal({ open, onClose, onSelectRx, patientId, patientNam
 
   // Physical prescription log form
   const [doctorName, setDoctorName] = useState("");
+  const [doctorRegNo, setDoctorRegNo] = useState("");
   const [hospitalName, setHospitalName] = useState("");
+  const [physicalRegisterNo, setPhysicalRegisterNo] = useState("");
   const [fileKey, setFileKey] = useState<string | null>(null);
 
   const { data: rxResponse, isLoading } = useQuery({
@@ -77,15 +79,23 @@ export function RxPickerModal({ open, onClose, onSelectRx, patientId, patientNam
         }
       }
 
+      if (!doctorName.trim()) {
+        throw new Error("Doctor Name is required.");
+      }
+      if (!doctorRegNo.trim()) {
+        throw new Error("Doctor Medical Registration Number is required for Schedule H sales.");
+      }
+
       const today = new Date().toISOString().split("T")[0]!;
       const expiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]!;
-      const docName = doctorName.trim() || "External Doctor (Verified on Counter)";
 
       // Step 1: Create prescription record
       const createRes: any = await apiClient.post("/prescriptions", {
         patientId: activePatientId,
-        doctorName: docName,
+        doctorName: doctorName.trim(),
+        doctorRegNo: doctorRegNo.trim(),
         hospitalName: hospitalName.trim() || undefined,
+        physicalRegisterNo: physicalRegisterNo.trim() || undefined,
         issuedDate: today,
         expiryDate: expiry,
         isControlled: true,
@@ -168,20 +178,6 @@ export function RxPickerModal({ open, onClose, onSelectRx, patientId, patientNam
               <span>Log Details / Photo (Optional)</span>
             </button>
           </div>
-
-          {/* Instant 1-Click Pass for Busy Tills */}
-          <Button
-            variant="primary"
-            size="sm"
-            isLoading={createPhysicalRxMutation.isPending}
-            onClick={() => {
-              setDoctorName("External Doctor (Verified on Counter)");
-              createPhysicalRxMutation.mutate();
-            }}
-            className="shadow-md shrink-0 font-extrabold"
-          >
-            ⚡ Quick Verify Physical Rx (1-Click)
-          </Button>
         </div>
 
         {tab === "search" ? (
@@ -297,12 +293,38 @@ export function RxPickerModal({ open, onClose, onSelectRx, patientId, patientNam
 
                   <div className="space-y-1">
                     <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Doctor Reg. No. (MCI / State Council) *
+                    </label>
+                    <input
+                      value={doctorRegNo}
+                      onChange={(e) => setDoctorRegNo(e.target.value)}
+                      placeholder="e.g. WBMC-84920 / MCI-4819"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
                       Hospital / Clinic Name
                     </label>
                     <input
                       value={hospitalName}
                       onChange={(e) => setHospitalName(e.target.value)}
                       placeholder="e.g. City Hospital / Apex Clinic"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Physical Register Serial / Ref No
+                    </label>
+                    <input
+                      value={physicalRegisterNo}
+                      onChange={(e) => setPhysicalRegisterNo(e.target.value)}
+                      placeholder="e.g. SCH-H-2026/0491"
                       className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
                     />
                   </div>

@@ -10,13 +10,28 @@ import { HeaderNotificationsDropdown } from "@/components/shared/header-notifica
 import { useNotificationsSocket } from "@/hooks/use-notifications-socket";
 import { useNavigation } from "@/lib/navigation-context";
 
+import { useState, useEffect } from "react";
+import { GlobalSearchModal } from "@/components/shared/global-search-modal";
+
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { user, logout, accessToken } = useAuthStore();
   const router = useRouter();
   const { navigate } = useNavigation();
+  const [searchOpen, setSearchOpen] = useState(false);
 
   // Initialize real-time Socket.IO notification push listener
   useNotificationsSocket();
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -40,30 +55,31 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
     : "";
 
   return (
-    <header className="glass-header h-16 flex items-center justify-between gap-3 px-4 sm:px-6 shrink-0 z-20">
-      <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
-        <button
-          onClick={onMenuClick}
-          aria-label="Open menu"
-          className="lg:hidden shrink-0 p-2 -ml-2 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-colors"
-        >
-          <Menu size={20} />
-        </button>
-        <Breadcrumbs />
-      </div>
+    <>
+      <header className="glass-header h-16 flex items-center justify-between gap-3 px-4 sm:px-6 shrink-0 z-20">
+        <div className="flex items-center gap-2 min-w-0 flex-1 overflow-hidden">
+          <button
+            onClick={onMenuClick}
+            aria-label="Open menu"
+            className="lg:hidden shrink-0 p-2 -ml-2 rounded-xl hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-colors"
+          >
+            <Menu size={20} />
+          </button>
+          <Breadcrumbs />
+        </div>
 
-      <div className="flex items-center gap-2.5 shrink-0">
-        {/* Quick navigation search indicator button */}
-        <button
-          onClick={() => navigate("/inventory")}
-          className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200/80 bg-slate-50/70 hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-all text-xs font-medium"
-        >
-          <Search size={14} className="text-slate-400" />
-          <span>Quick search inventory...</span>
-          <kbd className="hidden lg:inline-block px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 bg-white border border-slate-200 rounded-md shadow-2xs">
-            Ctrl+K
-          </kbd>
-        </button>
+        <div className="flex items-center gap-2.5 shrink-0">
+          {/* Quick navigation search indicator button */}
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200/80 bg-slate-50/70 hover:bg-slate-100 text-slate-400 hover:text-slate-700 transition-all text-xs font-medium"
+          >
+            <Search size={14} className="text-slate-400" />
+            <span>Quick search inventory...</span>
+            <kbd className="hidden lg:inline-block px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 bg-white border border-slate-200 rounded-md shadow-2xs">
+              Ctrl+K
+            </kbd>
+          </button>
 
         {/* Active branch — renders for super_admin only */}
         <BranchSwitcher />
@@ -98,5 +114,8 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         </button>
       </div>
     </header>
+
+    <GlobalSearchModal open={searchOpen} onClose={() => setSearchOpen(false)} />
+    </>
   );
 }

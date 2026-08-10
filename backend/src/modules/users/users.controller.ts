@@ -147,4 +147,15 @@ export class UsersController {
   ) {
     return this.usersService.reactivateUser(id, caller, reqMeta(req));
   }
+
+  @Post("deactivate-demo-accounts")
+  @Roles(UserRole.SUPER_ADMIN)
+  @UseGuards(NoImpersonationGuard)
+  @ApiOperation({ summary: "Deactivate all default demo accounts prior to go-live" })
+  deactivateDemoAccounts(
+    @CurrentUser() caller: JwtPayload,
+    @Req() req: any,
+  ) {
+    return this.usersService.deactivateDemoAccounts(caller, reqMeta(req));
+  }
 }

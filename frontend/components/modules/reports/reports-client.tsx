@@ -228,9 +228,15 @@ function SalesTab() {
                   cx="50%"
                   cy="50%"
                   outerRadius={70}
-                  label={({ method, percent }) =>
-                    `${method} ${((percent ?? 0) * 100).toFixed(0)}%`
-                  }
+                  label={({ method, percent }) => {
+                    const labelStr =
+                      typeof method === "string"
+                        ? method === "upi"
+                          ? "UPI"
+                          : method.charAt(0).toUpperCase() + method.slice(1).toLowerCase().replace(/_/g, " ")
+                        : String(method ?? "");
+                    return `${labelStr} ${((percent ?? 0) * 100).toFixed(0)}%`;
+                  }}
                   labelLine={false}
                 >
                   {pieRows.map((_, idx) => (

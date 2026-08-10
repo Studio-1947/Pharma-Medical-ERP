@@ -279,9 +279,15 @@ export default function AnalyticsPage() {
                   cx="50%"
                   cy="45%"
                   outerRadius={75}
-                  label={({ method, percent }) =>
-                    `${method} ${(percent * 100).toFixed(0)}%`
-                  }
+                  label={({ method, percent }) => {
+                    const labelStr =
+                      typeof method === "string"
+                        ? method === "upi"
+                          ? "UPI"
+                          : method.charAt(0).toUpperCase() + method.slice(1).toLowerCase().replace(/_/g, " ")
+                        : String(method ?? "");
+                    return `${labelStr} ${(percent * 100).toFixed(0)}%`;
+                  }}
                   labelLine={false}
                 >
                   {paymentRows.map((_: any, i: number) => (

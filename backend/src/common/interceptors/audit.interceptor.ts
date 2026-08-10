@@ -9,6 +9,8 @@ import { tap } from "rxjs/operators";
 import { DrizzleService } from "../../database/drizzle.service";
 import { auditLogs } from "../../database/schema";
 
+import { extractClientIp } from "../utils/client-ip.util";
+
 /**
  * Factory that creates an interceptor writing to audit_logs after each mutating request.
  */
@@ -20,7 +22,7 @@ export function AuditInterceptor(entity: string, action: string) {
     intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
       const req = context.switchToHttp().getRequest();
       const userId: string | undefined = req.user?.sub;
-      const ip: string = req.ip;
+      const ip: string = extractClientIp(req);
       const ua: string = req.headers["user-agent"] ?? "";
 
       return next.handle().pipe(

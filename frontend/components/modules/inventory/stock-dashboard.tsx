@@ -110,9 +110,16 @@ export function StockDashboard() {
                   <div className="flex items-center gap-2">
                     <AlertTriangle
                       size={14}
-                      className={days <= 7 ? "text-red-500" : "text-amber-500"}
+                      className={days <= 7 ? "text-red-500 shrink-0" : "text-amber-500 shrink-0"}
                     />
-                    <span className="font-mono text-xs">{b.batchNo}</span>
+                    <div className="min-w-0">
+                      <p className="font-semibold text-xs text-slate-800 truncate max-w-[180px]">
+                        {(b as any).medicineName ?? (b as any).medicine?.name ?? `Batch ${b.batchNo}`}
+                      </p>
+                      <p className="font-mono text-[10px] text-slate-400">
+                        {b.batchNo}
+                      </p>
+                    </div>
                   </div>
                   <div className="text-right">
                     <span

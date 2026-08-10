@@ -10,6 +10,8 @@ import { PatientsRepository } from "../patients/patients.repository";
 import { S3Service } from "../../common/s3/s3.service";
 import { ClickHouseService } from "../../common/clickhouse/clickhouse.service";
 import { InvoicePdfService } from "./invoice-pdf.service";
+import { AuditService } from "../../common/audit/audit.service";
+import { AuditAction } from "../../common/audit/audit-actions";
 import * as schema from "../../database/schema";
 import type {
   CreateInvoiceDto,
@@ -65,6 +67,7 @@ export class BillingService {
     private readonly s3: S3Service,
     private readonly clickhouse: ClickHouseService,
     private readonly pdfService: InvoicePdfService,
+    private readonly audit?: AuditService,
   ) {}
 
   findAll(query: QueryInvoiceDto) { return this.repo.findPaginated(query); }
@@ -352,7 +355,7 @@ export class BillingService {
         amountPaid: finalTotal.toFixed(2),
         amountDue: "0.00",
         paymentMode: dto.payments.length > 1 ? "mixed" : dto.payments[0]!.mode as any,
-        status: "confirmed",
+        status: "paid",
         notes: dto.notes,
         isOfflineSync: dto.isOfflineSync ?? false,
         isReturn: false,
@@ -395,6 +398,14 @@ export class BillingService {
       }
 
       return { invoice, items: insertedItems, _lines: lines as AllocationLine[] };
+    });
+
+    await this.audit?.writeSafe({
+      actorId: staffId,
+      action: AuditAction.INVOICE_CREATE,
+      entity: "sales_invoice",
+      entityId: result.invoice.id,
+      newValue: { invoiceNo: result.invoice.invoiceNo, totalAmount: result.invoice.totalAmount },
     });
 
     // 7. PDF is generated on first request to /invoices/:id/pdf (synchronous, on-demand)
@@ -461,6 +472,16 @@ export class BillingService {
         }, tx);
       }
     });
+
+    await this.audit?.writeSafe({
+      actorId: userId,
+      action: AuditAction.INVOICE_VOID,
+      entity: "sales_invoice",
+      entityId: id,
+      oldValue: { status: existing.data.status, invoiceNo: existing.data.invoiceNo },
+      newValue: { status: "cancelled", reason: dto.reason },
+    });
+
     return { message: "Invoice voided" };
   }
 

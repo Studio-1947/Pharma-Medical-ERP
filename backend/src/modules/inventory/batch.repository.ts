@@ -37,6 +37,7 @@ export class BatchRepository {
         .select({
           id: schema.inventoryBatches.id,
           medicineId: schema.inventoryBatches.medicineId,
+          medicineName: schema.medicines.name,
           locationId: schema.inventoryBatches.locationId,
           batchNo: schema.inventoryBatches.batchNo,
           expiryDate: schema.inventoryBatches.expiryDate,
@@ -47,6 +48,7 @@ export class BatchRepository {
           createdAt: schema.inventoryBatches.createdAt,
         })
         .from(schema.inventoryBatches)
+        .leftJoin(schema.medicines, eq(schema.inventoryBatches.medicineId, schema.medicines.id))
         .where(where)
         .orderBy(asc(schema.inventoryBatches.expiryDate))
         .limit(params.limit)
@@ -248,6 +250,7 @@ export class BatchRepository {
       .select({
         id: schema.inventoryBatches.id,
         medicineId: schema.inventoryBatches.medicineId,
+        medicineName: schema.medicines.name,
         branchId: schema.inventoryBatches.branchId,
         batchNo: schema.inventoryBatches.batchNo,
         expiryDate: schema.inventoryBatches.expiryDate,
@@ -255,6 +258,7 @@ export class BatchRepository {
         status: schema.inventoryBatches.status,
       })
       .from(schema.inventoryBatches)
+      .leftJoin(schema.medicines, eq(schema.inventoryBatches.medicineId, schema.medicines.id))
       .where(and(...conditions))
       .orderBy(asc(schema.inventoryBatches.expiryDate));
   }

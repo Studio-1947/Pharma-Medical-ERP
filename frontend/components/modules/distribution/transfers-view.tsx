@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -349,7 +349,9 @@ export function TransfersView() {
           </div>
 
           <div className="flex items-center justify-between mt-4 text-sm text-muted-foreground">
-            <span>{meta.total} total &bull; page {meta.page} of {Math.max(1, meta.totalPages)}</span>
+            <span>
+              {meta.total ?? 0} total &bull; page {meta.page || 1} of {Math.max(1, meta.totalPages || 1)}
+            </span>
             <div className="flex gap-2">
               <button
                 disabled={page === 1}
@@ -359,7 +361,7 @@ export function TransfersView() {
                 Prev
               </button>
               <button
-                disabled={page >= meta.totalPages}
+                disabled={page >= (meta.totalPages || 1)}
                 onClick={() => setPage((p) => p + 1)}
                 className="px-3 py-1 border rounded-lg disabled:opacity-40 hover:bg-muted transition-colors"
               >

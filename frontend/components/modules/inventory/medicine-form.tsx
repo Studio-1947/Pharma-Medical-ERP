@@ -79,18 +79,18 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
     setError,
   } = useForm<CreateMedicineDto>({
     resolver: zodResolver(createMedicineSchema),
-    defaultValues: initial as CreateMedicineDto,
+    defaultValues: initial
+      ? (initial as CreateMedicineDto)
+      : ({
+          isActive: true,
+          requiresPrescription: false,
+          isControlled: false,
+          stripSize: 1,
+          reorderLevel: 10,
+          unit: "box",
+        } as any),
   });
 
-  /**
-   * When editing, load the full record rather than trusting the row handed in.
-   *
-   * The medicine list query selects a subset of columns — it has no
-   * composition, categoryId, hsnCode, storageConditions, drawerMapping,
-   * description or reorderQty. Seeding the form from that row and submitting
-   * would blank every one of them, so correcting a spelling mistake quietly
-   * destroyed the rest of the record.
-   */
   const { data: fullRes, isLoading: loadingFull } = useQuery({
     queryKey: queryKeys.medicines.detail(initial?.id ?? ""),
     queryFn: () => apiClient.get(`/inventory/medicines/${initial!.id}`) as Promise<any>,
@@ -103,7 +103,6 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
     if (!d?.id) return;
     reset({
       ...(d as CreateMedicineDto),
-      // Nulls from the API would make the inputs uncontrolled; normalise to "".
       brandName: d.brandName ?? "",
       genericName: d.genericName ?? "",
       composition: d.composition ?? "",
@@ -125,6 +124,13 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
 
   const scheduleVal = watch("scheduleClass");
   const scheduleOption = SCHEDULE_OPTIONS.find((o) => o.value === scheduleVal) ?? SCHEDULE_OPTIONS[0];
+
+  useEffect(() => {
+    if (["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"].includes(scheduleVal ?? "")) {
+      setValue("requiresPrescription", true, { shouldDirty: true });
+      setValue("isControlled", true, { shouldDirty: true });
+    }
+  }, [scheduleVal, setValue]);
 
   const mutation = useMutation({
     mutationFn: (data: CreateMedicineDto) =>

@@ -30,6 +30,10 @@ export const branches = pgTable("branches", {
   isActive: boolean("is_active").notNull().default(true),
   // Drives intra- vs inter-state GST on invoices raised by this branch.
   state: varchar("state", { length: 100 }),
+  gstin: varchar("gstin", { length: 15 }),
+  drugLicense20B: varchar("drug_license_20b", { length: 100 }),
+  drugLicense21B: varchar("drug_license_21b", { length: 100 }),
+  licenseeName: varchar("licensee_name", { length: 255 }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

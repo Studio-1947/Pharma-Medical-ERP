@@ -193,7 +193,7 @@ export function SecuritySettings() {
         <SecurityInfoCard
           icon={<Clock size={18} />}
           title="Session Security"
-          description="Sessions are invalidated on logout. Concurrent sessions are not allowed."
+          description="Sessions are tracked per device and invalidated on logout. Active sessions can be managed from Admin Console."
         />
         <SecurityInfoCard
           icon={<Lock size={18} />}
@@ -203,7 +203,7 @@ export function SecuritySettings() {
         <SecurityInfoCard
           icon={<AlertCircle size={18} />}
           title="Audit Logging"
-          description="All actions are logged with IP address and user identity."
+          description="All financial, inventory, and clinical mutations are logged with client IP address and user identity."
         />
       </div>
 

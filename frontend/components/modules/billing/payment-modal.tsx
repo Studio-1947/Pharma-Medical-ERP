@@ -245,10 +245,8 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading, needsRx
               {/* Quick amount buttons */}
               <div>
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Quick Amount</p>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {QUICK_AMOUNTS.filter((a) => a >= total).slice(0, 3).concat(
-                    QUICK_AMOUNTS.filter((a) => a < total).slice(-3)
-                  ).slice(0, 6).map((amt) => (
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[100, 200, 500, 1000].map((amt) => (
                     <button key={amt} type="button"
                       onClick={() => setCashTendered(String(amt.toFixed(2)))}
                       className={`py-1.5 rounded-lg text-xs font-semibold border transition-all ${
@@ -310,7 +308,8 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading, needsRx
         <div className="px-6 pb-6">
           <button
             onClick={handleConfirm}
-            disabled={loading}
+            disabled={loading || (needsRx && !prescriptionId?.trim())}
+            title={needsRx && !prescriptionId?.trim() ? "Prescription required for Schedule H sales" : undefined}
             className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3.5 rounded-xl font-bold text-base transition-all duration-150 shadow-lg shadow-emerald-500/30 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
           >
             {loading ? (

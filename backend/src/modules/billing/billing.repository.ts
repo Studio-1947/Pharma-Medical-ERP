@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, desc, eq, gte, ilike, inArray, isNull, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import Redis from "ioredis";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
@@ -53,7 +53,14 @@ export class BillingRepository {
     const conditions: any[] = [];
     if (params.patientId) conditions.push(eq(schema.salesInvoices.patientId, params.patientId));
     if (params.staffId) conditions.push(eq(schema.salesInvoices.staffId, params.staffId));
-    if (params.status) conditions.push(eq(schema.salesInvoices.status, params.status as any));
+    if (params.branchId) conditions.push(eq(schema.salesInvoices.branchId, params.branchId));
+    if (params.status) {
+      if (params.status === "paid") {
+        conditions.push(or(eq(schema.salesInvoices.status, "paid"), eq(schema.salesInvoices.status, "confirmed")));
+      } else {
+        conditions.push(eq(schema.salesInvoices.status, params.status as any));
+      }
+    }
     if (params.search) conditions.push(ilike(schema.salesInvoices.invoiceNo, `%${params.search}%`));
     if (params.from) conditions.push(gte(schema.salesInvoices.createdAt, new Date(params.from)));
     if (params.to) {
@@ -65,12 +72,41 @@ export class BillingRepository {
 
     const where = conditions.length ? and(...conditions) : undefined;
     const [items, [countRow]] = await Promise.all([
-      this.db.select().from(schema.salesInvoices).where(where)
+      this.db
+        .select({
+          id: schema.salesInvoices.id,
+          invoiceNo: schema.salesInvoices.invoiceNo,
+          patientId: schema.salesInvoices.patientId,
+          patientName: schema.patients.name,
+          staffId: schema.salesInvoices.staffId,
+          branchId: schema.salesInvoices.branchId,
+          subtotal: schema.salesInvoices.subtotal,
+          discountAmount: schema.salesInvoices.discountAmount,
+          taxAmount: schema.salesInvoices.taxAmount,
+          totalAmount: schema.salesInvoices.totalAmount,
+          amountPaid: schema.salesInvoices.amountPaid,
+          amountDue: schema.salesInvoices.amountDue,
+          paymentMode: schema.salesInvoices.paymentMode,
+          status: schema.salesInvoices.status,
+          createdAt: schema.salesInvoices.createdAt,
+        })
+        .from(schema.salesInvoices)
+        .leftJoin(schema.patients, eq(schema.salesInvoices.patientId, schema.patients.id))
+        .where(where)
         .orderBy(desc(schema.salesInvoices.createdAt))
-        .limit(params.limit).offset((params.page - 1) * params.limit),
+        .limit(params.limit)
+        .offset((params.page - 1) * params.limit),
       this.db.select({ count: sql<number>`count(*)::int` }).from(schema.salesInvoices).where(where),
     ]);
-    return { data: items, meta: { page: params.page, limit: params.limit, total: countRow?.count ?? 0, totalPages: Math.ceil((countRow?.count ?? 0) / params.limit) } };
+    return {
+      data: items,
+      meta: {
+        page: params.page,
+        limit: params.limit,
+        total: countRow?.count ?? 0,
+        totalPages: Math.ceil((countRow?.count ?? 0) / params.limit),
+      },
+    };
   }
 
   async findById(id: string) {

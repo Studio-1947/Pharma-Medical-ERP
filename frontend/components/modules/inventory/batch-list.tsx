@@ -743,6 +743,7 @@ export function BatchList({ medicineId, medicine }: Props) {
             <table className="w-full text-sm">
               <thead className="bg-muted text-muted-foreground">
                 <tr>
+                  {!medicineId && <th className="text-left px-4 py-3 font-medium">Medicine</th>}
                   <th className="text-left px-4 py-3 font-medium">Batch No</th>
                   <th className="text-left px-4 py-3 font-medium">Expiry</th>
                   <th className="text-right px-4 py-3 font-medium">Qty</th>
@@ -754,10 +755,15 @@ export function BatchList({ medicineId, medicine }: Props) {
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {(data as any).data?.map((b: Batch) => {
+                {(data as any).data?.map((b: any) => {
                   const exp = expiryLabel(b.expiryDate);
                   return (
                     <tr key={b.id} className="hover:bg-muted/50 transition-colors">
+                      {!medicineId && (
+                        <td className="px-4 py-3 font-semibold text-slate-800 text-xs truncate max-w-[200px]">
+                          {b.medicineName ?? b.medicine?.name ?? `ID: ${b.medicineId.slice(0, 8)}…`}
+                        </td>
+                      )}
                       <td className="px-4 py-3 font-mono text-xs">{b.batchNo}</td>
                       <td className="px-4 py-3 text-xs">
                         {new Date(b.expiryDate).toLocaleDateString("en-IN")}

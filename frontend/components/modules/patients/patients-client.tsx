@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
-import { UserPlus, Search, Edit2, Trash2, Phone, Calendar, Star } from "lucide-react";
+import { UserPlus, Search, Edit2, Trash2, Phone, Calendar, Star, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
 
@@ -52,12 +52,91 @@ const inputCls =
 
 const labelCls = "block text-xs font-semibold text-slate-600 mb-1";
 
+function PatientHistoryModal({ patient, onClose }: { patient: Patient | null; onClose: () => void }) {
+  if (!patient) return null;
+
+  const { data: invoicesRes, isLoading: loadingInvoices } = useQuery({
+    queryKey: ["patient-invoices", patient.id],
+    queryFn: () => apiClient.get("/billing/invoices", { params: { patientId: patient.id, limit: 10 } }),
+  });
+
+  const invoices: any[] = (invoicesRes as any)?.data ?? [];
+
+  return (
+    <Modal
+      title={`Patient Profile — ${patient.name}`}
+      subtitle={`Phone: ${patient.phone} • Loyalty Points: ${patient.loyaltyPoints ?? 0}`}
+      open={!!patient}
+      onClose={onClose}
+      size="lg"
+    >
+      <div className="p-6 space-y-6">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
+          <div>
+            <span className="text-slate-400 block font-semibold uppercase">Blood Group</span>
+            <span className="font-bold text-slate-800">{patient.bloodGroup ?? "N/A"}</span>
+          </div>
+          <div>
+            <span className="text-slate-400 block font-semibold uppercase">Gender</span>
+            <span className="font-bold text-slate-800 capitalize">{patient.gender ?? "N/A"}</span>
+          </div>
+          <div>
+            <span className="text-slate-400 block font-semibold uppercase">Loyalty Balance</span>
+            <span className="font-bold text-yellow-700">{patient.loyaltyPoints ?? 0} pts</span>
+          </div>
+          <div>
+            <span className="text-slate-400 block font-semibold uppercase">Outstanding</span>
+            <span className="font-bold text-slate-800">₹{parseFloat(patient.outstandingBalance ?? "0").toFixed(2)}</span>
+          </div>
+        </div>
+
+        <div>
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Dispensing & Billing History</h4>
+          {loadingInvoices ? (
+            <p className="text-xs text-slate-400 py-4 text-center">Loading sales history...</p>
+          ) : invoices.length === 0 ? (
+            <p className="text-xs text-slate-400 py-4 text-center">No dispensing history for this patient.</p>
+          ) : (
+            <div className="border rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="bg-slate-50 text-slate-500 font-semibold border-b">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Invoice #</th>
+                    <th className="px-3 py-2 text-left">Date</th>
+                    <th className="px-3 py-2 text-right">Amount</th>
+                    <th className="px-3 py-2 text-center">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {invoices.map((inv: any) => (
+                    <tr key={inv.id} className="hover:bg-slate-50">
+                      <td className="px-3 py-2 font-mono font-semibold text-emerald-600">{inv.invoiceNo}</td>
+                      <td className="px-3 py-2 text-slate-600">{inv.createdAt ? format(new Date(inv.createdAt), "dd MMM yyyy") : "--"}</td>
+                      <td className="px-3 py-2 text-right font-bold text-slate-800">₹{parseFloat(inv.totalAmount).toFixed(2)}</td>
+                      <td className="px-3 py-2 text-center capitalize">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${inv.status === "paid" || inv.status === "confirmed" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+                          {inv.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 export function PatientsClient() {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const { success: toastSuccess, error: toastError } = useToast();
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<Patient | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -277,6 +356,13 @@ export function PatientsClient() {
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
+                          onClick={() => setHistoryTarget(patient)}
+                          className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-emerald-600"
+                          title="View patient dispensing history"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => openEdit(patient)}
                           className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-primary"
                           title="Edit patient"
@@ -487,6 +573,8 @@ export function PatientsClient() {
           </div>
         </form>
       </Modal>
+
+      <PatientHistoryModal patient={historyTarget} onClose={() => setHistoryTarget(null)} />
     </div>
   );
 }

@@ -127,17 +127,20 @@ export class InventoryController {
       "Bulk-import medicines from CSV rows — deduplicates by SKU. Rows carrying " +
       "Batch_No/Expiry_Date/Stock also load opening stock into the caller's branch.",
   })
-  bulkImport(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
-    const { rows, branchId } = body as {
+  bulkImport(
+    @Body() body: unknown,
+    @CurrentUser() user: JwtPayload,
+    @Query("dryRun") dryRunQuery?: string,
+  ) {
+    const { rows, branchId, dryRun: dryRunBody } = body as {
       rows: Record<string, string>[];
       branchId?: string;
+      dryRun?: boolean;
     };
-    // A branch user is pinned to their own branch whatever they send, so an
-    // admin of one branch cannot write stock into another's warehouse. Only
-    // super_admin — the one role with no branch of its own, and the one most
-    // likely to run the initial catalogue load — may name the target branch.
+    const isDryRun = dryRunBody === true || dryRunQuery === "true";
     return this.service.bulkImport(rows, user.sub, {
       branchId: resolveBranchScope(user, branchId),
+      dryRun: isDryRun,
     });
   }
 

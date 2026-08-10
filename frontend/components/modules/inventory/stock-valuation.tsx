@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -51,7 +51,7 @@ export function StockValuation() {
   const totalCost = filtered.reduce((s, r) => s + Number(r.costValue), 0);
   const totalMrp = filtered.reduce((s, r) => s + Number(r.mrpValue), 0);
   const totalQty = filtered.reduce((s, r) => s + Number(r.totalQty), 0);
-  const margin = totalCost > 0 ? ((totalMrp - totalCost) / totalCost) * 100 : 0;
+  const margin = totalMrp > 0 ? ((totalMrp - totalCost) / totalMrp) * 100 : 0;
 
   return (
     <div className="space-y-4">
@@ -137,8 +137,8 @@ export function StockValuation() {
             <tbody className="divide-y">
               {filtered.map((r) => {
                 const rowMargin =
-                  r.costValue > 0
-                    ? ((r.mrpValue - r.costValue) / r.costValue) * 100
+                  r.mrpValue > 0
+                    ? ((r.mrpValue - r.costValue) / r.mrpValue) * 100
                     : 0;
                 return (
                   <tr key={r.id} className="hover:bg-muted/50 transition-colors">

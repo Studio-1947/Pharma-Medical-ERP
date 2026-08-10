@@ -132,9 +132,18 @@ export class InventoryRepository {
           stripSize: schema.medicines.stripSize,
           isActive: schema.medicines.isActive,
           createdAt: schema.medicines.createdAt,
+          totalStock: sql<number>`COALESCE(SUM(${schema.inventoryBatches.quantity}), 0)`,
         })
         .from(schema.medicines)
+        .leftJoin(
+          schema.inventoryBatches,
+          and(
+            eq(schema.medicines.id, schema.inventoryBatches.medicineId),
+            eq(schema.inventoryBatches.status, "active"),
+          ),
+        )
         .where(and(...conditions))
+        .groupBy(schema.medicines.id)
         .orderBy(asc(schema.medicines.name))
         .limit(params.limit)
         .offset((params.page - 1) * params.limit),
@@ -666,8 +675,11 @@ export class InventoryRepository {
       : sql``;
 
     const result = await this.db.execute(sql`
-      SELECT m.id, m.name, m.sku, m.reorder_level,
-             COALESCE(SUM(b.quantity), 0)::int AS current_stock
+      SELECT m.id, m.name, m.sku,
+             m.reorder_level AS "reorderLevel",
+             m.reorder_level AS "reorder_level",
+             COALESCE(SUM(b.quantity), 0)::int AS "currentStock",
+             COALESCE(SUM(b.quantity), 0)::int AS "current_stock"
       FROM medicines m
       LEFT JOIN inventory_batches b ON b.medicine_id = m.id
         AND b.status = 'active' AND b.expiry_date > CURRENT_DATE
@@ -675,7 +687,7 @@ export class InventoryRepository {
       WHERE m.is_active = true AND m.deleted_at IS NULL
       GROUP BY m.id
       HAVING COALESCE(SUM(b.quantity), 0) <= m.reorder_level
-      ORDER BY current_stock ASC
+      ORDER BY "current_stock" ASC
     `);
     return { data: this.extractRows(result) };
   }

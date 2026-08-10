@@ -271,13 +271,14 @@ export class InventoryService {
   async bulkImport(
     rawRows: Record<string, string>[],
     userId?: string,
-    opts: { branchId?: string } = {},
+    opts: { branchId?: string; dryRun?: boolean } = {},
   ): Promise<{
     created: number;
     skipped: number;
     batchesCreated: number;
     errors: { row: number; sku: string; reason: string }[];
     warnings: { row: number; sku: string; reason: string }[];
+    dryRun?: boolean;
   }> {
     const errors: { row: number; sku: string; reason: string }[] = [];
     // Rows that imported, but with an unsafe field withheld. Separate from
@@ -569,6 +570,17 @@ export class InventoryService {
           `${stockToLoad.length} rows carry batch and stock data, but the importing user has no ` +
           `branch — medicines were created without opening stock`,
       });
+    }
+
+    if (opts.dryRun) {
+      return {
+        created: toInsert.length,
+        skipped,
+        batchesCreated: stockToLoad.length,
+        errors,
+        warnings,
+        dryRun: true,
+      };
     }
 
     // Medicines and their opening stock go in together. Splitting them would
