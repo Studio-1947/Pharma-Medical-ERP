@@ -3,8 +3,23 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
-import { Building2, MapPin, Phone, Mail, FileText, Plus, Edit2, X, AlertCircle } from "lucide-react";
+import {
+  Building2,
+  MapPin,
+  Phone,
+  Mail,
+  FileText,
+  Plus,
+  Edit2,
+  Trash2,
+  X,
+  AlertCircle,
+  AlertTriangle,
+} from "lucide-react";
 import { apiClient } from "@/lib/api-client";
+import { useAuthStore } from "@/stores/auth.store";
+import { useToast } from "@/components/ui/toast";
+import { Modal } from "@/components/ui/modal";
 
 interface Branch {
   id: string;
@@ -96,7 +111,13 @@ function BranchForm({
   });
 
   return (
-    <form onSubmit={handleSubmit((d) => { setError(null); mutation.mutate(d); })} className="space-y-4">
+    <form
+      onSubmit={handleSubmit((d) => {
+        setError(null);
+        mutation.mutate(d);
+      })}
+      className="space-y-4"
+    >
       <div className="grid grid-cols-2 gap-3">
         <div className="col-span-2 space-y-1">
           <label className="text-xs font-semibold text-gray-700">
@@ -107,7 +128,9 @@ function BranchForm({
             placeholder="Main Branch"
             className={inputCls}
           />
-          {errors.name && <p className="text-xs text-red-500">{errors.name.message}</p>}
+          {errors.name && (
+            <p className="text-xs text-red-500">{errors.name.message}</p>
+          )}
         </div>
 
         <div className="space-y-1">
@@ -119,12 +142,18 @@ function BranchForm({
             placeholder="BRN01"
             className={inputCls}
           />
-          {errors.code && <p className="text-xs text-red-500">{errors.code.message}</p>}
+          {errors.code && (
+            <p className="text-xs text-red-500">{errors.code.message}</p>
+          )}
         </div>
 
         <div className="space-y-1">
           <label className="text-xs font-semibold text-gray-700">State</label>
-          <input {...register("state")} placeholder="Maharashtra" className={inputCls} />
+          <input
+            {...register("state")}
+            placeholder="Maharashtra"
+            className={inputCls}
+          />
         </div>
 
         <div className="col-span-2 space-y-1">
@@ -137,41 +166,79 @@ function BranchForm({
             placeholder="Full address"
             className={`${inputCls} resize-none`}
           />
-          {errors.address && <p className="text-xs text-red-500">{errors.address.message}</p>}
+          {errors.address && (
+            <p className="text-xs text-red-500">{errors.address.message}</p>
+          )}
         </div>
 
         <div className="space-y-1">
           <label className="text-xs font-semibold text-gray-700">Phone</label>
-          <input {...register("phone")} placeholder="+91 98765 43210" className={inputCls} />
+          <input
+            {...register("phone")}
+            placeholder="+91 98765 43210"
+            className={inputCls}
+          />
         </div>
 
         <div className="space-y-1">
           <label className="text-xs font-semibold text-gray-700">Email</label>
-          <input {...register("email")} type="email" placeholder="branch@pharma.com" className={inputCls} />
+          <input
+            {...register("email")}
+            type="email"
+            placeholder="branch@pharma.com"
+            className={inputCls}
+          />
         </div>
 
         <div className="space-y-1">
           <label className="text-xs font-semibold text-gray-700">GSTIN</label>
-          <input {...register("gstin")} placeholder="19ABCDE1234F1Z5" className={inputCls} />
+          <input
+            {...register("gstin")}
+            placeholder="19ABCDE1234F1Z5"
+            className={inputCls}
+          />
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-gray-700">Licensee Name</label>
-          <input {...register("licenseeName")} placeholder="Radha Madhav Medical Hall" className={inputCls} />
+          <label className="text-xs font-semibold text-gray-700">
+            Licensee Name
+          </label>
+          <input
+            {...register("licenseeName")}
+            placeholder="Radha Madhav Medical Hall"
+            className={inputCls}
+          />
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-gray-700">Drug License 20B (Retail)</label>
-          <input {...register("drugLicense20B")} placeholder="WB/CAL/20B/104928" className={inputCls} />
+          <label className="text-xs font-semibold text-gray-700">
+            Drug License 20B (Retail)
+          </label>
+          <input
+            {...register("drugLicense20B")}
+            placeholder="WB/CAL/20B/104928"
+            className={inputCls}
+          />
         </div>
 
         <div className="space-y-1">
-          <label className="text-xs font-semibold text-gray-700">Drug License 21B (Wholesale)</label>
-          <input {...register("drugLicense21B")} placeholder="WB/CAL/21B/104929" className={inputCls} />
+          <label className="text-xs font-semibold text-gray-700">
+            Drug License 21B (Wholesale)
+          </label>
+          <input
+            {...register("drugLicense21B")}
+            placeholder="WB/CAL/21B/104929"
+            className={inputCls}
+          />
         </div>
 
         <div className="col-span-2 flex items-center gap-2">
-          <input {...register("isHeadOffice")} type="checkbox" id="isHeadOffice" className="w-4 h-4" />
+          <input
+            {...register("isHeadOffice")}
+            type="checkbox"
+            id="isHeadOffice"
+            className="w-4 h-4"
+          />
           <label htmlFor="isHeadOffice" className="text-sm text-slate-700">
             This is the head office
           </label>
@@ -198,7 +265,11 @@ function BranchForm({
           disabled={isSubmitting}
           className="flex-1 bg-primary text-primary-foreground py-2 rounded-lg text-sm font-semibold hover:opacity-90 disabled:opacity-60 transition-all"
         >
-          {isSubmitting ? "Saving..." : branch ? "Update Branch" : "Create Branch"}
+          {isSubmitting
+            ? "Saving..."
+            : branch
+            ? "Update Branch"
+            : "Create Branch"}
         </button>
       </div>
     </form>
@@ -208,6 +279,13 @@ function BranchForm({
 export function BranchSettings() {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Branch | null>(null);
+  const [deletingBranch, setDeletingBranch] = useState<Branch | null>(null);
+
+  const { user } = useAuthStore();
+  const { success: toastSuccess, error: toastError } = useToast();
+  const queryClient = useQueryClient();
+
+  const isSuperAdmin = user?.role === "super_admin";
 
   const { data, isLoading } = useQuery<any>({
     queryKey: ["branches"],
@@ -217,6 +295,21 @@ export function BranchSettings() {
 
   const branches: Branch[] = Array.isArray(data) ? data : data?.data ?? [];
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => apiClient.delete(`/branches/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["branches"] });
+      toastSuccess("Branch deleted", "The branch has been removed successfully.");
+      setDeletingBranch(null);
+    },
+    onError: (err: any) => {
+      toastError(
+        "Cannot delete branch",
+        err?.response?.data?.message ?? "Failed to delete branch.",
+      );
+    },
+  });
+
   if (showForm || editing) {
     return (
       <div className="max-w-xl">
@@ -225,7 +318,10 @@ export function BranchSettings() {
             {editing ? `Edit: ${editing.name}` : "New Branch"}
           </h3>
           <button
-            onClick={() => { setShowForm(false); setEditing(null); }}
+            onClick={() => {
+              setShowForm(false);
+              setEditing(null);
+            }}
             className="text-muted-foreground hover:text-foreground"
           >
             <X size={18} />
@@ -233,8 +329,14 @@ export function BranchSettings() {
         </div>
         <BranchForm
           branch={editing ?? undefined}
-          onSuccess={() => { setShowForm(false); setEditing(null); }}
-          onCancel={() => { setShowForm(false); setEditing(null); }}
+          onSuccess={() => {
+            setShowForm(false);
+            setEditing(null);
+          }}
+          onCancel={() => {
+            setShowForm(false);
+            setEditing(null);
+          }}
         />
       </div>
     );
@@ -242,17 +344,21 @@ export function BranchSettings() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <button
-          onClick={() => setShowForm(true)}
-          className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
-        >
-          <Plus size={15} /> Add Branch
-        </button>
-      </div>
+      {isSuperAdmin && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => setShowForm(true)}
+            className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity shadow-sm"
+          >
+            <Plus size={15} /> Add Branch
+          </button>
+        </div>
+      )}
 
       {isLoading && (
-        <div className="text-center py-16 text-muted-foreground">Loading branches...</div>
+        <div className="text-center py-16 text-muted-foreground">
+          Loading branches...
+        </div>
       )}
 
       {!isLoading && branches.length === 0 && (
@@ -262,43 +368,63 @@ export function BranchSettings() {
       )}
 
       {branches.map((branch) => (
-        <div key={branch.id} className="rounded-xl border bg-white p-5 space-y-3">
+        <div
+          key={branch.id}
+          className="rounded-xl border bg-white p-5 space-y-3 shadow-2xs hover:shadow-xs transition-shadow"
+        >
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0">
+              <div className="w-10 h-10 rounded-lg bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0 border border-emerald-100">
                 <Building2 size={18} />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="font-semibold text-slate-800">{branch.name}</h3>
+                  <h3 className="font-semibold text-slate-800">
+                    {branch.name}
+                  </h3>
                   {branch.isHeadOffice && (
-                    <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-semibold rounded">
+                    <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded">
                       HQ
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground font-mono">{branch.code}</p>
+                <p className="text-xs text-muted-foreground font-mono">
+                  {branch.code}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <span
                 className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                  branch.isActive ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
+                  branch.isActive
+                    ? "bg-green-100 text-green-700"
+                    : "bg-red-100 text-red-700"
                 }`}
               >
                 {branch.isActive ? "Active" : "Inactive"}
               </span>
               <button
                 onClick={() => setEditing(branch)}
-                className="p-1.5 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500 hover:text-slate-900 transition-colors"
                 title="Edit branch"
               >
                 <Edit2 size={14} />
               </button>
+
+              {/* Super Admin Delete Option */}
+              {isSuperAdmin && (
+                <button
+                  onClick={() => setDeletingBranch(branch)}
+                  className="p-1.5 rounded-lg hover:bg-rose-50 text-slate-400 hover:text-rose-600 transition-colors"
+                  title="Delete branch (Super Admin only)"
+                >
+                  <Trash2 size={14} />
+                </button>
+              )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm pt-1">
             {branch.address && (
               <div className="flex items-start gap-2 text-slate-600">
                 <MapPin size={13} className="mt-0.5 shrink-0 text-slate-400" />
@@ -323,24 +449,80 @@ export function BranchSettings() {
             {branch.gstin && (
               <div className="flex items-center gap-2 text-slate-600">
                 <FileText size={13} className="shrink-0 text-slate-400" />
-                <span className="text-xs font-mono font-semibold">GSTIN: {branch.gstin}</span>
+                <span className="text-xs font-mono font-semibold">
+                  GSTIN: {branch.gstin}
+                </span>
               </div>
             )}
             {branch.drugLicense20B && (
               <div className="flex items-center gap-2 text-slate-600">
                 <FileText size={13} className="shrink-0 text-slate-400" />
-                <span className="text-xs font-mono">DL 20B: {branch.drugLicense20B}</span>
+                <span className="text-xs font-mono">
+                  DL 20B: {branch.drugLicense20B}
+                </span>
               </div>
             )}
             {branch.drugLicense21B && (
               <div className="flex items-center gap-2 text-slate-600">
                 <FileText size={13} className="shrink-0 text-slate-400" />
-                <span className="text-xs font-mono">DL 21B: {branch.drugLicense21B}</span>
+                <span className="text-xs font-mono">
+                  DL 21B: {branch.drugLicense21B}
+                </span>
               </div>
             )}
           </div>
         </div>
       ))}
+
+      {/* Delete Confirmation Modal for Super Admin */}
+      {deletingBranch && (
+        <Modal
+          title="Delete Branch"
+          subtitle={`Permanently remove "${deletingBranch.name}" (${deletingBranch.code})`}
+          icon={<AlertTriangle size={18} className="text-rose-600" />}
+          open={!!deletingBranch}
+          onClose={() => setDeletingBranch(null)}
+        >
+          <div className="p-6 space-y-4">
+            <p className="text-xs text-slate-600 leading-relaxed">
+              Are you sure you want to delete <strong className="text-slate-900">{deletingBranch.name}</strong>? This action is permanent and restricted to <strong className="text-slate-900">Super Admins</strong>.
+            </p>
+            <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-3 text-[11px] text-amber-800 flex items-start gap-2">
+              <AlertCircle size={14} className="shrink-0 text-amber-600 mt-0.5" />
+              <span>
+                Branches with active stock batches, sales invoices, or assigned staff cannot be hard-deleted to preserve accounting integrity. Deactivate them instead if they have transactions.
+              </span>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setDeletingBranch(null)}
+                className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => deleteMutation.mutate(deletingBranch.id)}
+                disabled={deleteMutation.isPending}
+                className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition-all shadow-sm disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? (
+                  <>
+                    <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={13} /> Delete Branch
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

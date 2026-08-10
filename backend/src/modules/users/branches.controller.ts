@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { BranchesService, UpsertBranchDto } from "./branches.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -73,5 +73,12 @@ export class BranchesController {
   @ApiOperation({ summary: "Reactivate a branch" })
   activate(@Param("id") id: string) {
     return this.service.toggleActive(id, true);
+  }
+
+  @Delete(":id")
+  @Roles(UserRole.SUPER_ADMIN)
+  @ApiOperation({ summary: "Delete a branch (Super Admin only)" })
+  remove(@Param("id") id: string) {
+    return this.service.remove(id);
   }
 }
