@@ -22,12 +22,21 @@ export function GlobalSearchModal({ open, onClose }: Props) {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setQuery("");
-        // Trigger parent state if handled outside
+      }
+      if (e.key === "Escape" && open) {
+        e.preventDefault();
+        onClose();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, []);
+  }, [open, onClose]);
+
+  useEffect(() => {
+    if (!open) {
+      setQuery("");
+    }
+  }, [open]);
 
   const { data: medicinesRes, isLoading: loadingMeds } = useQuery({
     queryKey: ["global-search-meds", debouncedQuery],
@@ -74,7 +83,11 @@ export function GlobalSearchModal({ open, onClose }: Props) {
             className="w-full text-sm bg-transparent font-medium text-slate-800 placeholder:text-slate-400 focus:outline-none"
           />
           {isLoading && <Loader2 size={16} className="animate-spin text-emerald-600 shrink-0" />}
-          <kbd className="px-2 py-0.5 text-[10px] font-bold text-slate-400 bg-slate-100 rounded border border-slate-200 shrink-0">
+          <kbd
+            onClick={onClose}
+            className="px-2 py-0.5 text-[10px] font-bold text-slate-400 hover:text-slate-600 bg-slate-100 hover:bg-slate-200 cursor-pointer rounded border border-slate-200 shrink-0 transition-colors"
+            title="Close search (Esc)"
+          >
             ESC
           </kbd>
         </div>
