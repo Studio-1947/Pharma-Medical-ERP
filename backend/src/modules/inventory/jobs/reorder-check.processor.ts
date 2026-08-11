@@ -60,9 +60,7 @@ export class ReorderCheckProcessor {
       `Reorder check complete — ${total} low-stock lines across ${branches.length} branches, ${raised} new alerts raised`,
     );
 
-    // TODO (Phase 3 / procurement): auto-generate draft POs per branch for each
-    //   low-stock medicine that has a preferred supplier configured.
-
     return { lowStockCount: total, alertsRaised: raised, branches: perBranch };
   }
 }
+
