@@ -29,6 +29,8 @@ import { apiClient } from "@/lib/api-client";
 import { usePermissions } from "@/hooks/use-permissions";
 import { BranchComparison } from "@/components/modules/analytics/branch-comparison";
 
+import { BranchSelect } from "@/components/shared/branch-select";
+
 const PERIOD_OPTIONS = [
   { value: "7d", label: "Last 7 days" },
   { value: "30d", label: "Last 30 days" },
@@ -70,37 +72,39 @@ function fmt(n: number) {
 
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState("30d");
+  const [selectedBranchId, setSelectedBranchId] = useState<string>("");
   const [view, setView] = useState<"overview" | "branches">("overview");
   const { role } = usePermissions();
   const canCompareBranches = role === "super_admin" || role === "admin";
 
   const days = period === "7d" ? 7 : period === "30d" ? 30 : 90;
+  const branchParams = selectedBranchId ? { branchId: selectedBranchId } : {};
 
   const { data: salesData, isLoading: salesLoading, refetch } = useQuery<any>({
-    queryKey: ["analytics-sales", period],
+    queryKey: ["analytics-sales", period, selectedBranchId],
     queryFn: () =>
-      apiClient.get("/reports/sales", { params: { days, groupBy: "day" } }),
+      apiClient.get("/reports/sales", { params: { days, groupBy: "day", ...branchParams } }),
     retry: 1,
   });
 
   const { data: summaryData } = useQuery<any>({
-    queryKey: ["analytics-summary", period],
+    queryKey: ["analytics-summary", period, selectedBranchId],
     queryFn: () =>
-      apiClient.get("/reports/summary", { params: { days } }),
+      apiClient.get("/reports/summary", { params: { days, ...branchParams } }),
     retry: 1,
   });
 
   const { data: topProducts } = useQuery<any>({
-    queryKey: ["analytics-top-products", period],
+    queryKey: ["analytics-top-products", period, selectedBranchId],
     queryFn: () =>
-      apiClient.get("/reports/top-products", { params: { days, limit: 5 } }),
+      apiClient.get("/reports/top-products", { params: { days, limit: 5, ...branchParams } }),
     retry: 1,
   });
 
   const { data: paymentBreakdown } = useQuery<any>({
-    queryKey: ["analytics-payments", period],
+    queryKey: ["analytics-payments", period, selectedBranchId],
     queryFn: () =>
-      apiClient.get("/reports/payment-methods", { params: { days } }),
+      apiClient.get("/reports/payment-methods", { params: { days, ...branchParams } }),
     retry: 1,
   });
 
@@ -131,10 +135,19 @@ export default function AnalyticsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {canCompareBranches && (
+            <div className="w-48">
+              <BranchSelect
+                value={selectedBranchId}
+                onChange={setSelectedBranchId}
+                placeholder="All branches"
+              />
+            </div>
+          )}
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+            className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/40 bg-white"
           >
             {PERIOD_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -144,7 +157,7 @@ export default function AnalyticsPage() {
           </select>
           <button
             onClick={() => refetch()}
-            className="p-2 border rounded-lg hover:bg-muted transition-colors"
+            className="p-2 border rounded-lg bg-white hover:bg-muted transition-colors"
             title="Refresh"
           >
             <RefreshCw size={16} />

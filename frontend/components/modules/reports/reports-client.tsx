@@ -43,36 +43,38 @@ type Tab = "sales" | "purchase" | "compliance";
 
 function SalesTab() {
   const [days, setDays] = useState(30);
+  const [selectedBranchId, setSelectedBranchId] = useState("");
+  const branchParams = selectedBranchId ? { branchId: selectedBranchId } : {};
 
   const { data: summary } = useQuery({
-    queryKey: ["reports-summary", days],
+    queryKey: ["reports-summary", days, selectedBranchId],
     queryFn: () =>
-      apiClient.get("/reports/summary", { params: { days } }) as Promise<{
+      apiClient.get("/reports/summary", { params: { days, ...branchParams } }) as Promise<{
         totalRevenue: number;
         totalInvoices: number;
       }>,
   });
 
   const { data: trend } = useQuery({
-    queryKey: ["reports-sales", days],
+    queryKey: ["reports-sales", days, selectedBranchId],
     queryFn: () =>
-      apiClient.get("/reports/sales", { params: { days } }) as Promise<{
+      apiClient.get("/reports/sales", { params: { days, ...branchParams } }) as Promise<{
         rows: { date: string; revenue: number; invoices: number }[];
       }>,
   });
 
   const { data: topProducts } = useQuery({
-    queryKey: ["reports-top-products", days],
+    queryKey: ["reports-top-products", days, selectedBranchId],
     queryFn: () =>
-      apiClient.get("/reports/top-products", { params: { days, limit: 10 } }) as Promise<{
+      apiClient.get("/reports/top-products", { params: { days, limit: 10, ...branchParams } }) as Promise<{
         rows: { name: string; revenue: number; qty: number }[];
       }>,
   });
 
   const { data: paymentMethods } = useQuery({
-    queryKey: ["reports-payment-methods", days],
+    queryKey: ["reports-payment-methods", days, selectedBranchId],
     queryFn: () =>
-      apiClient.get("/reports/payment-methods", { params: { days } }) as Promise<{
+      apiClient.get("/reports/payment-methods", { params: { days, ...branchParams } }) as Promise<{
         rows: { method: string; amount: number }[];
       }>,
   });
@@ -91,24 +93,50 @@ function SalesTab() {
   const totalInvoices = Number(summary?.totalInvoices ?? 0);
   const avgInvoice = totalInvoices > 0 ? totalRevenue / totalInvoices : 0;
 
+  const handleExportExcel = () => {
+    const query: Record<string, string> = { type: "sales" };
+    if (selectedBranchId) query.branchId = selectedBranchId;
+    const params = new URLSearchParams(query);
+    window.open(`/api/v1/reports/export/excel?${params.toString()}`, "_blank");
+  };
+
   return (
     <div className="space-y-6">
-      {/* Period selector */}
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">Period:</span>
-        {[7, 14, 30, 90].map((d) => (
+      {/* Controls */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Period:</span>
+          {[7, 14, 30, 90].map((d) => (
+            <button
+              key={d}
+              onClick={() => setDays(d)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                days === d
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground hover:bg-muted/80"
+              }`}
+            >
+              {d}d
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="w-52">
+            <BranchSelect
+              value={selectedBranchId}
+              onChange={setSelectedBranchId}
+              placeholder="All branches"
+            />
+          </div>
           <button
-            key={d}
-            onClick={() => setDays(d)}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-              days === d
-                ? "bg-primary text-primary-foreground"
-                : "bg-muted text-muted-foreground hover:bg-muted/80"
-            }`}
+            onClick={handleExportExcel}
+            className="flex items-center gap-1.5 px-3 py-2 border rounded-lg text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors shadow-sm"
           >
-            {d}d
+            <Download size={14} className="text-emerald-600" />
+            Excel (.xlsx)
           </button>
-        ))}
+        </div>
       </div>
 
       {/* KPI cards */}
@@ -259,13 +287,15 @@ function SalesTab() {
 function PurchaseTab() {
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  const [from, setFrom] = useState(thirtyDaysAgo.toISOString().split("T")[0]);
-  const [to, setTo] = useState(new Date().toISOString().split("T")[0]);
+  const [from, setFrom] = useState(thirtyDaysAgo.toISOString().slice(0, 10));
+  const [to, setTo] = useState(new Date().toISOString().slice(0, 10));
+  const [selectedBranchId, setSelectedBranchId] = useState("");
+  const branchParams = selectedBranchId ? { branchId: selectedBranchId } : {};
 
   const { data, isLoading } = useQuery({
-    queryKey: ["reports-purchase", from, to],
+    queryKey: ["reports-purchase", from, to, selectedBranchId],
     queryFn: () =>
-      apiClient.get("/reports/purchase", { params: { from, to } }) as Promise<{
+      apiClient.get("/reports/purchase", { params: { from, to, ...branchParams } }) as Promise<{
         summary: {
           totalOrders: number;
           totalValue: number;
@@ -287,27 +317,57 @@ function PurchaseTab() {
   const summary = data?.summary;
   const rows = data?.rows ?? [];
 
+  const handleExportExcel = () => {
+    const query: Record<string, string> = { type: "purchase", from, to };
+    if (selectedBranchId) query.branchId = selectedBranchId;
+    const params = new URLSearchParams(query);
+    window.open(`/api/v1/reports/export/excel?${params.toString()}`, "_blank");
+  };
+
   return (
     <div className="space-y-6">
-      {/* Date range */}
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-gray-700">From</label>
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          />
+      {/* Date range & controls */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-gray-700">From</label>
+            <input
+              type="date"
+              value={from}
+              onChange={(e) => setFrom(e.target.value)}
+              className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-gray-700">To</label>
+            <input
+              type="date"
+              value={to}
+              onChange={(e) => setTo(e.target.value)}
+              className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+            />
+          </div>
         </div>
-        <div className="space-y-1">
-          <label className="text-xs font-semibold text-gray-700">To</label>
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-          />
+
+        <div className="flex items-center gap-3">
+          <div className="w-52 space-y-1">
+            <label className="text-xs font-semibold text-gray-700">Branch</label>
+            <BranchSelect
+              value={selectedBranchId}
+              onChange={setSelectedBranchId}
+              placeholder="All branches"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold text-transparent block">Export</label>
+            <button
+              onClick={handleExportExcel}
+              className="flex items-center gap-1.5 px-3 py-2 border rounded-lg text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 transition-colors shadow-sm"
+            >
+              <Download size={14} className="text-emerald-600" />
+              Excel (.xlsx)
+            </button>
+          </div>
         </div>
       </div>
 
