@@ -851,4 +851,93 @@ export class ProcurementRepository {
       with: { batch: { with: { medicine: true } } },
     });
   }
+
+  /**
+   * Auto-generate draft Purchase Orders for medicines below reorder level in a branch.
+   */
+  async createDraftPOsFromLowStock(branchId: string, raisedBy: string) {
+    // 1. Get default/first active supplier as fallback
+    const [defaultSupplier] = await this.db
+      .select({ id: schema.suppliers.id })
+      .from(schema.suppliers)
+      .where(and(eq(schema.suppliers.isActive, true), isNull(schema.suppliers.deletedAt)))
+      .limit(1);
+
+    if (!defaultSupplier) {
+      throw new Error("No active suppliers found to generate purchase orders");
+    }
+
+    // 2. Query low stock medicines in branch
+    const lowStockQuery = sql`
+      SELECT 
+        m.id,
+        m.name,
+        m.reorder_level AS "reorderLevel",
+        m.reorder_qty AS "reorderQty",
+        m.purchase_rate AS "purchaseRate",
+        m.price_mrp AS "priceMrp",
+        m.tax_percent AS "taxPercent",
+        COALESCE(SUM(b.quantity), 0) AS current_stock,
+        (
+          SELECT b_sup.supplier_id 
+          FROM ${schema.inventoryBatches} b_sup
+          WHERE b_sup.medicine_id = m.id AND b_sup.supplier_id IS NOT NULL
+          ORDER BY b_sup.created_at DESC LIMIT 1
+        ) AS supplier_id
+      FROM ${schema.medicines} m
+      LEFT JOIN ${schema.inventoryBatches} b 
+        ON b.medicine_id = m.id 
+       AND b.branch_id = ${branchId}::uuid
+       AND b.status = 'active'
+      WHERE m.is_active = true AND m.deleted_at IS NULL
+      GROUP BY m.id, m.name, m.reorder_level, m.reorder_qty, m.purchase_rate, m.price_mrp, m.tax_percent
+      HAVING COALESCE(SUM(b.quantity), 0) <= m.reorder_level
+    `;
+
+    const result = await this.db.execute(lowStockQuery);
+    const lowStockItems = (result as any).rows ?? result ?? [];
+
+    if (lowStockItems.length === 0) {
+      return { createdPOs: [], message: "No medicines currently below reorder level" };
+    }
+
+    // 3. Group by supplierId
+    const itemsBySupplier = new Map<string, any[]>();
+    for (const item of lowStockItems) {
+      const supplierId = item.supplier_id || defaultSupplier.id;
+      if (!itemsBySupplier.has(supplierId)) itemsBySupplier.set(supplierId, []);
+      itemsBySupplier.get(supplierId)!.push(item);
+    }
+
+    const createdPOs: any[] = [];
+
+    // 4. Create draft PO per supplier
+    for (const [supplierId, items] of itemsBySupplier.entries()) {
+      const poData: CreatePurchaseOrderDto & { branchId: string } = {
+        supplierId,
+        branchId,
+        notes: "Auto-generated draft PO from reorder engine",
+        items: items.map((m) => {
+          const qty = Number(m.reorderQty || m.reorder_qty || 50);
+          const unitCost = String(m.purchaseRate || m.purchase_rate || m.priceMrp || m.price_mrp || "100.00");
+          const rawTax = String(m.taxPercent || m.tax_percent || "0");
+          const taxPct = (["0", "5", "12", "18"].includes(rawTax) ? rawTax : "0") as "0" | "5" | "12" | "18";
+          return {
+            medicineId: m.id,
+            orderedQty: qty,
+            unitCost,
+            taxPct,
+            discountPct: "0",
+            schemeFreeQty: 0,
+            isConsignment: false,
+          };
+        }),
+      };
+
+      const po = await this.createPO(poData, raisedBy);
+      createdPOs.push(po);
+    }
+
+    return { createdPOs, message: `Created ${createdPOs.length} draft PO(s) for ${lowStockItems.length} low-stock medicines` };
+  }
 }

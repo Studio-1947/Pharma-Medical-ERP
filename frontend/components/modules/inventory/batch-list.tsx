@@ -2,13 +2,14 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { AlertTriangle, CheckCircle, Clock, Pencil, Plus, X, Camera } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, Pencil, Plus, X, Camera, Barcode } from "lucide-react";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
 import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
 import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
 import { Modal } from "@/components/ui/modal";
+import { BarcodeLabelModal } from "./barcode-label-modal";
 
 interface Batch {
   id: string;
@@ -654,6 +655,7 @@ export function BatchList({ medicineId, medicine }: Props) {
   const [editTarget, setEditTarget] = useState<Batch | null>(null);
   const [adjustTarget, setAdjustTarget] = useState<Batch | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [printLabelBatchId, setPrintLabelBatchId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
   const { success: toastSuccess, warning: toastWarning } = useToast();
@@ -821,6 +823,14 @@ export function BatchList({ medicineId, medicine }: Props) {
                         ) : (
                           <div className="inline-flex items-center gap-2">
                             <button
+                              onClick={() => setPrintLabelBatchId(b.id)}
+                              title="Print 50mm x 25mm barcode shelf sticker"
+                              className="inline-flex items-center gap-1 px-2 py-1 text-xs text-slate-700 bg-slate-100 border border-slate-200 rounded-md hover:bg-slate-200 transition-colors font-medium"
+                            >
+                              <Barcode size={12} />
+                              Label
+                            </button>
+                            <button
                               onClick={() => setAdjustTarget(b)}
                               title="Manual stock adjustment (Household, Loss, Audit)"
                               className="inline-flex items-center gap-1 px-2 py-1 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md hover:bg-amber-100 transition-colors font-medium"
@@ -883,6 +893,14 @@ export function BatchList({ medicineId, medicine }: Props) {
               </button>
             </div>
           </div>
+
+          {printLabelBatchId && (
+            <BarcodeLabelModal
+              batchId={printLabelBatchId}
+              open={!!printLabelBatchId}
+              onClose={() => setPrintLabelBatchId(null)}
+            />
+          )}
         </>
       )}
 

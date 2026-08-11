@@ -2,6 +2,7 @@ import { Controller, Get, Query, Res, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { FastifyReply } from "fastify";
 import { ReportsService } from "./reports.service";
+import { ExcelExportService } from "./excel-export.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
@@ -14,7 +15,10 @@ import { parse } from "json2csv";
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("reports")
 export class ReportsController {
-  constructor(private readonly service: ReportsService) {}
+  constructor(
+    private readonly service: ReportsService,
+    private readonly excelExportService: ExcelExportService,
+  ) {}
 
   @Get("branch-comparison")
   // Deliberately not open to reports_analyst: this is the one report that shows
@@ -122,6 +126,94 @@ export class ReportsController {
     }
 
     return res.send({ data });
+  }
+
+  @Get("gst/gstr1-json")
+  @Roles("admin", "pharmacist")
+  @ApiOperation({ summary: "Download GSTR-1 return in official Government GST Portal JSON format" })
+  async getGstr1Json(
+    @CurrentUser() user: JwtPayload,
+    @Query("branchId") branchId: string,
+    @Query("month") month: string,
+    @Query("year") year: string,
+    @Res() res: FastifyReply,
+  ) {
+    const scoped = requireBranchScope(user, branchId);
+    const json = await this.service.getGstr1GovernmentJson(scoped, parseInt(month), parseInt(year));
+
+    res.header("Content-Type", "application/json");
+    res.header("Content-Disposition", `attachment; filename="GSTR1_${json.gstin}_${json.fp}.json"`);
+    return res.send(JSON.stringify(json, null, 2));
+  }
+
+  @Get("export/excel")
+  @Roles("admin", "pharmacist", "reports_analyst")
+  @ApiOperation({ summary: "Export report as styled .xlsx Excel spreadsheet" })
+  async exportExcel(
+    @CurrentUser() user: JwtPayload,
+    @Query("type") type: string,
+    @Query("branchId") branchId: string,
+    @Res() res: FastifyReply,
+    @Query("month") month?: string,
+    @Query("year") year?: string,
+    @Query("from") from?: string,
+    @Query("to") to?: string,
+  ) {
+    const scoped = resolveBranchScope(user, branchId);
+    let title = "Report";
+    let columns: any[] = [];
+    let rows: any[] = [];
+
+    if (type === "gst") {
+      const m = parseInt(month || "8");
+      const y = parseInt(year || "2026");
+      title = `GSTR-1 Tax Register (${m}-${y})`;
+      rows = await this.service.getGstData(scoped || branchId, m, y);
+      columns = [
+        { header: "Date", key: "date", width: 14 },
+        { header: "Invoice No", key: "invoiceNo", width: 20 },
+        { header: "Customer GSTIN", key: "customerGstin", width: 18 },
+        { header: "Item Name", key: "itemName", width: 25 },
+        { header: "HSN Code", key: "hsnCode", width: 12 },
+        { header: "Qty", key: "quantity", width: 10 },
+        { header: "Taxable Amt", key: "taxableAmount", width: 16, numFmt: "₹#,##0.00" },
+        { header: "CGST Amt", key: "cgstAmount", width: 14, numFmt: "₹#,##0.00" },
+        { header: "SGST Amt", key: "sgstAmount", width: 14, numFmt: "₹#,##0.00" },
+        { header: "IGST Amt", key: "igstAmount", width: 14, numFmt: "₹#,##0.00" },
+        { header: "Total Amt", key: "totalAmount", width: 16, numFmt: "₹#,##0.00" },
+      ];
+    } else if (type === "scheduleH") {
+      const f = from || new Date().toISOString().slice(0, 10);
+      const t = to || new Date().toISOString().slice(0, 10);
+      title = `Schedule H Register (${f} to ${t})`;
+      rows = await this.service.getScheduleHData(scoped || branchId, f, t);
+      columns = [
+        { header: "Date", key: "date", width: 14 },
+        { header: "Invoice No", key: "invoiceNo", width: 18 },
+        { header: "Drug Name", key: "drugName", width: 25 },
+        { header: "Class", key: "scheduleClass", width: 15 },
+        { header: "Batch No", key: "batchNo", width: 15 },
+        { header: "Qty", key: "quantity", width: 10 },
+        { header: "Patient Name", key: "patientName", width: 20 },
+        { header: "Doctor Name", key: "doctorName", width: 20 },
+        { header: "Doctor Reg No", key: "doctorRegNo", width: 16 },
+      ];
+    } else {
+      title = "Sales Trend Report";
+      const trend = await this.service.getSalesTrend(30, scoped);
+      rows = trend.rows;
+      columns = [
+        { header: "Date", key: "date", width: 16 },
+        { header: "Invoices", key: "invoices", width: 12 },
+        { header: "Revenue (₹)", key: "revenue", width: 18, numFmt: "₹#,##0.00" },
+      ];
+    }
+
+    const buffer = await this.excelExportService.generateExcelBuffer(title, columns, rows);
+
+    res.header("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.header("Content-Disposition", `attachment; filename="${type}-report.xlsx"`);
+    return res.send(buffer);
   }
 
   @Get("abc-analysis")
