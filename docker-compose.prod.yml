@@ -17,6 +17,11 @@ services:
       - frontend
     networks:
       - pharmerp_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
 
   backend:
     build:
@@ -34,6 +39,11 @@ services:
         condition: service_healthy
     networks:
       - pharmerp_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:4000/api/v1/health || exit 1"]
       interval: 30s
@@ -54,6 +64,11 @@ services:
       - backend
     networks:
       - pharmerp_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
     healthcheck:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1"]
       interval: 30s
@@ -73,6 +88,11 @@ services:
       - postgres_prod_data:/var/lib/postgresql/data
     networks:
       - pharmerp_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-pharmerp}"]
       interval: 10s
@@ -102,6 +122,11 @@ services:
         condition: service_healthy
     networks:
       - pharmerp_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
 
   redis:
     image: redis:7-alpine
@@ -112,6 +137,11 @@ services:
       - redis_prod_data:/data
     networks:
       - pharmerp_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
@@ -134,6 +164,16 @@ services:
         hard: 262144
     networks:
       - pharmerp_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   minio:
     image: minio/minio
@@ -147,6 +187,16 @@ services:
       - minio_prod_data:/data
     networks:
       - pharmerp_net
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "5"
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9000/minio/health/live || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
 networks:
   pharmerp_net:
@@ -157,4 +207,3 @@ volumes:
   redis_prod_data:
   clickhouse_prod_data:
   minio_prod_data:
-

@@ -68,16 +68,18 @@ async function bootstrap() {
     credentials: true,
   });
 
-  // Swagger — patchNestJsSwagger must run before createDocument
-  patchNestJsSwagger();
-  const config = new DocumentBuilder()
-    .setTitle("PharmERP API")
-    .setDescription("Medical Pharmacy ERP — REST API")
-    .setVersion("1.0")
-    .addBearerAuth()
-    .build();
-  const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup("docs", app, document);
+  // Swagger — only expose API explorer in non-production environments
+  if (process.env.NODE_ENV !== "production") {
+    patchNestJsSwagger();
+    const config = new DocumentBuilder()
+      .setTitle("PharmERP API")
+      .setDescription("Medical Pharmacy ERP — REST API")
+      .setVersion("1.0")
+      .addBearerAuth()
+      .build();
+    const document = SwaggerModule.createDocument(app, config);
+    SwaggerModule.setup("docs", app, document);
+  }
 
   const httpAdapter = app.getHttpAdapter();
   httpAdapter.get("/health", (_req: unknown, res: any) => {
@@ -87,7 +89,9 @@ async function bootstrap() {
   const port = process.env.PORT ?? 4000;
   await app.listen(port, "0.0.0.0");
   console.log(`PharmERP API running on http://localhost:${port}`);
-  console.log(`Swagger docs: http://localhost:${port}/docs`);
+  if (process.env.NODE_ENV !== "production") {
+    console.log(`Swagger docs: http://localhost:${port}/docs`);
+  }
 }
 
 bootstrap();
