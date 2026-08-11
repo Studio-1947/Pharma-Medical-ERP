@@ -45,6 +45,15 @@ async function bootstrap() {
 
   app.setGlobalPrefix("api/v1");
 
+  // Production Security Headers
+  const fastifyInstance = app.getHttpAdapter().getInstance();
+  fastifyInstance.addHook("onRequest", async (_request: unknown, reply: any) => {
+    reply.header("X-Frame-Options", "SAMEORIGIN");
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("X-XSS-Protection", "1; mode=block");
+    reply.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  });
+
   const rawOrigin = process.env.CORS_ORIGIN ?? "http://localhost:3000";
   const allowedOrigins = rawOrigin.split(",").map((o) => o.trim());
   app.enableCors({

@@ -440,10 +440,10 @@ function ComplianceTab() {
   const [fromDate, setFromDate] = useState(new Date().toISOString().split("T")[0]);
   const [toDate, setToDate] = useState(new Date().toISOString().split("T")[0]);
 
-  const downloadCsv = async (url: string, params: object, filename: string) => {
+  const downloadFile = async (url: string, params: object, filename: string) => {
     try {
       const blob = (await apiClient.get(url, {
-        params: { ...params, format: "csv" },
+        params,
         responseType: "blob",
       })) as unknown as Blob;
       const blobUrl = window.URL.createObjectURL(blob);
@@ -455,7 +455,7 @@ function ComplianceTab() {
       link.remove();
       window.URL.revokeObjectURL(blobUrl);
     } catch {
-      toastError("Download failed", "Could not generate the CSV export. Check your connection and try again.");
+      toastError("Download failed", "Could not generate file export. Check your connection and try again.");
     }
   };
 
@@ -518,19 +518,51 @@ function ComplianceTab() {
             </div>
           </div>
         </div>
-        <button
-          disabled={!gstBranchId}
-          onClick={() =>
-            downloadCsv(
-              "/reports/gst",
-              { branchId: gstBranchId, month, year },
-              `gstr1-${year}-${String(month).padStart(2, "0")}.csv`,
-            )
-          }
-          className="w-full inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Download className="w-4 h-4" /> Download GSTR-1 CSV
-        </button>
+
+        <div className="space-y-2 pt-2 border-t">
+          <button
+            disabled={!gstBranchId}
+            onClick={() =>
+              downloadFile(
+                "/reports/gst/gstr1-json",
+                { branchId: gstBranchId, month, year },
+                `GSTR1_${year}_${String(month).padStart(2, "0")}.json`,
+              )
+            }
+            className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-xs font-bold hover:bg-emerald-700 transition disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" /> Download GSTR-1 JSON (Govt Portal)
+          </button>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              disabled={!gstBranchId}
+              onClick={() =>
+                downloadFile(
+                  "/reports/export/excel",
+                  { type: "gst", branchId: gstBranchId, month, year },
+                  `gstr1-${year}-${String(month).padStart(2, "0")}.xlsx`,
+                )
+              }
+              className="inline-flex items-center justify-center gap-1.5 bg-green-700 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-green-800 transition disabled:opacity-50"
+            >
+              <Download className="w-3.5 h-3.5" /> Excel (.xlsx)
+            </button>
+            <button
+              disabled={!gstBranchId}
+              onClick={() =>
+                downloadFile(
+                  "/reports/gst",
+                  { branchId: gstBranchId, month, year, format: "csv" },
+                  `gstr1-${year}-${String(month).padStart(2, "0")}.csv`,
+                )
+              }
+              className="inline-flex items-center justify-center gap-1.5 border border-slate-300 text-slate-700 px-3 py-2 rounded-lg text-xs font-semibold hover:bg-slate-50 transition disabled:opacity-50"
+            >
+              <Download className="w-3.5 h-3.5" /> CSV Export
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Schedule H Register */}
@@ -580,19 +612,35 @@ function ComplianceTab() {
             </div>
           </div>
         </div>
-        <button
-          disabled={!schBranchId}
-          onClick={() =>
-            downloadCsv(
-              "/reports/schedule-h-register",
-              { branchId: schBranchId, from: fromDate, to: toDate },
-              `schedule-h-${fromDate}-to-${toDate}.csv`,
-            )
-          }
-          className="w-full inline-flex items-center justify-center gap-2 bg-primary text-primary-foreground px-4 py-2.5 rounded-lg text-sm font-semibold hover:bg-primary/90 transition disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Download className="w-4 h-4" /> Download Register CSV
-        </button>
+
+        <div className="grid grid-cols-2 gap-2 pt-2 border-t">
+          <button
+            disabled={!schBranchId}
+            onClick={() =>
+              downloadFile(
+                "/reports/export/excel",
+                { type: "scheduleH", branchId: schBranchId, from: fromDate, to: toDate },
+                `schedule-h-${fromDate}-to-${toDate}.xlsx`,
+              )
+            }
+            className="inline-flex items-center justify-center gap-1.5 bg-green-700 text-white px-3 py-2.5 rounded-lg text-xs font-bold hover:bg-green-800 transition disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" /> Excel (.xlsx)
+          </button>
+          <button
+            disabled={!schBranchId}
+            onClick={() =>
+              downloadFile(
+                "/reports/schedule-h-register",
+                { branchId: schBranchId, from: fromDate, to: toDate, format: "csv" },
+                `schedule-h-${fromDate}-to-${toDate}.csv`,
+              )
+            }
+            className="inline-flex items-center justify-center gap-1.5 border border-slate-300 text-slate-700 px-3 py-2.5 rounded-lg text-xs font-semibold hover:bg-slate-50 transition disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" /> CSV Export
+          </button>
+        </div>
       </div>
     </div>
   );

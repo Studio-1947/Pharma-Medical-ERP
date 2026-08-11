@@ -112,6 +112,10 @@ export const salesInvoices = pgTable(
     patientIdx: index("invoices_patient_idx").on(t.patientId),
     staffIdx: index("invoices_staff_idx").on(t.staffId),
     createdAtIdx: index("invoices_created_at_idx").on(t.createdAt),
+    branchCreatedAtIdx: index("invoices_branch_created_at_idx").on(
+      t.branchId,
+      t.createdAt,
+    ),
   }),
 );
 

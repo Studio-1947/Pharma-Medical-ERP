@@ -13,6 +13,7 @@ import type {
   AdjustBatchQuantityDto,
   QueryBatchDto,
 } from "@pharmerp/types";
+import { BarcodeService } from "./barcode.service";
 
 @Injectable()
 export class BatchService {
@@ -20,6 +21,7 @@ export class BatchService {
     private readonly batchRepo: BatchRepository,
     private readonly movementRepo: StockMovementRepository,
     private readonly inventoryRepo: InventoryRepository,
+    private readonly barcodeService: BarcodeService,
   ) {}
 
   findAll(query: QueryBatchDto) {
@@ -182,5 +184,26 @@ export class BatchService {
     if (!existing) throw new NotFoundException(`Batch ${id} not found`);
     const updated = await this.batchRepo.releaseStock(id, quantity);
     return { data: updated, message: "Stock reservation released" };
+  }
+
+  async getBarcodeLabel(id: string) {
+    const batch = await this.batchRepo.findBatchById(id);
+    if (!batch) throw new NotFoundException(`Batch ${id} not found`);
+
+    const code = batch.batchNo;
+    const pngBuffer = await this.barcodeService.generateRaw(code);
+    const base64Image = `data:image/png;base64,${pngBuffer.toString("base64")}`;
+
+    return {
+      data: {
+        batchId: batch.id,
+        batchNo: batch.batchNo,
+        medicineName: (batch as any).medicine?.name ?? "Medicine",
+        brandName: (batch as any).medicine?.brandName ?? (batch as any).medicine?.name ?? "",
+        expiryDate: batch.expiryDate,
+        mrpAtEntry: batch.mrpAtEntry,
+        barcodeBase64: base64Image,
+      },
+    };
   }
 }

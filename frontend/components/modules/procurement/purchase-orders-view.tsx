@@ -329,6 +329,18 @@ export function PurchaseOrdersView() {
     },
   });
 
+  const autoGeneratePOMutation = useMutation({
+    mutationFn: () => apiClient.post("/procurement/auto-draft-pos", { branchId: activeBranchId }),
+    onSuccess: (res: any) => {
+      queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+      const msg = res?.data?.message ?? res?.message ?? "Auto-draft POs created successfully.";
+      toastSuccess("Auto-Draft POs Generated", msg);
+    },
+    onError: (err: any) => {
+      toastError("Auto-Draft POs Failed", err?.response?.data?.message ?? "Could not auto-generate purchase orders.");
+    },
+  });
+
   const updatePOMutation = useMutation({
     mutationFn: ({ id, data }: { id: string; data: object }) =>
       apiClient.patch(`/procurement/purchase-orders/${id}`, data),
@@ -466,12 +478,27 @@ export function PurchaseOrdersView() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h3 className="text-base font-semibold">Track & Create Purchase Orders</h3>
-        <button
-          onClick={openCreate}
-          className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 shadow-sm transition-all"
-        >
-          <PlusCircle className="w-4 h-4" /> Create Draft PO
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => autoGeneratePOMutation.mutate()}
+            disabled={autoGeneratePOMutation.isPending}
+            className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-2 rounded-lg text-sm font-semibold shadow-sm transition-all disabled:opacity-60"
+            title="Scan low stock medicines and auto-generate draft POs"
+          >
+            {autoGeneratePOMutation.isPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <PackageCheck className="w-4 h-4" />
+            )}
+            Auto-Draft POs (Low Stock)
+          </button>
+          <button
+            onClick={openCreate}
+            className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 shadow-sm transition-all"
+          >
+            <PlusCircle className="w-4 h-4" /> Create Draft PO
+          </button>
+        </div>
       </div>
 
       {isLoading ? (

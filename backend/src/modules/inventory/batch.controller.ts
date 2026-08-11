@@ -66,6 +66,13 @@ export class BatchController {
     return this.service.getMovements(id);
   }
 
+  @Get(":id/barcode-label")
+  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @ApiOperation({ summary: "Get printable barcode label data + base64 barcode image for a batch" })
+  getBarcodeLabel(@Param("id") id: string) {
+    return this.service.getBarcodeLabel(id);
+  }
+
   @Post()
   @Roles("admin", "inventory_manager")
   @ApiOperation({ summary: "Receive a new batch (logs purchase movement)" })

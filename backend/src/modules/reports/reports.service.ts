@@ -57,6 +57,126 @@ export class ReportsService {
     }));
   }
 
+  async getGstr1GovernmentJson(branchId: string, month: number, year: number) {
+    const [branch] = await this.db
+      .select({ gstin: schema.branches.gstin, name: schema.branches.name, state: schema.branches.state })
+      .from(schema.branches)
+      .where(eq(schema.branches.id, branchId));
+
+    const gstin = branch?.gstin ?? "27AAAAA0000A1Z5";
+    const fp = `${String(month).padStart(2, "0")}${year}`;
+
+    const rawGstData = await this.getGstData(branchId, month, year);
+
+    // Group B2B by Customer GSTIN
+    const b2bMap = new Map<string, any[]>();
+    const b2csMap = new Map<string, { txval: number; iamt: number; camt: number; samt: number }>();
+    const hsnMap = new Map<string, { desc: string; qty: number; val: number; txval: number; iamt: number; camt: number; samt: number }>();
+
+    for (const item of rawGstData) {
+      // HSN summary grouping
+      const hsnCode = item.hsnCode || "3004";
+      if (!hsnMap.has(hsnCode)) {
+        hsnMap.set(hsnCode, { desc: item.itemName, qty: 0, val: 0, txval: 0, iamt: 0, camt: 0, samt: 0 });
+      }
+      const hsnEntry = hsnMap.get(hsnCode)!;
+      hsnEntry.qty += Number(item.quantity);
+      hsnEntry.val += Number(item.totalAmount);
+      hsnEntry.txval += Number(item.taxableAmount);
+      hsnEntry.iamt += Number(item.igstAmount || 0);
+      hsnEntry.camt += Number(item.cgstAmount || 0);
+      hsnEntry.samt += Number(item.sgstAmount || 0);
+
+      // B2B vs B2CS
+      if (item.customerGstin && item.customerGstin.trim().length === 15) {
+        const cGstin = item.customerGstin.trim();
+        if (!b2bMap.has(cGstin)) b2bMap.set(cGstin, []);
+        b2bMap.get(cGstin)!.push(item);
+      } else {
+        const key = "INTRA";
+        if (!b2csMap.has(key)) {
+          b2csMap.set(key, { txval: 0, iamt: 0, camt: 0, samt: 0 });
+        }
+        const b2csEntry = b2csMap.get(key)!;
+        b2csEntry.txval += Number(item.taxableAmount);
+        b2csEntry.iamt += Number(item.igstAmount || 0);
+        b2csEntry.camt += Number(item.cgstAmount || 0);
+        b2csEntry.samt += Number(item.sgstAmount || 0);
+      }
+    }
+
+    // Build B2B array according to Govt Schema
+    const b2b = Array.from(b2bMap.entries()).map(([ctin, invs]) => {
+      const invGrouped = new Map<string, any[]>();
+      for (const inv of invs) {
+        if (!invGrouped.has(inv.invoiceNo)) invGrouped.set(inv.invoiceNo, []);
+        invGrouped.get(inv.invoiceNo)!.push(inv);
+      }
+
+      const invList = Array.from(invGrouped.entries()).map(([inum, items]) => {
+        const first = items[0];
+        const val = items.reduce((acc, i) => acc + Number(i.totalAmount), 0);
+        const itms = items.map((itm, num) => ({
+          num: num + 1,
+          itm_det: {
+            txval: Number(Number(itm.taxableAmount).toFixed(2)),
+            rt: Number((((Number(itm.cgstAmount) + Number(itm.sgstAmount) + Number(itm.igstAmount)) / (Number(itm.taxableAmount) || 1)) * 100).toFixed(2)),
+            iamt: Number(Number(itm.igstAmount || 0).toFixed(2)),
+            camt: Number(Number(itm.cgstAmount || 0).toFixed(2)),
+            samt: Number(Number(itm.sgstAmount || 0).toFixed(2)),
+          },
+        }));
+
+        return {
+          inum,
+          idt: first.date,
+          val: Number(val.toFixed(2)),
+          pos: ctin.slice(0, 2),
+          rchrg: "N",
+          inv_typ: "R",
+          itms,
+        };
+      });
+
+      return { ctin, inv: invList };
+    });
+
+    // Build B2CS array
+    const b2cs = Array.from(b2csMap.entries()).map(([_, val]) => ({
+      sply_ty: "INTRA",
+      txval: Number(val.txval.toFixed(2)),
+      pos: gstin.slice(0, 2),
+      rt: 12.0,
+      iamt: Number(val.iamt.toFixed(2)),
+      camt: Number(val.camt.toFixed(2)),
+      samt: Number(val.samt.toFixed(2)),
+    }));
+
+    // Build HSN array
+    const hsnData = Array.from(hsnMap.entries()).map(([hsn_sc, val], idx) => ({
+      num: idx + 1,
+      hsn_sc,
+      desc: val.desc,
+      uqc: "BOX",
+      qty: val.qty,
+      val: Number(val.val.toFixed(2)),
+      txval: Number(val.txval.toFixed(2)),
+      iamt: Number(val.iamt.toFixed(2)),
+      camt: Number(val.camt.toFixed(2)),
+      samt: Number(val.samt.toFixed(2)),
+    }));
+
+    return {
+      gstin,
+      fp,
+      version: "GST1.5",
+      hash: "hash-placeholder",
+      b2b,
+      b2cs,
+      hsn: { data: hsnData },
+    };
+  }
+
   async getSalesTrend(days: number, branchId?: string, groupBy: "day" | "week" | "month" = "day") {
     const since = new Date();
     since.setDate(since.getDate() - days);
