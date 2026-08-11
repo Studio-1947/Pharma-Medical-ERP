@@ -176,6 +176,13 @@
       "when": 1786355000000,
       "tag": "0024_branch_gstin_licensing",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1786400000000,
+      "tag": "0025_performance_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -190,6 +190,12 @@ export const inventoryBatches = pgTable(
       t.batchNo,
       t.branchId,
     ),
+    fefoAllocationIdx: index("batch_fefo_allocation_idx").on(
+      t.medicineId,
+      t.branchId,
+      t.expiryDate,
+      t.quantity,
+    ),
   }),
 );
 
