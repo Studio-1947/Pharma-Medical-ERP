@@ -3,7 +3,7 @@ RUN npm install -g pnpm@9
 
 FROM base AS deps
 WORKDIR /app
-RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends --fix-missing python3 make g++ && rm -rf /var/lib/apt/lists/*
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY backend/package.json ./backend/
 COPY packages/types/package.json ./packages/types/
@@ -21,7 +21,7 @@ RUN pnpm --filter backend build
 RUN pnpm deploy --filter backend --prod /deploy
 
 FROM node:20-bullseye-slim AS runner
-RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+# No build tools needed at runtime — dist/main is compiled JS
 WORKDIR /app
 COPY --from=build /deploy .
 # Migration SQL is read at boot by runMigrations(); guarantee it's present
