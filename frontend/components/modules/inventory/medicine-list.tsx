@@ -10,6 +10,8 @@ import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { MedicineForm } from "./medicine-form";
 import { BulkImportModal } from "./bulk-import-modal";
+import { MedicineStockModal } from "./medicine-stock-modal";
+import { Layers } from "lucide-react";
 import type { CreateMedicineDto } from "@pharmerp/types";
 
 interface Medicine {
@@ -39,12 +41,11 @@ export function MedicineList() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
-  // When a scan finds no match, we open the create form pre-filled with the
-  // scanned barcode plus sensible defaults, so only name and MRP remain to enter.
   const [createInitial, setCreateInitial] = useState<Partial<CreateMedicineDto> | null>(null);
   const [importOpen, setImportOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Medicine | null>(null);
+  const [viewStockTarget, setViewStockTarget] = useState<Medicine | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
 
   const deleteMutation = useMutation({
@@ -155,22 +156,37 @@ export function MedicineList() {
               </thead>
               <tbody className="divide-y">
                 {data.data.map((m) => (
-                  <tr key={m.id} className="hover:bg-muted/50 transition-colors">
+                  <tr key={m.id} className="hover:bg-slate-50/80 transition-colors group">
                     <td className="px-4 py-3">
-                      <div className="font-medium">{m.name}</div>
+                      <button
+                        type="button"
+                        onClick={() => setViewStockTarget(m)}
+                        className="text-left font-bold text-slate-900 group-hover:text-emerald-700 hover:underline transition-colors"
+                      >
+                        {m.name}
+                      </button>
                       {m.genericName && (
-                        <div className="text-xs text-muted-foreground">{m.genericName}</div>
+                        <div className="text-xs text-slate-500 font-medium">{m.genericName}</div>
                       )}
                     </td>
-                    <td className="px-4 py-3 font-mono text-xs">{m.sku}</td>
-                    <td className="px-4 py-3">{m.unit}</td>
-                    <td className="px-4 py-3 text-right font-medium">
+                    <td className="px-4 py-3 font-mono text-xs text-slate-600">{m.sku}</td>
+                    <td className="px-4 py-3 text-slate-700">{m.unit}</td>
+                    <td className="px-4 py-3 text-right font-bold text-emerald-700">
                       ₹{parseFloat(m.priceMrp).toFixed(2)}
                     </td>
-                    <td className="px-4 py-3 text-right font-medium">
-                      <span className={(m as any).totalStock > 0 ? "text-slate-900 font-bold" : "text-amber-600 font-semibold"}>
-                        {(m as any).totalStock ?? 0}
-                      </span>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setViewStockTarget(m)}
+                        className={`font-extrabold text-xs px-2 py-0.5 rounded-md hover:scale-105 transition-transform ${
+                          (m as any).totalStock > 0
+                            ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                            : "bg-amber-100 text-amber-800 border border-amber-200"
+                        }`}
+                        title="Click to view batches & receive stock"
+                      >
+                        {(m as any).totalStock ?? 0} units
+                      </button>
                     </td>
                     <td className="px-4 py-3 text-center">
                       {m.scheduleClass ? (
@@ -197,8 +213,16 @@ export function MedicineList() {
                     <td className="px-4 py-3 text-center">
                       <div className="flex items-center justify-center gap-2">
                         <button
+                          onClick={() => setViewStockTarget(m)}
+                          className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-bold transition-colors inline-flex items-center gap-1"
+                          title="View Batches & Receive Stock"
+                        >
+                          <Layers size={13} />
+                          <span>Batches</span>
+                        </button>
+                        <button
                           onClick={() => setEditTarget(m)}
-                          className="text-xs text-primary hover:underline"
+                          className="text-xs font-semibold text-slate-600 hover:text-slate-900 hover:underline"
                         >
                           Edit
                         </button>
@@ -362,6 +386,13 @@ export function MedicineList() {
             toastError("Lookup failed", "Couldn't check the catalog for that barcode. Try again.");
           }
         }}
+      />
+
+      <MedicineStockModal
+        open={!!viewStockTarget}
+        onClose={() => setViewStockTarget(null)}
+        medicineId={viewStockTarget?.id ?? null}
+        medicineName={viewStockTarget?.name}
       />
     </div>
   );
