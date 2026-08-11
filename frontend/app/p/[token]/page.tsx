@@ -217,20 +217,20 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
         )}
 
         {/* Footer */}
-        <div className="bg-slate-50 p-4 border-t border-slate-200/80 text-center space-y-3">
+        <div className="bg-slate-50 p-4 border-t border-slate-200/80 text-center space-y-3 print:bg-white print:p-0 print:border-0">
           <button
             type="button"
             onClick={() => window.print()}
             className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-extrabold transition-all shadow-md inline-flex items-center justify-center gap-2 print:hidden"
           >
-            <Download size={14} className="text-emerald-400" /> Save / Print PDF Invoice
+            <Download size={14} className="text-emerald-400" /> Save / Print PDF Record
           </button>
 
           <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-slate-600">
-            <ShieldCheck size={14} className="text-emerald-600" />
+            <ShieldCheck size={14} className="text-emerald-600 print:hidden" />
             <span>Official Verified Record — Radha Madhav Medical Hall</span>
           </div>
-          <p className="text-[10px] text-slate-400">
+          <p className="text-[10px] text-slate-400 print:text-slate-600">
             Thank you for choosing Radha Madhav Medical Hall. For support, contact your pharmacy counter.
           </p>
         </div>
