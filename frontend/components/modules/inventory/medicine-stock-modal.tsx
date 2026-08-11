@@ -99,14 +99,17 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName }: 
     e.preventDefault();
     if (!medicineId || !newBatchNo.trim() || !newExpiry) return;
 
+    const cost = parseFloat(newPurchasePrice || medicine?.purchasePrice || "0").toFixed(2);
+    const mrp = parseFloat(newMrp || medicine?.priceMrp || "0").toFixed(2);
+
     addBatchMutation.mutate({
       medicineId,
       branchId: activeBranchId,
       batchNo: newBatchNo.trim().toUpperCase(),
-      expiryDate: new Date(newExpiry).toISOString(),
+      expiryDate: newExpiry, // YYYY-MM-DD format
       quantity: Number(newQty),
-      purchaseRate: newPurchasePrice || medicine?.purchasePrice || "0",
-      mrp: newMrp || medicine?.priceMrp || "0",
+      costPrice: cost,
+      mrpAtEntry: mrp,
     });
   };
 
