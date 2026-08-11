@@ -7,6 +7,8 @@ import {
   Bar,
   LineChart,
   Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -199,117 +201,176 @@ export default function AnalyticsPage() {
           value={fmt(totalRevenue)}
           sub={`Last ${days} days`}
           icon={<IndianRupee size={24} />}
-          color="bg-emerald-50 text-emerald-700"
+          color="bg-gradient-to-br from-emerald-50 to-teal-50 text-emerald-700 border border-emerald-100/80 shadow-sm"
         />
         <KpiCard
           label="Total Invoices"
-          value={totalInvoices || "--"}
+          value={totalInvoices ? totalInvoices.toLocaleString("en-IN") : "0"}
           sub={`Last ${days} days`}
           icon={<ShoppingBag size={24} />}
-          color="bg-green-50 text-green-700"
+          color="bg-gradient-to-br from-green-50 to-emerald-50 text-green-700 border border-green-100/80 shadow-sm"
         />
         <KpiCard
           label="Avg Invoice Value"
-          value={avgInvoiceValue > 0 ? fmt(avgInvoiceValue) : "--"}
+          value={avgInvoiceValue > 0 ? fmt(avgInvoiceValue) : "₹0"}
+          sub="Per customer bill"
           icon={<TrendingUp size={24} />}
-          color="bg-amber-50 text-amber-700"
+          color="bg-gradient-to-br from-amber-50 to-orange-50 text-amber-700 border border-amber-100/80 shadow-sm"
         />
         <KpiCard
-          label="Top Product"
-          value={topRows[0]?.name ?? "--"}
-          sub={topRows[0] ? fmt(topRows[0].revenue) + " revenue" : undefined}
+          label="Top Selling Drug"
+          value={topRows[0]?.name ?? "—"}
+          sub={topRows[0] ? fmt(topRows[0].revenue) + " revenue" : "No sales yet"}
           icon={<Package size={24} />}
-          color="bg-teal-50 text-teal-700"
+          color="bg-gradient-to-br from-teal-50 to-cyan-50 text-teal-700 border border-teal-100/80 shadow-sm"
         />
       </div>
 
       {/* Charts row 1 */}
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
         {/* Sales trend — takes 2/3 width */}
-        <div className="xl:col-span-2 rounded-xl border bg-white p-5">
-          <h2 className="text-sm font-semibold text-slate-700 mb-4">Revenue Trend</h2>
+        <div className="xl:col-span-2 rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+            <div>
+              <h2 className="text-base font-bold text-slate-800">Revenue Performance Trend</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Daily sales and billing pattern over the last {days} days</p>
+            </div>
+            {salesRows.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-700">
+                <TrendingUp size={13} />
+                Avg: {fmt(totalRevenue / Math.max(1, salesRows.length))}/day
+              </span>
+            )}
+          </div>
           {salesLoading ? (
-            <div className="h-56 flex items-center justify-center text-muted-foreground text-sm">
-              Loading...
+            <div className="h-60 flex items-center justify-center text-slate-400 text-sm">
+              Loading chart data…
             </div>
           ) : salesRows.length === 0 ? (
-            <div className="h-56 flex items-center justify-center text-muted-foreground text-sm">
-              No sales data for this period.
+            <div className="h-60 flex flex-col items-center justify-center text-slate-400 gap-2">
+              <TrendingUp size={28} className="opacity-30" />
+              <p className="text-sm font-medium">No sales data for this period</p>
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <LineChart data={salesRows} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={salesRows} margin={{ top: 8, right: 16, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id="analyticsRevGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="#10b981" stopOpacity={0.01} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 11, fill: "#94a3b8" }}
+                  axisLine={false}
+                  tickLine={false}
                   tickFormatter={(v) =>
                     new Date(v).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
                   }
                 />
                 <YAxis
                   tick={{ fontSize: 11, fill: "#94a3b8" }}
+                  axisLine={false}
+                  tickLine={false}
                   tickFormatter={(v) => fmt(v)}
-                  width={60}
+                  width={56}
                 />
                 <Tooltip
-                  formatter={(v: number) => [fmt(v), "Revenue"]}
-                  labelFormatter={(l) =>
-                    new Date(l).toLocaleDateString("en-IN", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                    })
-                  }
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length || !payload[0]) return null;
+                    const r = (payload[0].value as number) ?? 0;
+                    const inv = (payload[0].payload as any)?.invoices ?? 0;
+                    return (
+                      <div className="bg-slate-900 text-white rounded-xl shadow-xl px-4 py-3 text-xs space-y-1">
+                        <p className="text-slate-400 font-semibold">
+                          {new Date(label).toLocaleDateString("en-IN", {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          })}
+                        </p>
+                        <p className="text-sm font-extrabold text-emerald-400">{fmt(r)}</p>
+                        <p className="text-[11px] text-slate-300">{inv} invoice{inv !== 1 ? "s" : ""} raised</p>
+                      </div>
+                    );
+                  }}
                 />
-                <Line
+                <Area
                   type="monotone"
                   dataKey="revenue"
                   stroke="#10b981"
-                  strokeWidth={2}
-                  dot={false}
-                  activeDot={{ r: 4 }}
+                  strokeWidth={2.5}
+                  fill="url(#analyticsRevGrad)"
+                  activeDot={{ r: 5, fill: "#10b981", stroke: "#ffffff", strokeWidth: 2 }}
                 />
-              </LineChart>
+              </AreaChart>
             </ResponsiveContainer>
           )}
         </div>
 
         {/* Payment breakdown */}
-        <div className="rounded-xl border bg-white p-5">
-          <h2 className="text-sm font-semibold text-slate-700 mb-4">Payment Methods</h2>
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm flex flex-col justify-between">
+          <div>
+            <h2 className="text-base font-bold text-slate-800">Payment Breakdown</h2>
+            <p className="text-xs text-slate-500 mt-0.5">Distribution across Cash, UPI, and Cards</p>
+          </div>
+
           {paymentRows.length === 0 ? (
-            <div className="h-56 flex items-center justify-center text-muted-foreground text-sm">
-              No data
+            <div className="h-56 flex flex-col items-center justify-center text-slate-400 gap-2">
+              <p className="text-sm font-medium">No payment data</p>
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={220}>
-              <PieChart>
-                <Pie
-                  data={paymentRows}
-                  dataKey="amount"
-                  nameKey="method"
-                  cx="50%"
-                  cy="45%"
-                  outerRadius={75}
-                  label={({ method, percent }) => {
-                    const labelStr =
-                      typeof method === "string"
-                        ? method === "upi"
-                          ? "UPI"
-                          : method.charAt(0).toUpperCase() + method.slice(1).toLowerCase().replace(/_/g, " ")
-                        : String(method ?? "");
-                    return `${labelStr} ${(percent * 100).toFixed(0)}%`;
-                  }}
-                  labelLine={false}
-                >
-                  {paymentRows.map((_: any, i: number) => (
-                    <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v: number) => fmt(v)} />
-              </PieChart>
-            </ResponsiveContainer>
+            <div className="space-y-4 my-2">
+              <ResponsiveContainer width="100%" height={160}>
+                <PieChart>
+                  <Pie
+                    data={paymentRows}
+                    dataKey="amount"
+                    nameKey="method"
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={45}
+                    outerRadius={70}
+                    paddingAngle={3}
+                  >
+                    {paymentRows.map((_: any, i: number) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(v: number) => [fmt(v), "Total"]} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="space-y-2">
+                {paymentRows.map((r, i) => {
+                  const labelStr =
+                    typeof r.method === "string"
+                      ? r.method === "upi"
+                        ? "UPI / Digital"
+                        : r.method.charAt(0).toUpperCase() + r.method.slice(1).toLowerCase().replace(/_/g, " ")
+                      : String(r.method ?? "");
+                  const pct = totalRevenue > 0 ? ((r.amount / totalRevenue) * 100).toFixed(1) : "0";
+                  return (
+                    <div key={i} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }}
+                        />
+                        <span className="font-medium text-slate-700">{labelStr}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-800">{fmt(r.amount)}</span>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 font-semibold text-slate-500">
+                          {pct}%
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
         </div>
       </div>
@@ -317,67 +378,101 @@ export default function AnalyticsPage() {
       {/* Charts row 2 */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         {/* Top products bar */}
-        <div className="rounded-xl border bg-white p-5">
-          <h2 className="text-sm font-semibold text-slate-700 mb-4">Top 5 Products by Revenue</h2>
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-800">Top 5 Products by Revenue</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Highest grossing medicines in selected period</p>
+            </div>
+          </div>
           {topRows.length === 0 ? (
-            <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-              No data
+            <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
+              No product sales recorded yet.
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={210}>
               <BarChart
                 data={topRows}
                 layout="vertical"
-                margin={{ top: 0, right: 16, bottom: 0, left: 8 }}
+                margin={{ top: 0, right: 16, bottom: 0, left: 10 }}
               >
                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
                 <XAxis
                   type="number"
                   tick={{ fontSize: 11, fill: "#94a3b8" }}
+                  axisLine={false}
+                  tickLine={false}
                   tickFormatter={(v) => fmt(v)}
                 />
                 <YAxis
                   type="category"
                   dataKey="name"
-                  tick={{ fontSize: 11, fill: "#64748b" }}
-                  width={110}
+                  tick={{ fontSize: 11, fill: "#475569", fontWeight: 600 }}
+                  axisLine={false}
+                  tickLine={false}
+                  width={120}
                 />
-                <Tooltip formatter={(v: number) => [fmt(v), "Revenue"]} />
-                <Bar dataKey="revenue" fill="#10b981" radius={[0, 4, 4, 0]} />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (!active || !payload?.length || !payload[0]) return null;
+                    const item = payload[0].payload;
+                    if (!item) return null;
+                    return (
+                      <div className="bg-slate-900 text-white rounded-xl shadow-xl px-3 py-2 text-xs">
+                        <p className="font-bold text-slate-200">{item.name}</p>
+                        <p className="text-emerald-400 font-extrabold">{fmt(item.revenue)}</p>
+                        <p className="text-[11px] text-slate-400">{item.qty?.toLocaleString("en-IN") ?? 0} units sold</p>
+                      </div>
+                    );
+                  }}
+                />
+                <Bar dataKey="revenue" fill="#10b981" radius={[0, 6, 6, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}
         </div>
 
         {/* Invoice count trend */}
-        <div className="rounded-xl border bg-white p-5">
-          <h2 className="text-sm font-semibold text-slate-700 mb-4">Invoice Volume</h2>
+        <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-800">Invoice Volume</h2>
+              <p className="text-xs text-slate-500 mt-0.5">Daily bill count generated at counter</p>
+            </div>
+          </div>
           {salesRows.length === 0 ? (
-            <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">
-              No data
+            <div className="h-48 flex items-center justify-center text-slate-400 text-sm">
+              No invoice volume data.
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={200}>
+            <ResponsiveContainer width="100%" height={210}>
               <BarChart data={salesRows} margin={{ top: 4, right: 16, bottom: 0, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                 <XAxis
                   dataKey="date"
                   tick={{ fontSize: 11, fill: "#94a3b8" }}
+                  axisLine={false}
+                  tickLine={false}
                   tickFormatter={(v) =>
                     new Date(v).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
                   }
                 />
-                <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} allowDecimals={false} />
+                <YAxis tick={{ fontSize: 11, fill: "#94a3b8" }} axisLine={false} tickLine={false} allowDecimals={false} />
                 <Tooltip
-                  formatter={(v: number) => [v, "Invoices"]}
-                  labelFormatter={(l) =>
-                    new Date(l).toLocaleDateString("en-IN", {
-                      day: "numeric",
-                      month: "short",
-                    })
-                  }
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length || !payload[0]) return null;
+                    const count = (payload[0].value as number) ?? 0;
+                    return (
+                      <div className="bg-slate-900 text-white rounded-xl shadow-xl px-3 py-2 text-xs">
+                        <p className="text-slate-400 font-semibold">
+                          {new Date(label).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}
+                        </p>
+                        <p className="text-emerald-400 font-bold">{count} invoice{count !== 1 ? "s" : ""}</p>
+                      </div>
+                    );
+                  }}
                 />
-                <Bar dataKey="invoices" fill="#10b981" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="invoices" fill="#06b6d4" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           )}

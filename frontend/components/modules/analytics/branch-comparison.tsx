@@ -133,44 +133,85 @@ export function BranchComparison() {
         </div>
       ) : (
         <>
-          {/* Revenue by branch — single series, so the title names it and no
-              legend is needed. Values are direct-labelled rather than relying
-              on an axis readout. */}
-          <div className="rounded-xl border border-slate-200 bg-white p-5">
-            <h4 className="text-sm font-semibold text-slate-800">
-              Revenue by branch
-            </h4>
-            <p className="text-xs text-slate-400 mt-0.5 mb-4">
-              Confirmed invoices in the selected range
-            </p>
+          {/* Executive Summary Tiles */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3.5">
+              <p className="text-[11px] font-medium text-emerald-700">Combined Revenue</p>
+              <p className="text-xl font-extrabold text-emerald-900 mt-0.5">{totals ? inr(totals.revenue) : "₹0"}</p>
+              <p className="text-[10px] text-emerald-600/80 mt-0.5">{totals ? num(totals.invoices) : 0} total invoices</p>
+            </div>
+            <div className="rounded-xl border border-teal-100 bg-teal-50/60 p-3.5">
+              <p className="text-[11px] font-medium text-teal-700">Total Stock Value</p>
+              <p className="text-xl font-extrabold text-teal-900 mt-0.5">{totals ? inr(totals.stockValue) : "₹0"}</p>
+              <p className="text-[10px] text-teal-600/80 mt-0.5">{totals ? num(totals.units) : 0} units across branches</p>
+            </div>
+            <div className="rounded-xl border border-amber-100 bg-amber-50/60 p-3.5">
+              <p className="text-[11px] font-medium text-amber-700">Avg Ticket Size</p>
+              <p className="text-xl font-extrabold text-amber-900 mt-0.5">{totals ? inr(totals.avgInvoiceValue) : "₹0"}</p>
+              <p className="text-[10px] text-amber-600/80 mt-0.5">Per bill across all branches</p>
+            </div>
+            <div className="rounded-xl border border-rose-100 bg-rose-50/60 p-3.5">
+              <p className="text-[11px] font-medium text-rose-700">Expiring Stock (30d)</p>
+              <p className="text-xl font-extrabold text-rose-900 mt-0.5">{totals ? num(totals.expiringSoon) : 0} batches</p>
+              <p className="text-[10px] text-rose-600/80 mt-0.5">Requires branch clearance</p>
+            </div>
+          </div>
+
+          {/* Revenue by branch — rank badges & gradient bars */}
+          <div className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm space-y-4">
+            <div>
+              <h4 className="text-base font-bold text-slate-800">
+                Branch Revenue Comparison
+              </h4>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Confirmed sales revenue ranked by branch performance
+              </p>
+            </div>
 
             <div className="space-y-3">
-              {rows.map((r) => (
-                <div key={r.branchId} className="flex items-center gap-3">
-                  <div className="w-32 shrink-0 min-w-0">
-                    <p className="text-xs font-medium text-slate-700 truncate">
-                      {r.branchName}
-                    </p>
-                    <p className="text-[10px] text-slate-400">{r.branchCode}</p>
-                  </div>
-                  <div className="flex-1 h-6 relative">
-                    <div
-                      className="h-full rounded-r"
-                      style={{
-                        width: `${Math.max(1, (r.revenue / maxRevenue) * 100)}%`,
-                        backgroundColor: "var(--series-1)",
-                        borderTopRightRadius: 4,
-                        borderBottomRightRadius: 4,
-                      }}
-                      role="img"
-                      aria-label={`${r.branchName}: ${inr(r.revenue)}`}
-                    />
-                  </div>
-                  <span className="w-24 text-right text-xs font-semibold text-slate-700 tabular-nums shrink-0">
-                    {inr(r.revenue)}
-                  </span>
-                </div>
-              ))}
+              {[...rows]
+                .sort((a, b) => b.revenue - a.revenue)
+                .map((r, rankIdx) => {
+                  const pct = Math.max(2, (r.revenue / maxRevenue) * 100);
+                  const isTop = rankIdx === 0 && r.revenue > 0;
+                  return (
+                    <div key={r.branchId} className="flex items-center gap-3">
+                      <div className="w-36 shrink-0 min-w-0 flex items-center gap-2">
+                        <span
+                          className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                            isTop
+                              ? "bg-amber-100 text-amber-800 border border-amber-300"
+                              : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          #{rankIdx + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-semibold text-slate-800 truncate">
+                            {r.branchName}
+                          </p>
+                          <p className="text-[10px] text-slate-400 font-mono">{r.branchCode}</p>
+                        </div>
+                      </div>
+                      <div className="flex-1 h-7 bg-slate-100/80 rounded-lg p-0.5 overflow-hidden relative">
+                        <div
+                          className="h-full rounded-md bg-gradient-to-r from-emerald-500 to-teal-500 transition-all duration-500"
+                          style={{ width: `${pct}%` }}
+                          role="img"
+                          aria-label={`${r.branchName}: ${inr(r.revenue)}`}
+                        />
+                      </div>
+                      <div className="w-28 text-right shrink-0">
+                        <span className="text-xs font-extrabold text-slate-800 tabular-nums block">
+                          {inr(r.revenue)}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block font-medium">
+                          {num(r.invoices)} bills
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
             </div>
           </div>
 
