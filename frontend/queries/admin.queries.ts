@@ -63,6 +63,50 @@ export function useBranches() {
   });
 }
 
+function invalidateBranches(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: queryKeys.branches.all() });
+  qc.invalidateQueries({ queryKey: queryKeys.admin.all() });
+}
+
+export function useCreateBranch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: unknown) =>
+      apiClient.post("/branches", data) as Promise<any>,
+    onSuccess: () => invalidateBranches(qc),
+  });
+}
+
+export function useUpdateBranch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: unknown }) =>
+      apiClient.patch(`/branches/${id}`, data) as Promise<any>,
+    onSuccess: () => invalidateBranches(qc),
+  });
+}
+
+export function useToggleBranchActive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
+      apiClient.patch(
+        `/branches/${id}/${active ? "activate" : "deactivate"}`,
+        {},
+      ) as Promise<any>,
+    onSuccess: () => invalidateBranches(qc),
+  });
+}
+
+export function useDeleteBranch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiClient.delete(`/branches/${id}`) as Promise<any>,
+    onSuccess: () => invalidateBranches(qc),
+  });
+}
+
 // ------------------------------------------------------------- user writes
 
 /**

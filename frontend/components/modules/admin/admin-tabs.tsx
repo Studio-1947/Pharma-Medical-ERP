@@ -6,6 +6,7 @@ import { useNavigation } from "@/lib/navigation-context";
 
 const TABS = [
   { href: "/admin", label: "Overview" },
+  { href: "/admin/branches", label: "Branches" },
   { href: "/admin/users", label: "Users & Roles" },
   { href: "/admin/sessions", label: "Sessions" },
   { href: "/admin/audit", label: "Audit Log" },
