@@ -10,6 +10,10 @@ import {
   ArrowRight,
   TrendingUp,
   Sparkles,
+  Building2,
+  GitCompare,
+  ShieldCheck,
+  Layers,
 } from "lucide-react";
 import { useNavigation } from "@/lib/navigation-context";
 import {
@@ -23,6 +27,9 @@ import {
 } from "recharts";
 import { apiClient } from "@/lib/api-client";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useAuthStore } from "@/stores/auth.store";
+import { useBranchStore } from "@/stores/branch.store";
+import { BranchSelect } from "@/components/shared/branch-select";
 import { DoctorDashboard } from "@/components/modules/dashboard/doctor-dashboard";
 import { StatCard } from "@/components/ui/stat-card";
 import { Badge } from "@/components/ui/badge";
@@ -114,32 +121,37 @@ function DashboardSkeleton() {
 
 function PharmacyDashboard() {
   const { navigate } = useNavigation();
-  const today = new Date().toISOString().split("T")[0];
+  const { user } = useAuthStore();
+  const { activeBranch, branches, setActiveBranch } = useBranchStore();
+  const isSuperAdmin = user?.role === "super_admin";
+
+  const today = new Date().toISOString().slice(0, 10);
+  const branchParams = activeBranch?.id ? { branchId: activeBranch.id } : {};
 
   const { data: eodRaw } = useQuery<any>({
-    queryKey: ["eod-summary", today],
+    queryKey: ["eod-summary", today, activeBranch?.id],
     queryFn: () =>
-      apiClient.get("/billing/reports/end-of-day", { params: { date: today } }),
+      apiClient.get("/billing/reports/end-of-day", { params: { date: today, ...branchParams } }),
     retry: 1,
   });
 
   const { data: salesTrendRaw } = useQuery<any>({
-    queryKey: ["dashboard-sales-trend"],
+    queryKey: ["dashboard-sales-trend", activeBranch?.id],
     queryFn: () =>
-      apiClient.get("/reports/sales", { params: { days: 14, groupBy: "day" } }),
+      apiClient.get("/reports/sales", { params: { days: 14, groupBy: "day", ...branchParams } }),
     retry: 1,
   });
 
   const { data: lowStockRaw } = useQuery<any>({
-    queryKey: ["low-stock"],
-    queryFn: () => apiClient.get("/inventory/medicines/low-stock"),
+    queryKey: ["low-stock", activeBranch?.id],
+    queryFn: () => apiClient.get("/inventory/medicines/low-stock", { params: branchParams }),
     retry: 1,
   });
 
   const { data: expiringRaw } = useQuery<any>({
-    queryKey: ["expiring-batches", 30],
+    queryKey: ["expiring-batches", 30, activeBranch?.id],
     queryFn: () =>
-      apiClient.get("/inventory/batches/expiring", { params: { days: 30 } }),
+      apiClient.get("/inventory/batches/expiring", { params: { days: 30, ...branchParams } }),
     retry: 1,
   });
 
@@ -162,13 +174,19 @@ function PharmacyDashboard() {
       {/* Page header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
               Pharmacy Control Center
             </h1>
             <Badge variant="emerald" size="sm" dot pulse>
               Live Sync
             </Badge>
+            {activeBranch && (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-700">
+                <Building2 size={13} className="text-emerald-600" />
+                {activeBranch.name}
+              </span>
+            )}
           </div>
           <p className="text-xs font-medium text-slate-500 mt-1">{dateLabel}</p>
         </div>
@@ -181,6 +199,61 @@ function PharmacyDashboard() {
           Open POS Terminal
         </Button>
       </div>
+
+      {/* Super Admin Multi-Branch Control Banner */}
+      {isSuperAdmin && (
+        <div className="rounded-2xl border border-emerald-500/30 bg-slate-900 text-white p-4 shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
+              <ShieldCheck size={20} />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                  Super Admin Navigation Scope
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-medium border border-emerald-500/30">
+                  Full Multi-Branch Access
+                </span>
+              </div>
+              <p className="text-xs text-slate-300 mt-0.5">
+                Current Active Branch: <strong className="text-emerald-300">{activeBranch?.name ?? "All Branches"}</strong>
+                {branches.length > 0 ? ` · ${branches.length} Branches Registered` : ""}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
+            <div className="w-48 text-slate-900">
+              <BranchSelect
+                value={activeBranch?.id ?? ""}
+                onChange={(id) => {
+                  const found = branches.find((b) => b.id === id);
+                  if (found) setActiveBranch(found);
+                }}
+                placeholder="Switch active branch..."
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white text-xs"
+              leftIcon={<GitCompare size={14} />}
+              onClick={() => navigate("/analytics?view=branches")}
+            >
+              Compare All Branches
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700 hover:text-white text-xs"
+              leftIcon={<Building2 size={14} />}
+              onClick={() => navigate("/admin/branches")}
+            >
+              Manage Branches
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Modern KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
