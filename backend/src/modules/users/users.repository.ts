@@ -11,6 +11,7 @@ export interface InviteUserData {
   role: string;
   branchId?: string | null;
   passwordHash: string;
+  doctorProfile?: Record<string, any> | null;
 }
 
 export interface UserListFilters {
@@ -49,6 +50,7 @@ export class UsersRepository {
       // would hide exactly the accounts the admin console exists to manage.
       branchName: schema.branches.name,
       isActive: schema.users.isActive,
+      doctorProfile: schema.users.doctorProfile,
       twoFaEnabled: schema.users.twoFaEnabled,
       lastLoginAt: schema.users.lastLoginAt,
       createdAt: schema.users.createdAt,
@@ -105,6 +107,7 @@ export class UsersRepository {
         role: schema.users.role,
         branchId: schema.users.branchId,
         isActive: schema.users.isActive,
+        doctorProfile: schema.users.doctorProfile,
         lastLoginAt: schema.users.lastLoginAt,
         createdAt: schema.users.createdAt,
         updatedAt: schema.users.updatedAt,
@@ -132,6 +135,7 @@ export class UsersRepository {
         role: data.role as any,
         branchId: data.branchId ?? null,
         passwordHash: data.passwordHash,
+        doctorProfile: data.doctorProfile ?? null,
         isActive: true,
       })
       .returning({
@@ -142,6 +146,7 @@ export class UsersRepository {
         role: schema.users.role,
         branchId: schema.users.branchId,
         isActive: schema.users.isActive,
+        doctorProfile: schema.users.doctorProfile,
         createdAt: schema.users.createdAt,
       });
     return user;
@@ -205,6 +210,7 @@ export class UsersRepository {
     if (data.role !== undefined) patch.role = data.role;
     if (data.branchId !== undefined) patch.branchId = data.branchId;
     if (data.isActive !== undefined) patch.isActive = data.isActive;
+    if (data.doctorProfile !== undefined) patch.doctorProfile = data.doctorProfile;
 
     const [user] = await (tx ?? this.db)
       .update(schema.users)
@@ -218,6 +224,7 @@ export class UsersRepository {
         role: schema.users.role,
         branchId: schema.users.branchId,
         isActive: schema.users.isActive,
+        doctorProfile: schema.users.doctorProfile,
         updatedAt: schema.users.updatedAt,
       });
     return user ?? null;

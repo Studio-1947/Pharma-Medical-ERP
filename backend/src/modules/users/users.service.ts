@@ -85,6 +85,7 @@ export class UsersService {
       role,
       branchId,
       passwordHash,
+      doctorProfile: dto.doctorProfile,
     });
 
     await this.audit.writeSafe({

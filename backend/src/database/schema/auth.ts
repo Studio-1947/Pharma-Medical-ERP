@@ -25,6 +25,7 @@ export const users = pgTable("users", {
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }),
   notificationPrefs: jsonb("notification_prefs").$type<Record<string, { email: boolean; sms: boolean }>>(),
+  doctorProfile: jsonb("doctor_profile").$type<Record<string, any>>(),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

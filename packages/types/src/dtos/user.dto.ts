@@ -1,6 +1,19 @@
 import { z } from "zod";
 import { UserRole } from "../enums";
 
+export const doctorProfileSchema = z.object({
+  specialty: z.string().optional(),
+  opdRoom: z.string().optional(),
+  consultationFee: z.union([z.number(), z.string()]).optional(),
+  regNo: z.string().optional(),
+  phone: z.string().optional(),
+  weeklySchedule: z.array(z.object({
+    days: z.string(),
+    slots: z.string(),
+  })).optional(),
+  availabilityStatus: z.enum(["available", "on_call", "on_leave", "busy"]).optional(),
+}).optional();
+
 export const userSchema = z.object({
   id: z.string().uuid(),
   email: z.string().email(),
@@ -9,6 +22,7 @@ export const userSchema = z.object({
   role: z.nativeEnum(UserRole),
   branchId: z.string().uuid().nullable(),
   isActive: z.boolean(),
+  doctorProfile: doctorProfileSchema,
   lastLoginAt: z.date().nullable(),
   createdAt: z.date(),
   updatedAt: z.date(),
@@ -29,7 +43,9 @@ export const updateUserSchema = z.object({
     .optional(),
   branchId: z.string().uuid().nullable().optional(),
   isActive: z.boolean().optional(),
+  doctorProfile: doctorProfileSchema,
 });
 
+export type DoctorProfileDto = z.infer<typeof doctorProfileSchema>;
 export type UserDto = z.infer<typeof userSchema>;
 export type UpdateUserDto = z.infer<typeof updateUserSchema>;

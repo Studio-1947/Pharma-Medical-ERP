@@ -174,6 +174,15 @@ export class ClinicService {
     return this.repo.findDoctors(branchId).then((data) => ({ data }));
   }
 
+  async updateDoctorProfile(id: string, doctorProfile: Record<string, any>, user: JwtPayload) {
+    if (user.role === "doctor" && user.sub !== id) {
+      throw new ForbiddenException("You can only update your own doctor profile");
+    }
+    const updated = await this.repo.updateDoctorProfile(id, doctorProfile);
+    if (!updated) throw new NotFoundException(`Doctor ${id} not found`);
+    return { data: updated, message: "Doctor profile updated" };
+  }
+
   /**
    * Tokens are for consultations that have not happened yet, so a past date is
    * a typo rather than a use case. One day of slack absorbs the gap between the

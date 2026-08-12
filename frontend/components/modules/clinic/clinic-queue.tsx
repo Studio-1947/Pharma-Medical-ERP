@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -33,6 +33,7 @@ import {
   ChevronRight,
   Filter,
   Sparkles,
+  Edit,
 } from "lucide-react";
 import { QuickPatientForm } from "@/components/modules/patients/quick-patient-form";
 import { formatClockTime, formatDuration, durationMinutes } from "@/lib/consultation-time";
@@ -49,6 +50,15 @@ interface Doctor {
   lastName?: string;
   email: string;
   specialty?: string;
+  doctorProfile?: {
+    specialty?: string;
+    opdRoom?: string;
+    consultationFee?: number | string;
+    regNo?: string;
+    phone?: string;
+    weeklySchedule?: { days: string; slots: string }[];
+    availabilityStatus?: string;
+  } | null;
 }
 
 interface ClinicToken {
@@ -141,8 +151,20 @@ const DOCTOR_PRESETS: DoctorSchedule[] = [
   },
 ];
 
-function getDoctorSchedule(index: number): DoctorSchedule {
-  return DOCTOR_PRESETS[index % DOCTOR_PRESETS.length]!;
+function getDoctorSchedule(d?: Doctor, index = 0): DoctorSchedule {
+  const preset = DOCTOR_PRESETS[index % DOCTOR_PRESETS.length]!;
+  if (!d?.doctorProfile) return preset;
+
+  const dp = d.doctorProfile;
+  return {
+    specialty: dp.specialty || preset.specialty,
+    opdRoom: dp.opdRoom || preset.opdRoom,
+    fee: dp.consultationFee ? `₹${dp.consultationFee}` : preset.fee,
+    colorTheme: preset.colorTheme,
+    badgeBg: preset.badgeBg,
+    badgeText: preset.badgeText,
+    weeklySchedule: dp.weeklySchedule?.length ? dp.weeklySchedule : preset.weeklySchedule,
+  };
 }
 
 function doctorName(d?: Doctor) {
@@ -178,6 +200,261 @@ function statusBadge(status: ClinicToken["status"]) {
         </span>
       );
   }
+}
+
+function EditDoctorProfileModal({
+  open,
+  onClose,
+  doctor,
+}: {
+  open: boolean;
+  onClose: () => void;
+  doctor: Doctor | null;
+}) {
+  const qc = useQueryClient();
+  const { success: toastSuccess, error: toastError } = useToast();
+  const dp = doctor?.doctorProfile;
+  const sched = dp?.weeklySchedule ?? [];
+
+  const [specialty, setSpecialty] = useState("General Medicine & Primary Care");
+  const [fee, setFee] = useState("400");
+  const [opdRoom, setOpdRoom] = useState("OPD Cabin 101 (Ground Floor)");
+  const [regNo, setRegNo] = useState("");
+  const [phone, setPhone] = useState("");
+  const [status, setStatus] = useState("available");
+  const [slot1Days, setSlot1Days] = useState("Mon - Fri");
+  const [slot1Hours, setSlot1Hours] = useState("09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM");
+  const [slot2Days, setSlot2Days] = useState("Saturday");
+  const [slot2Hours, setSlot2Hours] = useState("09:00 AM - 02:00 PM");
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (doctor) {
+      const dProfile = doctor.doctorProfile;
+      const sList = dProfile?.weeklySchedule ?? [];
+      setSpecialty(dProfile?.specialty ?? "General Medicine & Primary Care");
+      setFee(dProfile?.consultationFee ? String(dProfile.consultationFee) : "400");
+      setOpdRoom(dProfile?.opdRoom ?? "OPD Cabin 101 (Ground Floor)");
+      setRegNo(dProfile?.regNo ?? "");
+      setPhone(dProfile?.phone ?? "");
+      setStatus(dProfile?.availabilityStatus ?? "available");
+      setSlot1Days(sList[0]?.days ?? "Mon - Fri");
+      setSlot1Hours(sList[0]?.slots ?? "09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM");
+      setSlot2Days(sList[1]?.days ?? "Saturday");
+      setSlot2Hours(sList[1]?.slots ?? "09:00 AM - 02:00 PM");
+    }
+  }, [doctor]);
+
+  if (!doctor) return null;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+
+    const profileData = {
+      specialty: specialty.trim() || "General Medicine & Primary Care",
+      consultationFee: parseFloat(fee) || 400,
+      opdRoom: opdRoom.trim() || "OPD Cabin 101 (Ground Floor)",
+      regNo: regNo.trim() || undefined,
+      phone: phone.trim() || undefined,
+      availabilityStatus: status,
+      weeklySchedule: [
+        { days: slot1Days || "Mon - Fri", slots: slot1Hours || "09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM" },
+        ...(slot2Days ? [{ days: slot2Days, slots: slot2Hours || "09:00 AM - 02:00 PM" }] : []),
+      ],
+    };
+
+    apiClient
+      .patch(`/clinic/doctors/${doctor.id}/profile`, profileData)
+      .then(() => {
+        qc.invalidateQueries({ queryKey: queryKeys.clinicTokens.doctors() });
+        toastSuccess("Doctor Profile Updated", `${doctorName(doctor)} OPD profile and timings updated.`);
+        onClose();
+      })
+      .catch((err: any) => {
+        toastError("Could not update profile", err?.response?.data?.message ?? "An error occurred.");
+      })
+      .finally(() => setSubmitting(false));
+  };
+
+  return (
+    <Modal
+      title={`Edit Doctor Profile — ${doctorName(doctor)}`}
+      subtitle="Update OPD specialization, consultation fee, cabin room & weekly timings"
+      icon={<Edit size={18} className="text-emerald-600" />}
+      open={open}
+      onClose={onClose}
+      size="lg"
+    >
+      <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+          <div>
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">
+              Medical Specialization / Department
+            </label>
+            <select
+              value={specialty}
+              onChange={(e) => setSpecialty(e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-slate-800 font-medium"
+            >
+              <option value="General Medicine & Primary Care">General Medicine & Primary Care</option>
+              <option value="Cardiology & Heart Care">Cardiology & Heart Care</option>
+              <option value="Pediatrics & Child Health">Pediatrics & Child Health</option>
+              <option value="Orthopedics & Joint Care">Orthopedics & Joint Care</option>
+              <option value="Dermatology & Skin Care">Dermatology & Skin Care</option>
+              <option value="Gynecology & Women's Health">Gynecology & Women's Health</option>
+              <option value="ENT & Head/Neck">ENT & Head/Neck</option>
+              <option value="Neurology & Brain Health">Neurology & Brain Health</option>
+              <option value="Psychiatry & Behavioral Health">Psychiatry & Behavioral Health</option>
+              <option value="Dentistry & Dental Care">Dentistry & Dental Care</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">
+              Consultation Fee (₹)
+            </label>
+            <input
+              type="number"
+              min="0"
+              value={fee}
+              onChange={(e) => setFee(e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-slate-800 font-medium"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">
+              OPD Cabin / Room Location
+            </label>
+            <input
+              type="text"
+              value={opdRoom}
+              onChange={(e) => setOpdRoom(e.target.value)}
+              placeholder="e.g. OPD Cabin 101 (Ground Floor)"
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-slate-800"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">
+              Medical License / Reg No.
+            </label>
+            <input
+              type="text"
+              value={regNo}
+              onChange={(e) => setRegNo(e.target.value)}
+              placeholder="e.g. MCI-2024-88910"
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-slate-800"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">
+              Doctor Direct Phone
+            </label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="e.g. +91 9876543210"
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-slate-800"
+            />
+          </div>
+
+          <div>
+            <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">
+              Availability Status
+            </label>
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+              className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-slate-800 font-medium"
+            >
+              <option value="available">Available Today</option>
+              <option value="on_call">On Call / Emergency</option>
+              <option value="on_leave">On Leave</option>
+              <option value="busy">Busy / In Surgery</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="space-y-2 pt-2 border-t border-slate-100">
+          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+            Weekly OPD Timings & Duty Roster
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold block mb-0.5">Slot 1 Days</span>
+              <input
+                type="text"
+                value={slot1Days}
+                onChange={(e) => setSlot1Days(e.target.value)}
+                placeholder="Mon - Fri"
+                className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white"
+              />
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold block mb-0.5">Slot 1 Hours</span>
+              <input
+                type="text"
+                value={slot1Hours}
+                onChange={(e) => setSlot1Hours(e.target.value)}
+                placeholder="09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM"
+                className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white"
+              />
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold block mb-0.5">Slot 2 Days (Optional)</span>
+              <input
+                type="text"
+                value={slot2Days}
+                onChange={(e) => setSlot2Days(e.target.value)}
+                placeholder="Saturday"
+                className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white"
+              />
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold block mb-0.5">Slot 2 Hours (Optional)</span>
+              <input
+                type="text"
+                value={slot2Hours}
+                onChange={(e) => setSlot2Hours(e.target.value)}
+                placeholder="09:00 AM - 02:00 PM"
+                className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 border border-slate-200 rounded-xl text-xs font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="flex items-center gap-2 px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md transition-all disabled:opacity-50"
+          >
+            {submitting ? (
+              <>
+                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Saving Profile...
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={15} /> Save Doctor Profile
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
 }
 
 function NewTokenModal({
@@ -410,7 +687,7 @@ function NewTokenModal({
           >
             <option value="">Select consulting doctor...</option>
             {doctors.map((d, i) => {
-              const sched = getDoctorSchedule(i);
+              const sched = getDoctorSchedule(d, i);
               return (
                 <option key={d.id} value={d.id}>
                   {doctorName(d)} — {sched.specialty} ({sched.opdRoom})
@@ -531,6 +808,7 @@ export function ClinicQueue() {
   const [doctorFilter, setDoctorFilter] = useState("");
   const [searchFilter, setSearchFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
+  const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
   const [preselectedDoctorId, setPreselectedDoctorId] = useState<string | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<"overview" | "roster" | "queue">("overview");
 
@@ -586,7 +864,7 @@ export function ClinicQueue() {
 
   // Filtered doctors list for search
   const filteredDoctors = doctors.filter((d, i) => {
-    const sched = getDoctorSchedule(i);
+    const sched = getDoctorSchedule(d, i);
     const name = doctorName(d).toLowerCase();
     const spec = sched.specialty.toLowerCase();
     const query = searchFilter.toLowerCase();
@@ -764,12 +1042,13 @@ export function ClinicQueue() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {filteredDoctors.map((doc, idx) => {
-              const sched = getDoctorSchedule(idx);
+              const sched = getDoctorSchedule(doc, idx);
               const name = doctorName(doc);
               const docTokens = tokens.filter(
                 (t) => t.doctor?.id === doc.id || t.doctor?.email === doc.email,
               );
               const docWaiting = docTokens.filter((t) => t.status === "pending").length;
+              const availStatus = doc.doctorProfile?.availabilityStatus ?? "available";
 
               return (
                 <div
@@ -784,9 +1063,18 @@ export function ClinicQueue() {
                           {name.replace("Dr. ", "").slice(0, 2).toUpperCase()}
                         </div>
                         <div>
-                          <h3 className="font-extrabold text-slate-900 text-sm group-hover:text-emerald-700 transition-colors">
-                            {name}
-                          </h3>
+                          <div className="flex items-center gap-1.5">
+                            <h3 className="font-extrabold text-slate-900 text-sm group-hover:text-emerald-700 transition-colors">
+                              {name}
+                            </h3>
+                            <button
+                              onClick={() => setEditingDoctor(doc)}
+                              className="text-slate-400 hover:text-emerald-600 transition-colors p-0.5 rounded"
+                              title="Edit Doctor Profile & OPD Timings"
+                            >
+                              <Edit size={13} />
+                            </button>
+                          </div>
                           <span
                             className={`inline-block mt-0.5 text-[10px] font-extrabold px-2 py-0.5 rounded-full border ${sched.badgeBg} ${sched.badgeText}`}
                           >
@@ -811,9 +1099,19 @@ export function ClinicQueue() {
                         <MapPin size={13} className="text-slate-400 shrink-0" />
                         <span>{sched.opdRoom}</span>
                       </div>
-                      <div className="flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        Available Today
+                      <div className={`flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md border ${
+                        availStatus === "on_leave"
+                          ? "bg-rose-50 text-rose-700 border-rose-200"
+                          : availStatus === "on_call"
+                          ? "bg-amber-50 text-amber-700 border-amber-200"
+                          : availStatus === "busy"
+                          ? "bg-purple-50 text-purple-700 border-purple-200"
+                          : "bg-emerald-50 text-emerald-700 border-emerald-200/60"
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${
+                          availStatus === "on_leave" ? "bg-rose-500" : availStatus === "on_call" ? "bg-amber-500 animate-pulse" : "bg-emerald-500 animate-pulse"
+                        }`} />
+                        {availStatus === "on_leave" ? "On Leave" : availStatus === "on_call" ? "On Call / Emergency" : availStatus === "busy" ? "Busy / In Surgery" : "Available Today"}
                       </div>
                     </div>
 
@@ -839,12 +1137,21 @@ export function ClinicQueue() {
                     <div className="text-[11px] font-semibold text-slate-500">
                       Waiting: <span className="font-extrabold text-slate-900">{docWaiting} patients</span>
                     </div>
-                    <button
-                      onClick={() => openNewTokenForDoctor(doc.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl transition-all shadow-2xs"
-                    >
-                      <Ticket size={13} /> Issue Token
-                    </button>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setEditingDoctor(doc)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all border border-slate-200"
+                        title="Edit Doctor Profile & OPD Timings"
+                      >
+                        <Edit size={12} /> Edit
+                      </button>
+                      <button
+                        onClick={() => openNewTokenForDoctor(doc.id)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 hover:bg-emerald-600 text-white text-xs font-bold rounded-xl transition-all shadow-2xs"
+                      >
+                        <Ticket size={13} /> Issue Token
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -913,7 +1220,7 @@ export function ClinicQueue() {
                       const docIdx = doctors.findIndex(
                         (d) => d.id === t.doctor?.id || d.email === t.doctor?.email,
                       );
-                      const sched = getDoctorSchedule(docIdx >= 0 ? docIdx : 0);
+                      const sched = getDoctorSchedule(t.doctor, docIdx >= 0 ? docIdx : 0);
 
                       return (
                         <tr
@@ -1010,6 +1317,13 @@ export function ClinicQueue() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         defaultDoctorId={preselectedDoctorId}
+      />
+
+      {/* Edit Doctor Profile Modal */}
+      <EditDoctorProfileModal
+        open={!!editingDoctor}
+        onClose={() => setEditingDoctor(null)}
+        doctor={editingDoctor}
       />
     </div>
   );

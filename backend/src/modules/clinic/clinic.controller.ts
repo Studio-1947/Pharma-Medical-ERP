@@ -29,6 +29,17 @@ export class ClinicController {
     return this.service.findDoctors(resolveBranchScope(user, branchId));
   }
 
+  @Patch("doctors/:id/profile")
+  @Roles("admin", "cashier", "doctor")
+  @ApiOperation({ summary: "Update doctor profile (specialty, fee, OPD room, weekly timings, availability)" })
+  updateDoctorProfile(
+    @Param("id") id: string,
+    @Body() body: Record<string, any>,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    return this.service.updateDoctorProfile(id, body, user);
+  }
+
   @Get("tokens")
   @Roles("admin", "cashier", "doctor")
   @ApiOperation({ summary: "Query the clinic token queue" })
