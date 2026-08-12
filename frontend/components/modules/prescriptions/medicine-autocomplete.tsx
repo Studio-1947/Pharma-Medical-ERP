@@ -34,6 +34,7 @@ export interface MedicineOption {
   scheduleClass?: string | null;
   requiresPrescription?: boolean;
   isControlled?: boolean;
+  totalStock?: number | null;
 }
 
 /** Schedule H/H1/X need a prescription on record; OTC and blanks do not. */
@@ -260,6 +261,17 @@ export function MedicineAutocomplete({
               <span className="text-xs font-bold truncate">{m.name}</span>
               <div className="flex items-center gap-1.5 shrink-0">
                 {scheduleBadge(m)}
+                {m.totalStock !== undefined && m.totalStock !== null && (
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+                      Number(m.totalStock) <= 0
+                        ? "bg-red-50 text-red-700 border-red-200"
+                        : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    }`}
+                  >
+                    {Number(m.totalStock) <= 0 ? "Out" : `${m.totalStock} in stock`}
+                  </span>
+                )}
                 {m.priceMrp && (
                   <span className="text-[11px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200/60 px-1.5 py-0.5 rounded">
                     ₹{Number(m.priceMrp).toFixed(2)}

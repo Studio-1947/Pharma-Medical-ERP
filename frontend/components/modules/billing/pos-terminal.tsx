@@ -711,10 +711,10 @@ export function PosTerminal() {
                         setSearch("");
                       } catch { toastError("Failed to load stock", "Could not fetch batch details. Check your connection and try again."); }
                     }}
-                    className="flex items-center justify-between px-5 py-4 hover:bg-muted/40 text-sm text-left transition duration-150 cursor-pointer"
+                    className="flex items-center justify-between px-5 py-3.5 hover:bg-muted/40 text-sm text-left transition duration-150 cursor-pointer"
                   >
                     <div className="space-y-1">
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold text-gray-900">{m.name}</span>
                         {m.scheduleClass && CONTROLLED_CLASSES.includes(m.scheduleClass) && (
                           <span className="text-[10px] bg-red-50 text-red-700 border border-red-100 font-bold px-1.5 py-0.5 rounded uppercase">
@@ -722,12 +722,38 @@ export function PosTerminal() {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                         <span className="font-mono">{m.sku}</span>
                         {m.hsnCode && <span>· HSN: {m.hsnCode}</span>}
+                        {m.totalStock !== undefined && (
+                          <span
+                            className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md border transition-all ${
+                              Number(m.totalStock) <= 0
+                                ? "bg-red-50 text-red-700 border-red-200"
+                                : Number(m.totalStock) <= Number(m.reorderLevel || 10)
+                                ? "bg-amber-50 text-amber-800 border-amber-200"
+                                : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                Number(m.totalStock) <= 0
+                                  ? "bg-red-500"
+                                  : Number(m.totalStock) <= Number(m.reorderLevel || 10)
+                                  ? "bg-amber-500 animate-pulse"
+                                  : "bg-emerald-500"
+                              }`}
+                            />
+                            {Number(m.totalStock) <= 0
+                              ? "Out of stock"
+                              : Number(m.totalStock) <= Number(m.reorderLevel || 10)
+                              ? `Low Stock: ${m.totalStock} left`
+                              : `${m.totalStock} in stock`}
+                          </span>
+                        )}
                       </div>
                     </div>
-                    <span className="font-bold text-base text-primary">₹{parseFloat(m.priceMrp).toFixed(2)}</span>
+                    <span className="font-bold text-base text-primary shrink-0 ml-3">₹{parseFloat(m.priceMrp).toFixed(2)}</span>
                   </div>
                 ))}
                 {!isFetching && medicines.length === 0 && (
