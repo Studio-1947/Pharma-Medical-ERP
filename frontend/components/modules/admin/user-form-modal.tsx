@@ -334,7 +334,7 @@ export function UserFormModal({ open, onClose, user }: Props) {
                   <option value="Pediatrics & Child Health">Pediatrics & Child Health</option>
                   <option value="Orthopedics & Joint Care">Orthopedics & Joint Care</option>
                   <option value="Dermatology & Skin Care">Dermatology & Skin Care</option>
-                  <option value="Gynecology & Women's Health">Gynecology & Women's Health</option>
+                  <option value="Gynecology & Women's Health">Gynecology & Women&apos;s Health</option>
                   <option value="ENT & Head/Neck">ENT & Head/Neck</option>
                   <option value="Neurology & Brain Health">Neurology & Brain Health</option>
                   <option value="Psychiatry & Behavioral Health">Psychiatry & Behavioral Health</option>
