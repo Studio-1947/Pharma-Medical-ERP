@@ -180,8 +180,15 @@ export class ClinicService {
     }
     const { branchId, doctorProfile, ...rest } = body;
     const profilePayload = doctorProfile ?? rest;
+
+    // Doctors cannot change their own assigned branch; only Super Admins and Admins can assign doctors to branches.
+    const isAdmin = user.role === "admin" || user.role === "super_admin";
+    const effectiveBranchId = isAdmin
+      ? (branchId !== undefined ? (branchId === "" ? null : branchId) : undefined)
+      : undefined;
+
     const updated = await this.repo.updateDoctorProfile(id, {
-      branchId: branchId !== undefined ? (branchId === "" ? null : branchId) : undefined,
+      branchId: effectiveBranchId,
       doctorProfile: profilePayload,
     });
     if (!updated) throw new NotFoundException(`Doctor ${id} not found`);

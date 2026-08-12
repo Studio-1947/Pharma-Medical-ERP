@@ -14,6 +14,7 @@ import {
   useCreateClinicToken,
   useUpdateClinicToken,
 } from "@/queries/clinic.queries";
+import { useAuthStore } from "@/stores/auth.store";
 import {
   Ticket,
   Plus,
@@ -219,6 +220,9 @@ export function EditDoctorProfileModal({
   const { data: branchesRaw } = useBranches();
   const branches = rowsOf<any>(branchesRaw);
 
+  const { user: currentUser } = useAuthStore();
+  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
+
   const dp = doctor?.doctorProfile;
   const sched = dp?.weeklySchedule ?? [];
 
@@ -260,7 +264,7 @@ export function EditDoctorProfileModal({
     setSubmitting(true);
 
     const profileData = {
-      branchId: branchId === "" ? null : branchId,
+      ...(isAdmin ? { branchId: branchId === "" ? null : branchId } : {}),
       specialty: specialty.trim() || "General Medicine & Primary Care",
       consultationFee: parseFloat(fee) || 400,
       opdRoom: opdRoom.trim() || "OPD Cabin 101 (Ground Floor)",
@@ -277,7 +281,7 @@ export function EditDoctorProfileModal({
       .patch(`/clinic/doctors/${doctor.id}/profile`, profileData)
       .then(() => {
         qc.invalidateQueries({ queryKey: queryKeys.clinicTokens.doctors() });
-        toastSuccess("Doctor Profile Updated", `${doctorName(doctor)} OPD profile, branch mapping, and timings updated.`);
+        toastSuccess("Doctor Profile Updated", `${doctorName(doctor)} OPD profile and timings updated.`);
         onClose();
       })
       .catch((err: any) => {
@@ -298,14 +302,26 @@ export function EditDoctorProfileModal({
       <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
         {/* Branch Mapping Selector */}
         <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3.5 space-y-1">
-          <label className="text-xs font-black text-emerald-900 uppercase tracking-wider block flex items-center gap-1.5">
-            <Building2 size={14} className="text-emerald-600 shrink-0" />
-            Assigned OPD Branch / Clinic Practice Location
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-black text-emerald-900 uppercase tracking-wider block flex items-center gap-1.5">
+              <Building2 size={14} className="text-emerald-600 shrink-0" />
+              Assigned OPD Branch / Clinic Location
+            </label>
+            {!isAdmin && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                Managed by Admin
+              </span>
+            )}
+          </div>
           <select
             value={branchId}
+            disabled={!isAdmin}
             onChange={(e) => setBranchId(e.target.value)}
-            className="w-full border border-emerald-300 rounded-xl px-3 py-2 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40 text-slate-900 font-bold"
+            className={`w-full border rounded-xl px-3 py-2 text-xs font-bold ${
+              !isAdmin
+                ? "bg-slate-100 border-slate-300 text-slate-600 cursor-not-allowed"
+                : "bg-white border-emerald-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+            }`}
           >
             <option value="">No branch / All branches (Unassigned)</option>
             {branches.map((b: any) => (
@@ -315,7 +331,9 @@ export function EditDoctorProfileModal({
             ))}
           </select>
           <p className="text-[11px] text-emerald-700 font-medium">
-            Mapping this doctor to a branch assigns their primary OPD clinic for patient tokens, queue scheduling, and branch-scoped views.
+            {isAdmin
+              ? "Mapping this doctor to a branch assigns their primary OPD clinic for patient tokens, queue scheduling, and branch-scoped views."
+              : "Your primary OPD Branch location is assigned by Super Admins & Clinic Managers. Your live inventory and prescriptions automatically align with this OPD Branch."}
           </p>
         </div>
 
