@@ -183,6 +183,13 @@
       "when": 1786400000000,
       "tag": "0025_performance_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1786515000000,
+      "tag": "0026_doctor_profile",
+      "breakpoints": true
     }
   ]
 }
