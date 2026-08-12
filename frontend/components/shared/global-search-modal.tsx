@@ -128,8 +128,23 @@ export function GlobalSearchModal({ open, onClose }: Props) {
                             <p className="text-xs font-bold text-slate-800 group-hover:text-emerald-900">
                               {m.name}
                             </p>
-                            <p className="text-[10px] text-slate-500">
-                              SKU: {m.sku} &bull; MRP: ₹{m.priceMrp}
+                            <p className="text-[10px] text-slate-500 flex flex-wrap items-center gap-1.5 mt-0.5">
+                              <span>SKU: {m.sku} &bull; MRP: ₹{m.priceMrp}</span>
+                              {m.totalStock !== undefined && (
+                                <span
+                                  className={`inline-flex items-center gap-1 font-bold text-[9px] px-1.5 py-0.2 rounded border ${
+                                    Number(m.totalStock) <= 0
+                                      ? "bg-red-50 text-red-700 border-red-200"
+                                      : Number(m.totalStock) <= Number(m.reorderLevel || 10)
+                                      ? "bg-amber-50 text-amber-800 border-amber-200"
+                                      : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  }`}
+                                >
+                                  {Number(m.totalStock) <= 0
+                                    ? "Out of stock"
+                                    : `${m.totalStock} in stock`}
+                                </span>
+                              )}
                             </p>
                           </div>
                         </div>

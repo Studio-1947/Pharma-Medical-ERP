@@ -86,7 +86,7 @@ export class InvoicePdfWorker {
     return new Promise((resolve, reject) => {
       const doc = new PDFDocument({
         size: "A4",
-        margin: 30,
+        margins: { top: 25, bottom: 10, left: 30, right: 30 },
         bufferPages: true,
         info: {
           Title: `Cash Memo ${invoice.invoiceNo}`,
@@ -101,7 +101,7 @@ export class InvoicePdfWorker {
 
       const ML = 30;
       const PW = doc.page.width - ML * 2;
-      const PAGE_BOTTOM = doc.page.height - 50;
+      const PAGE_BOTTOM = doc.page.height - 70;
       const BORDER = "#333333";
       const TXT = "#111111";
       const LABEL = "#555555";
