@@ -14,6 +14,7 @@ import {
   useCreateClinicToken,
   useUpdateClinicToken,
 } from "@/queries/clinic.queries";
+import { useAuthStore } from "@/stores/auth.store";
 import {
   Ticket,
   Plus,
@@ -34,7 +35,9 @@ import {
   Filter,
   Sparkles,
   Edit,
+  Building2,
 } from "lucide-react";
+import { useBranches, rowsOf } from "@/queries/admin.queries";
 import { QuickPatientForm } from "@/components/modules/patients/quick-patient-form";
 import { formatClockTime, formatDuration, durationMinutes } from "@/lib/consultation-time";
 
@@ -50,6 +53,7 @@ interface Doctor {
   lastName?: string;
   email: string;
   specialty?: string;
+  branchId?: string | null;
   doctorProfile?: {
     specialty?: string;
     opdRoom?: string;
@@ -202,7 +206,7 @@ function statusBadge(status: ClinicToken["status"]) {
   }
 }
 
-function EditDoctorProfileModal({
+export function EditDoctorProfileModal({
   open,
   onClose,
   doctor,
@@ -213,9 +217,16 @@ function EditDoctorProfileModal({
 }) {
   const qc = useQueryClient();
   const { success: toastSuccess, error: toastError } = useToast();
+  const { data: branchesRaw } = useBranches();
+  const branches = rowsOf<any>(branchesRaw);
+
+  const { user: currentUser } = useAuthStore();
+  const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
+
   const dp = doctor?.doctorProfile;
   const sched = dp?.weeklySchedule ?? [];
 
+  const [branchId, setBranchId] = useState(doctor?.branchId ?? "");
   const [specialty, setSpecialty] = useState("General Medicine & Primary Care");
   const [fee, setFee] = useState("400");
   const [opdRoom, setOpdRoom] = useState("OPD Cabin 101 (Ground Floor)");
@@ -232,6 +243,7 @@ function EditDoctorProfileModal({
     if (doctor) {
       const dProfile = doctor.doctorProfile;
       const sList = dProfile?.weeklySchedule ?? [];
+      setBranchId(doctor.branchId ?? "");
       setSpecialty(dProfile?.specialty ?? "General Medicine & Primary Care");
       setFee(dProfile?.consultationFee ? String(dProfile.consultationFee) : "400");
       setOpdRoom(dProfile?.opdRoom ?? "OPD Cabin 101 (Ground Floor)");
@@ -252,6 +264,7 @@ function EditDoctorProfileModal({
     setSubmitting(true);
 
     const profileData = {
+      ...(isAdmin ? { branchId: branchId === "" ? null : branchId } : {}),
       specialty: specialty.trim() || "General Medicine & Primary Care",
       consultationFee: parseFloat(fee) || 400,
       opdRoom: opdRoom.trim() || "OPD Cabin 101 (Ground Floor)",
@@ -280,13 +293,50 @@ function EditDoctorProfileModal({
   return (
     <Modal
       title={`Edit Doctor Profile — ${doctorName(doctor)}`}
-      subtitle="Update OPD specialization, consultation fee, cabin room & weekly timings"
+      subtitle="Update assigned OPD branch clinic, specialization, consultation fee, cabin & weekly timings"
       icon={<Edit size={18} className="text-emerald-600" />}
       open={open}
       onClose={onClose}
       size="lg"
     >
       <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+        {/* Branch Mapping Selector */}
+        <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3.5 space-y-1">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-black text-emerald-900 uppercase tracking-wider block flex items-center gap-1.5">
+              <Building2 size={14} className="text-emerald-600 shrink-0" />
+              Assigned OPD Branch / Clinic Location
+            </label>
+            {!isAdmin && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-200 text-slate-700">
+                Managed by Admin
+              </span>
+            )}
+          </div>
+          <select
+            value={branchId}
+            disabled={!isAdmin}
+            onChange={(e) => setBranchId(e.target.value)}
+            className={`w-full border rounded-xl px-3 py-2 text-xs font-bold ${
+              !isAdmin
+                ? "bg-slate-100 border-slate-300 text-slate-600 cursor-not-allowed"
+                : "bg-white border-emerald-300 text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+            }`}
+          >
+            <option value="">No branch / All branches (Unassigned)</option>
+            {branches.map((b: any) => (
+              <option key={b.id} value={b.id}>
+                {b.name} ({b.code || "Branch"})
+              </option>
+            ))}
+          </select>
+          <p className="text-[11px] text-emerald-700 font-medium">
+            {isAdmin
+              ? "Mapping this doctor to a branch assigns their primary OPD clinic for patient tokens, queue scheduling, and branch-scoped views."
+              : "Your primary OPD Branch location is assigned by Super Admins & Clinic Managers. Your live inventory and prescriptions automatically align with this OPD Branch."}
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
           <div>
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block mb-1">

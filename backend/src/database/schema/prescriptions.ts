@@ -14,6 +14,7 @@ import { prescriptionStatusEnum } from "./enums";
 import { patients } from "./billing";
 import { users } from "./auth";
 import { medicines } from "./inventory";
+import { branches } from "./branches";
 
 export const prescriptions = pgTable(
   "prescriptions",
@@ -22,6 +23,9 @@ export const prescriptions = pgTable(
     patientId: uuid("patient_id")
       .notNull()
       .references(() => patients.id, { onDelete: "restrict" }),
+    branchId: uuid("branch_id").references(() => branches.id, {
+      onDelete: "set null",
+    }),
     doctorName: varchar("doctor_name", { length: 255 }).notNull(),
     doctorRegNo: varchar("doctor_reg_no", { length: 100 }),
     hospitalName: varchar("hospital_name", { length: 255 }),
@@ -51,6 +55,7 @@ export const prescriptions = pgTable(
     statusIdx: index("prescriptions_status_idx").on(t.status),
     expiryDateIdx: index("prescriptions_expiry_date_idx").on(t.expiryDate),
     patientIdIdx: index("prescriptions_patient_id_idx").on(t.patientId),
+    branchIdIdx: index("prescriptions_branch_id_idx").on(t.branchId),
   }),
 );
 
@@ -77,6 +82,10 @@ export const prescriptionsRelations = relations(
     patient: one(patients, {
       fields: [prescriptions.patientId],
       references: [patients.id],
+    }),
+    branch: one(branches, {
+      fields: [prescriptions.branchId],
+      references: [branches.id],
     }),
     verifiedBy: one(users, {
       fields: [prescriptions.verifiedBy],

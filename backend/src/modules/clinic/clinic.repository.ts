@@ -152,6 +152,7 @@ export class ClinicRepository {
         firstName: schema.users.firstName,
         lastName: schema.users.lastName,
         email: schema.users.email,
+        branchId: schema.users.branchId,
         doctorProfile: schema.users.doctorProfile,
       })
       .from(schema.users)
@@ -159,16 +160,25 @@ export class ClinicRepository {
       .orderBy(asc(schema.users.firstName));
   }
 
-  async updateDoctorProfile(id: string, doctorProfile: Record<string, any>) {
+  async updateDoctorProfile(id: string, payload: { branchId?: string | null; doctorProfile: Record<string, any> }) {
+    const updateData: Record<string, any> = {
+      doctorProfile: payload.doctorProfile,
+      updatedAt: new Date(),
+    };
+    if (payload.branchId !== undefined) {
+      updateData.branchId = payload.branchId;
+    }
+
     const [user] = await this.db
       .update(schema.users)
-      .set({ doctorProfile, updatedAt: new Date() })
+      .set(updateData)
       .where(and(eq(schema.users.id, id), eq(schema.users.role, "doctor")))
       .returning({
         id: schema.users.id,
         firstName: schema.users.firstName,
         lastName: schema.users.lastName,
         email: schema.users.email,
+        branchId: schema.users.branchId,
         doctorProfile: schema.users.doctorProfile,
       });
     return user ?? null;

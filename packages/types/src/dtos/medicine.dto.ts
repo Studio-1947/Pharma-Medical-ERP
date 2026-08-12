@@ -66,6 +66,7 @@ export const updateMedicineSchema = createMedicineSchema.partial().omit({});
 export const queryMedicineSchema = z.object({
   search: z.string().optional(),
   categoryId: z.string().uuid().optional(),
+  branchId: z.string().uuid().optional(),
   isActive: z.coerce.boolean().optional(),
   requiresPrescription: z.coerce.boolean().optional(),
   page: z.coerce.number().int().min(1).default(1),

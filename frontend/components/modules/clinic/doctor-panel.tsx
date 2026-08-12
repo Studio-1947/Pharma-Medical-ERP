@@ -5,7 +5,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
-import { useClinicTokens, useClinicToken, useUpdateClinicToken } from "@/queries/clinic.queries";
+import { useClinicTokens, useClinicToken, useUpdateClinicToken, useClinicDoctors } from "@/queries/clinic.queries";
+import { EditDoctorProfileModal } from "./clinic-queue";
 import { localDateString } from "@/lib/date";
 import {
   formatClockTime,
@@ -20,7 +21,7 @@ import { InvoiceDetailModal } from "@/components/modules/billing/invoice-detail-
 import { sendViaWhatsApp } from "@/lib/patient-messaging";
 import {
   Stethoscope, Clock, PhoneCall, CheckCircle2, User, AlertTriangle,
-  Plus, Trash2, Upload, FileText, History, ChevronRight,
+  Plus, Trash2, Upload, FileText, History, ChevronRight, Edit, MapPin, DollarSign,
   Image as ImageIcon,
 } from "lucide-react";
 import { format } from "date-fns";
@@ -56,6 +57,7 @@ function MedicineRow({
   onRemove,
   removable,
   idx,
+  branchId,
 }: {
   item: RxItem;
   onChange: (patch: Partial<RxItem>) => void;
@@ -63,6 +65,7 @@ function MedicineRow({
   onRemove: () => void;
   removable: boolean;
   idx?: number;
+  branchId?: string | null;
 }) {
   return (
     <>
@@ -72,6 +75,7 @@ function MedicineRow({
           <MedicineAutocomplete
             value={item.medicineName}
             linked={!!item.medicineId}
+            branchId={branchId}
             onChange={(text) => onChange({ medicineName: text, medicineId: undefined })}
             onSelect={onSelectMedicine}
             placeholder="Search medicine name..."
@@ -148,6 +152,7 @@ function MedicineRow({
             <MedicineAutocomplete
               value={item.medicineName}
               linked={!!item.medicineId}
+              branchId={branchId}
               onChange={(text) => onChange({ medicineName: text, medicineId: undefined })}
               onSelect={onSelectMedicine}
               placeholder="Search medicine name..."
@@ -259,7 +264,7 @@ function ConsultationClock({ token }: { token: any }) {
 
 // ─── Consultation workspace for the selected token ────────────────────────────
 
-function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCompleted: () => void }) {
+function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { tokenId: string; onCompleted: () => void; doctorBranchId?: string | null }) {
   const qc = useQueryClient();
   const { success: toastSuccess, error: toastError } = useToast();
   const { data: tokenRes, isLoading } = useClinicToken(tokenId);
@@ -351,6 +356,7 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
 
       const rxRes: any = await apiClient.post("/prescriptions", {
         patientId: token.patient.id,
+        branchId: doctorBranchId ?? token.doctor?.branchId ?? undefined,
         doctorName,
         issuedDate: localDateString(today),
         expiryDate: localDateString(expiry),
@@ -554,6 +560,7 @@ function ConsultationWorkspace({ tokenId, onCompleted }: { tokenId: string; onCo
                     <MedicineRow
                       key={idx}
                       item={item}
+                      branchId={doctorBranchId ?? token?.doctor?.branchId}
                       onChange={(patch) => updateItem(idx, patch)}
                       onSelectMedicine={(m) => selectMedicine(idx, m)}
                       onRemove={() => removeItem(idx)}
@@ -655,6 +662,27 @@ export function DoctorPanel() {
   const { user } = useAuthStore();
   const [date] = useState(localDateString());
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
+  const [editingSelf, setEditingSelf] = useState(false);
+
+  const { data: doctorsRes } = useClinicDoctors();
+  const doctors: any[] = (doctorsRes as any)?.data ?? [];
+  const me = doctors.find((d) => d.id === user?.id || d.email === user?.email) ?? {
+    id: user?.id ?? "",
+    firstName: (user as any)?.firstName,
+    lastName: (user as any)?.lastName,
+    email: user?.email ?? "",
+    doctorProfile: (user as any)?.doctorProfile,
+  };
+
+  const dp = me.doctorProfile;
+  const specialty = dp?.specialty || "General Medicine & Primary Care";
+  const fee = dp?.consultationFee ? `₹${dp.consultationFee}` : "₹400";
+  const opdRoom = dp?.opdRoom || "OPD Cabin 101 (Ground Floor)";
+  const status = dp?.availabilityStatus || "available";
+  const weeklySchedule = dp?.weeklySchedule ?? [
+    { days: "Mon - Fri", slots: "09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM" },
+    { days: "Saturday", slots: "09:00 AM - 02:00 PM" },
+  ];
 
   // Wait for the signed-in doctor's id before querying. Sending doctorId as
   // undefined asks for every doctor's queue; the API now pins it to the caller
@@ -668,13 +696,76 @@ export function DoctorPanel() {
   const called = tokens.filter((t) => t.status === "called");
   const completed = tokens.filter((t) => t.status === "completed");
 
+  const uAny = user as any;
+  const docName = [uAny?.firstName, uAny?.lastName].filter(Boolean).join(" ");
+  const displayName = docName ? `Dr. ${docName}` : user?.email || "Doctor";
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="mb-4">
-        <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 flex items-center gap-2">
-          <Stethoscope size={22} /> Doctor Panel
-        </h1>
-        <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 sm:mt-1">Today&apos;s consultation queue.</p>
+    <div className="flex flex-col h-full space-y-4">
+      {/* Top Banner: Doctor Profile Info & Availability Edit */}
+      <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 p-5 rounded-2xl text-white shadow-lg border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start gap-3.5">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center justify-center font-black text-lg shrink-0">
+            {displayName.replace("Dr. ", "").slice(0, 2).toUpperCase()}
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-extrabold text-white flex items-center gap-2">
+                <Stethoscope className="text-emerald-400 shrink-0" size={22} />
+                {displayName}
+              </h1>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                {specialty}
+              </span>
+              <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold border flex items-center gap-1.5 ${
+                status === "on_leave"
+                  ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                  : status === "on_call"
+                  ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                  : status === "busy"
+                  ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                  : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${
+                  status === "on_leave" ? "bg-rose-400" : status === "on_call" ? "bg-amber-400 animate-pulse" : "bg-emerald-400 animate-pulse"
+                }`} />
+                {status === "on_leave" ? "On Leave" : status === "on_call" ? "On Call / Emergency" : status === "busy" ? "Busy / In Surgery" : "Available Today"}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-4 text-xs text-slate-300 font-medium flex-wrap pt-0.5">
+              <span className="flex items-center gap-1 text-slate-200 font-semibold">
+                <MapPin size={13} className="text-emerald-400" /> {opdRoom}
+              </span>
+              <span className="flex items-center gap-1 text-slate-200 font-semibold">
+                <DollarSign size={13} className="text-emerald-400" /> {fee} Consult Fee
+              </span>
+              {dp?.regNo && (
+                <span className="text-slate-400 font-mono">Reg No: {dp.regNo}</span>
+              )}
+            </div>
+
+            {/* OPD Duty Hours Pill */}
+            <div className="flex items-center gap-2 text-[11px] text-slate-300 pt-1 flex-wrap">
+              <span className="text-slate-400 font-bold uppercase tracking-wider flex items-center gap-1 font-sans">
+                <Clock size={12} className="text-emerald-400" /> OPD Hours:
+              </span>
+              {weeklySchedule.map((s: any, idx: number) => (
+                <span key={idx} className="bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700 text-slate-200 font-mono">
+                  {s.days}: {s.slots}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Doctor Self Edit Button */}
+        <button
+          onClick={() => setEditingSelf(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition-all shrink-0 hover:scale-105 active:scale-95 self-start md:self-center"
+        >
+          <Edit size={14} /> Edit My OPD Profile & Timings
+        </button>
       </div>
 
       <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0 border rounded-xl bg-card shadow-sm overflow-hidden">
@@ -732,13 +823,20 @@ export function DoctorPanel() {
 
         {/* Workspace */}
         {selectedTokenId ? (
-          <ConsultationWorkspace tokenId={selectedTokenId} onCompleted={() => setSelectedTokenId(null)} />
+          <ConsultationWorkspace tokenId={selectedTokenId} onCompleted={() => setSelectedTokenId(null)} doctorBranchId={me.branchId} />
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm p-8 text-center">
             Select a token from the queue to begin the consultation.
           </div>
         )}
       </div>
+
+      {/* Edit Doctor Profile Modal */}
+      <EditDoctorProfileModal
+        open={editingSelf}
+        onClose={() => setEditingSelf(false)}
+        doctor={me}
+      />
     </div>
   );
 }

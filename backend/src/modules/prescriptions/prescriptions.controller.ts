@@ -17,6 +17,8 @@ import {
   queryPrescriptionSchema,
 } from "@pharmerp/types";
 
+import { resolveBranchScope } from "../../common/auth/branch-scope";
+
 @ApiTags("prescriptions")
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -63,8 +65,13 @@ export class PrescriptionsController {
   @Get()
   @Roles("admin", "pharmacist", "cashier", "doctor")
   @ApiOperation({ summary: "List prescriptions with optional filters" })
-  findAll(@Query() q: unknown) {
-    return this.service.findAll(queryPrescriptionSchema.parse(q));
+  findAll(
+    @Query() q: unknown,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const dto = queryPrescriptionSchema.parse(q);
+    const branchId = resolveBranchScope(user, dto.branchId);
+    return this.service.findAll({ ...dto, branchId });
   }
 
   @Public()

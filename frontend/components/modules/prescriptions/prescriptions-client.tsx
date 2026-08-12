@@ -120,6 +120,7 @@ function CreatePrescriptionModal({
   onClose: () => void;
 }) {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
   const { isDoctor, name: currentDoctorName } = useCurrentDoctor();
   const [patientSearch, setPatientSearch] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<{ id: string; name: string; phone: string } | null>(null);
@@ -244,6 +245,7 @@ function CreatePrescriptionModal({
 
     mutation.mutate({
       patientId: selectedPatient.id,
+      branchId: user?.branchId ?? undefined,
       doctorName: doctorName.trim(),
       doctorRegNo: doctorRegNo.trim() || undefined,
       hospitalName: hospitalName.trim() || undefined,
@@ -475,6 +477,7 @@ function CreatePrescriptionModal({
                       <MedicineAutocomplete
                         value={item.medicineName}
                         linked={!!item.medicineId}
+                        branchId={user?.branchId}
                         onChange={(text) => handleNameChange(idx, text)}
                         onSelect={(m) => handleMedicineSelect(idx, m)}
                         placeholder="Type to search medicines..."

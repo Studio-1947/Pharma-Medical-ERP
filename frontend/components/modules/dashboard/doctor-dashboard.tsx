@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useAuthStore } from "@/stores/auth.store";
-import { useClinicTokens } from "@/queries/clinic.queries";
+import { useClinicTokens, useClinicDoctors } from "@/queries/clinic.queries";
 import { useNavigation } from "@/lib/navigation-context";
 import { localDateString } from "@/lib/date";
+import { EditDoctorProfileModal } from "@/components/modules/clinic/clinic-queue";
 import {
-  Stethoscope, Clock, PhoneCall, CheckCircle2, Users, FileText, ArrowRight,
+  Stethoscope, Clock, PhoneCall, CheckCircle2, Users, FileText, ArrowRight, Edit, MapPin, DollarSign,
 } from "lucide-react";
 
 /**
@@ -56,6 +58,31 @@ export function DoctorDashboard() {
   const { user } = useAuthStore();
   const { navigate } = useNavigation();
   const today = localDateString();
+  const [editingSelf, setEditingSelf] = useState(false);
+
+  const { data: doctorsRes } = useClinicDoctors();
+  const doctors: any[] = (doctorsRes as any)?.data ?? [];
+  const me = doctors.find((d) => d.id === user?.id || d.email === user?.email) ?? {
+    id: user?.id ?? "",
+    firstName: (user as any)?.firstName,
+    lastName: (user as any)?.lastName,
+    email: user?.email ?? "",
+    doctorProfile: (user as any)?.doctorProfile,
+  };
+
+  const dp = me.doctorProfile;
+  const specialty = dp?.specialty || "General Medicine & Primary Care";
+  const fee = dp?.consultationFee ? `₹${dp.consultationFee}` : "₹400";
+  const opdRoom = dp?.opdRoom || "OPD Cabin 101 (Ground Floor)";
+  const status = dp?.availabilityStatus || "available";
+  const weeklySchedule = dp?.weeklySchedule ?? [
+    { days: "Mon - Fri", slots: "09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM" },
+    { days: "Saturday", slots: "09:00 AM - 02:00 PM" },
+  ];
+
+  const uAny = user as any;
+  const docName = [uAny?.firstName, uAny?.lastName].filter(Boolean).join(" ");
+  const displayName = docName ? `Dr. ${docName}` : user?.email || "Doctor";
 
   const { data: tokensRes, isLoading } = useClinicTokens(
     { date: today, doctorId: user?.id, limit: 100 },
@@ -80,21 +107,76 @@ export function DoctorDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-900">
-            Good morning, Doctor
-          </h1>
-          <p className="text-sm text-slate-400 mt-0.5">{dateLabel}</p>
+      {/* Top Banner: Doctor Greeting & Availability Controls */}
+      <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 p-6 rounded-2xl text-white shadow-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center justify-center font-black text-lg shrink-0">
+            {displayName.replace("Dr. ", "").slice(0, 2).toUpperCase()}
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h1 className="text-xl font-extrabold text-white flex items-center gap-2">
+                Good morning, {displayName}
+              </h1>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                {specialty}
+              </span>
+              <span className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold border flex items-center gap-1.5 ${
+                status === "on_leave"
+                  ? "bg-rose-500/20 text-rose-300 border-rose-500/30"
+                  : status === "on_call"
+                  ? "bg-amber-500/20 text-amber-300 border-amber-500/30"
+                  : status === "busy"
+                  ? "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                  : "bg-emerald-500/20 text-emerald-300 border-emerald-500/30"
+              }`}>
+                <span className={`w-2 h-2 rounded-full ${
+                  status === "on_leave" ? "bg-rose-400" : status === "on_call" ? "bg-amber-400 animate-pulse" : "bg-emerald-400 animate-pulse"
+                }`} />
+                {status === "on_leave" ? "On Leave" : status === "on_call" ? "On Call / Emergency" : status === "busy" ? "Busy / In Surgery" : "Available Today"}
+              </span>
+            </div>
+
+            <p className="text-xs text-slate-300 font-medium flex items-center gap-3 flex-wrap pt-0.5">
+              <span>{dateLabel}</span>
+              <span>•</span>
+              <span className="flex items-center gap-1 text-slate-200 font-semibold">
+                <MapPin size={13} className="text-emerald-400" /> {opdRoom}
+              </span>
+              <span>•</span>
+              <span className="flex items-center gap-1 text-slate-200 font-semibold">
+                <DollarSign size={13} className="text-emerald-400" /> {fee} Fee
+              </span>
+            </p>
+
+            <div className="flex items-center gap-2 text-[11px] text-slate-300 pt-1 flex-wrap font-mono">
+              <span className="text-slate-400 font-bold uppercase tracking-wider font-sans flex items-center gap-1">
+                <Clock size={12} className="text-emerald-400" /> Weekly Timings:
+              </span>
+              {weeklySchedule.map((s: any, idx: number) => (
+                <span key={idx} className="bg-slate-800/80 px-2 py-0.5 rounded border border-slate-700 text-slate-200">
+                  {s.days}: {s.slots}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
-        <button
-          onClick={() => navigate("/clinic/doctor")}
-          className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 text-white text-sm font-semibold rounded-xl shadow-sm hover:from-emerald-700 hover:to-teal-700 transition-all"
-        >
-          <Stethoscope size={14} />
-          Open Doctor Panel
-        </button>
+
+        <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+          <button
+            onClick={() => setEditingSelf(true)}
+            className="flex items-center gap-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 hover:text-white text-xs font-bold rounded-xl transition-all shadow-2xs"
+          >
+            <Edit size={14} className="text-emerald-400" /> Edit Profile & Timings
+          </button>
+          <button
+            onClick={() => navigate("/clinic/doctor")}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-extrabold rounded-xl shadow-md transition-all hover:scale-105 active:scale-95"
+          >
+            <Stethoscope size={15} />
+            Open Doctor Panel
+          </button>
+        </div>
       </div>
 
       {/* Queue stats */}
@@ -216,6 +298,13 @@ export function DoctorDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Edit Doctor Profile Modal */}
+      <EditDoctorProfileModal
+        open={editingSelf}
+        onClose={() => setEditingSelf(false)}
+        doctor={me}
+      />
     </div>
   );
 }
