@@ -54,3 +54,14 @@ export function requireBranchScope(
   }
   return branchId;
 }
+
+/** Enforces branch ownership after loading an existing record by ID. */
+export function assertBranchAccess(user: JwtPayload, recordBranchId: string | null | undefined): void {
+  if (!recordBranchId && user.role !== "super_admin") {
+    throw new ForbiddenException("You can only access branch-scoped data");
+  }
+  const allowedBranchId = resolveBranchScope(user);
+  if (allowedBranchId && allowedBranchId !== recordBranchId) {
+    throw new ForbiddenException("You can only access data for your own branch");
+  }
+}

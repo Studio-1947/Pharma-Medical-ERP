@@ -153,9 +153,11 @@ export class ClinicRepository {
         lastName: schema.users.lastName,
         email: schema.users.email,
         branchId: schema.users.branchId,
+        branchName: schema.branches.name,
         doctorProfile: schema.users.doctorProfile,
       })
       .from(schema.users)
+      .leftJoin(schema.branches, eq(schema.users.branchId, schema.branches.id))
       .where(and(...conditions))
       .orderBy(asc(schema.users.firstName));
   }
