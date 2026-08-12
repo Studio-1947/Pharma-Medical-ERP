@@ -56,8 +56,8 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 py-6 px-3 sm:px-6 flex flex-col items-center">
-      <div className="max-w-md w-full bg-white rounded-3xl border border-slate-200/80 shadow-xl overflow-hidden space-y-0">
+    <div className="min-h-screen bg-slate-100 py-6 px-3 sm:px-6 flex flex-col items-center print:min-h-0 print:py-0 print:px-0 print:bg-white print:block">
+      <div className="max-w-md w-full bg-white rounded-3xl border border-slate-200/80 shadow-xl overflow-hidden space-y-0 printable-invoice print:max-w-none print:w-full print:rounded-none print:border-0 print:shadow-none">
         
         {/* Top Header */}
         <div className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 p-6 text-white text-center relative">

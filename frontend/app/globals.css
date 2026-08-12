@@ -95,38 +95,64 @@ body {
 
 /* ── Print styles ─────────────────────────────────────────── */
 @media print {
-  /* Hide all chrome except .printable-invoice */
+  @page {
+    size: A4;
+    margin: 8mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    color: #000 !important;
+    font-size: 12px;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+  }
+
+  /* Hide all chrome except printable areas */
   aside,
   header,
   nav,
   [data-print-hide],
   button,
-  .no-print {
+  .no-print,
+  .print\:hidden {
     display: none !important;
   }
 
-  body {
-    background: #fff !important;
-    color: #000 !important;
-    font-size: 12px;
+  /* Reset layout containers so they don't stretch onto empty pages */
+  .min-h-screen,
+  div[class*="min-h-screen"] {
+    min-height: 0 !important;
+    height: auto !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    background: transparent !important;
   }
 
   .printable-invoice {
-    width: 100%;
-    max-width: 100%;
-    padding: 0;
-    margin: 0;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
   }
 
-  /* Avoid page breaks inside table rows */
+  /* Avoid page breaks inside table rows and cards */
   tr,
   .print-no-break {
-    page-break-inside: avoid;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
   }
 
   /* Force page break before a new section if needed */
   .print-break-before {
-    page-break-before: always;
+    break-before: page !important;
+    page-break-before: always !important;
   }
 
   /* Hide toast / modal overlays */
