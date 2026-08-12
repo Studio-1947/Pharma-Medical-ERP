@@ -18,6 +18,9 @@ export class PrescriptionsRepository {
     if (params.patientId) {
       conditions.push(eq(schema.prescriptions.patientId, params.patientId));
     }
+    if (params.branchId) {
+      conditions.push(eq(schema.prescriptions.branchId, params.branchId));
+    }
     if (params.status) {
       conditions.push(eq(schema.prescriptions.status, params.status as any));
     }
@@ -97,6 +100,7 @@ export class PrescriptionsRepository {
         .insert(schema.prescriptions)
         .values({
           patientId: data.patientId,
+          branchId: data.branchId,
           doctorName: data.doctorName,
           doctorRegNo: data.doctorRegNo,
           hospitalName: data.hospitalName,

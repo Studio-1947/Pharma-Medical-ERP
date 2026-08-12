@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const basePrescriptionSchema = z.object({
   patientId: z.string().uuid(),
+  branchId: z.string().uuid().optional(),
   doctorName: z.string().min(1).max(255),
   doctorRegNo: z.string().max(100).optional(),
   hospitalName: z.string().max(255).optional(),
@@ -62,6 +63,7 @@ export const verifyPrescriptionSchema = z.object({
 
 export const queryPrescriptionSchema = z.object({
   patientId: z.string().uuid().optional(),
+  branchId: z.string().uuid().optional(),
   status: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),

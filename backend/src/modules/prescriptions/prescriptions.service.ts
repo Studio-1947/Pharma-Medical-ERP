@@ -41,7 +41,7 @@ export class PrescriptionsService {
     };
   }
 
-  async create(dto: CreatePrescriptionDto, currentUser?: { sub: string; role: string }) {
+  async create(dto: CreatePrescriptionDto, currentUser?: { sub: string; role: string; branchId?: string }) {
     // A prescription written by a doctor skips pharmacist verification, so it
     // must be attributed to the doctor who actually signed in. Taking
     // doctorName from the request body would let one prescriber issue
@@ -52,13 +52,17 @@ export class PrescriptionsService {
       ? await this.repo.findUserDisplayName(currentUser!.sub)
       : null;
 
-    const prescription = await this.repo.create(
-      attribution ? { ...dto, doctorName: attribution } : dto,
-      {
-        autoVerify,
-        verifiedBy: autoVerify ? currentUser?.sub : undefined,
-      },
-    );
+    const branchId = dto.branchId || currentUser?.branchId;
+    const payload = {
+      ...dto,
+      branchId: branchId || undefined,
+      ...(attribution ? { doctorName: attribution } : {}),
+    };
+
+    const prescription = await this.repo.create(payload, {
+      autoVerify,
+      verifiedBy: autoVerify ? currentUser?.sub : undefined,
+    });
     return { data: prescription, message: "Prescription created" };
   }
 

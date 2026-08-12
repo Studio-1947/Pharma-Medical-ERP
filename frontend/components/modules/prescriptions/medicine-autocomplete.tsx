@@ -62,6 +62,7 @@ interface Props {
   placeholder?: string;
   autoFocus?: boolean;
   className?: string;
+  branchId?: string | null;
 }
 
 export function MedicineAutocomplete({
@@ -72,6 +73,7 @@ export function MedicineAutocomplete({
   placeholder = "Search medicine...",
   autoFocus = false,
   className,
+  branchId,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
@@ -94,10 +96,10 @@ export function MedicineAutocomplete({
   const shouldSearch = debounced.trim().length >= 2 && !linked;
 
   const { data, isFetching } = useQuery({
-    queryKey: ["medicine-autocomplete", debounced],
+    queryKey: ["medicine-autocomplete", debounced, branchId],
     queryFn: () =>
       apiClient.get("/inventory/medicines", {
-        params: { search: debounced.trim(), limit: 8 },
+        params: { search: debounced.trim(), limit: 8, branchId: branchId || undefined },
       }) as Promise<any>,
     enabled: shouldSearch,
     staleTime: 60_000,

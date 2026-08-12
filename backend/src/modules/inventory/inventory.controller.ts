@@ -41,8 +41,13 @@ export class InventoryController {
   @Get()
   @Roles("admin", "pharmacist", "inventory_manager", "cashier", "doctor")
   @ApiOperation({ summary: "List medicines with pagination and search" })
-  findAll(@Query() query: unknown) {
-    return this.service.findAll(queryMedicineSchema.parse(query));
+  findAll(
+    @Query() query: unknown,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const dto = queryMedicineSchema.parse(query);
+    const branchId = resolveBranchScope(user, dto.branchId);
+    return this.service.findAll({ ...dto, branchId });
   }
 
   // Declared before :id so "categories" is not captured as a medicine id.
