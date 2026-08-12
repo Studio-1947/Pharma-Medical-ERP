@@ -6,6 +6,7 @@ import { Search, Pill, User, FileText, ArrowRight, Loader2 } from "lucide-react"
 import { apiClient } from "@/lib/api-client";
 import { useNavigation } from "@/lib/navigation-context";
 import { useDebounce } from "@/hooks/use-debounce";
+import { formatStockUnit } from "@/lib/stock-unit-formatter";
 
 interface Props {
   open: boolean;
@@ -142,7 +143,7 @@ export function GlobalSearchModal({ open, onClose }: Props) {
                                 >
                                   {Number(m.totalStock) <= 0
                                     ? "Out of stock"
-                                    : `${m.totalStock} in stock`}
+                                    : formatStockUnit(Number(m.totalStock), m)}
                                 </span>
                               )}
                             </p>

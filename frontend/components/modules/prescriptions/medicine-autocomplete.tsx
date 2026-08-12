@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { useDebounce } from "@/hooks/use-debounce";
+import { formatStockUnit } from "@/lib/stock-unit-formatter";
 import { Loader2, Pill, CheckCircle2, X } from "lucide-react";
 
 /**
@@ -269,7 +270,7 @@ export function MedicineAutocomplete({
                         : "bg-emerald-50 text-emerald-700 border-emerald-200"
                     }`}
                   >
-                    {Number(m.totalStock) <= 0 ? "Out" : `${m.totalStock} in stock`}
+                    {Number(m.totalStock) <= 0 ? "Out" : formatStockUnit(Number(m.totalStock), m)}
                   </span>
                 )}
                 {m.priceMrp && (
