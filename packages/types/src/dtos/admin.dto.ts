@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { UserRole } from "../enums";
+import { doctorProfileSchema } from "./user.dto";
 
 /**
  * DTOs for the super_admin developer console.
@@ -32,6 +33,7 @@ export const adminCreateUserSchema = z.object({
   // Nullable rather than merely optional: a super_admin is the one account
   // that legitimately has no branch, and null is how that is expressed.
   branchId: z.string().uuid().nullable().optional(),
+  doctorProfile: doctorProfileSchema,
 });
 
 export const adminUpdateUserSchema = z.object({
@@ -41,6 +43,7 @@ export const adminUpdateUserSchema = z.object({
   role: roleField.optional(),
   branchId: z.string().uuid().nullable().optional(),
   isActive: z.boolean().optional(),
+  doctorProfile: doctorProfileSchema,
 });
 
 export const adminSetPasswordSchema = z.object({

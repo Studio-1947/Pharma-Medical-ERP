@@ -152,10 +152,26 @@ export class ClinicRepository {
         firstName: schema.users.firstName,
         lastName: schema.users.lastName,
         email: schema.users.email,
+        doctorProfile: schema.users.doctorProfile,
       })
       .from(schema.users)
       .where(and(...conditions))
       .orderBy(asc(schema.users.firstName));
+  }
+
+  async updateDoctorProfile(id: string, doctorProfile: Record<string, any>) {
+    const [user] = await this.db
+      .update(schema.users)
+      .set({ doctorProfile, updatedAt: new Date() })
+      .where(and(eq(schema.users.id, id), eq(schema.users.role, "doctor")))
+      .returning({
+        id: schema.users.id,
+        firstName: schema.users.firstName,
+        lastName: schema.users.lastName,
+        email: schema.users.email,
+        doctorProfile: schema.users.doctorProfile,
+      });
+    return user ?? null;
   }
 
   async findActiveDoctor(id: string) {
