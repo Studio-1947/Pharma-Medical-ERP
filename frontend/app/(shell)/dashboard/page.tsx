@@ -223,7 +223,7 @@ function PharmacyDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
-            <div className="w-48 text-slate-900">
+            <div className="w-full sm:w-48 text-slate-900">
               <BranchSelect
                 value={activeBranch?.id ?? ""}
                 onChange={(id) => {

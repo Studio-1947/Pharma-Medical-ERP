@@ -11,6 +11,9 @@ export interface CartItem {
   unitPrice: number; // The MRP of the pack/strip
   stripSize: number; // Number of loose pills per pack/strip
   saleUnit: "pack" | "loose";
+  unit?: string | null;
+  batchStock?: number;
+  totalStock?: number;
   taxPct: number;
   discountPct: number;
   quantity: number;

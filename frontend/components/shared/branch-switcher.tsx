@@ -63,7 +63,7 @@ export function BranchSwitcher() {
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors max-w-[200px]"
+        className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors max-w-[120px] sm:max-w-[200px]"
         title="Active branch — applies to actions that write to one branch"
       >
         {activeBranch ? (
@@ -72,7 +72,7 @@ export function BranchSwitcher() {
           <AlertTriangle size={14} className="text-amber-500 shrink-0" />
         )}
         <span
-          className={`text-[13px] font-medium truncate ${
+          className={`text-[12px] sm:text-[13px] font-semibold truncate ${
             activeBranch ? "text-slate-700" : "text-amber-600"
           }`}
         >
@@ -82,7 +82,7 @@ export function BranchSwitcher() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-1 w-60 bg-white border border-slate-200 rounded-lg shadow-lg z-50 overflow-hidden">
+        <div className="absolute left-0 sm:left-auto sm:right-0 mt-1 w-64 max-w-[calc(100vw-2rem)] bg-white border border-slate-200 rounded-xl shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
           <div className="px-3 py-2 border-b bg-slate-50">
             <p className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide">
               Active Branch

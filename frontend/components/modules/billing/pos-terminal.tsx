@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera } from "lucide-react";
-import { useCartStore } from "@/stores/cart.store";
+import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera, ShieldAlert } from "lucide-react";
+import { useCartStore, CartItem } from "@/stores/cart.store";
+import { formatStockUnit, getUnitLabel } from "@/lib/stock-unit-formatter";
 import { PaymentModal } from "./payment-modal";
 import { RxPickerModal } from "./rx-picker-modal";
 import { apiClient } from "@/lib/api-client";
@@ -43,6 +44,22 @@ export function PosTerminal() {
   const [clearConfirm, setClearConfirm] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+
+  const [allowOversell, setAllowOversell] = useState(false);
+  const [stockLimitDialog, setStockLimitDialog] = useState<{
+    open: boolean;
+    itemName: string;
+    requestedQty: number;
+    maxAvailable: number;
+    unit: string;
+    item?: CartItem;
+  }>({
+    open: false,
+    itemName: "",
+    requestedQty: 0,
+    maxAvailable: 0,
+    unit: "Strip",
+  });
 
   const [isPatientModalOpen, setIsPatientModalOpen] = useState(false);
   const [patientFormError, setPatientFormError] = useState("");
@@ -138,6 +155,32 @@ export function PosTerminal() {
   const needsRx = hasControlledItems();
   const loyaltyDiscount = loyaltyPointsToRedeem / 10;
   const finalTotal = Math.max(0, total - loyaltyDiscount);
+
+  const handleCartQtyChange = (item: CartItem, targetQty: number) => {
+    if (targetQty <= 0) {
+      removeItem(item.medicineId, item.batchId);
+      return;
+    }
+
+    const availableBatchQty = item.batchStock ?? item.totalStock ?? 99999;
+    const maxAvailable = item.saleUnit === "loose"
+      ? availableBatchQty * (item.stripSize || 1)
+      : availableBatchQty;
+
+    if (targetQty > maxAvailable && !allowOversell) {
+      setStockLimitDialog({
+        open: true,
+        itemName: item.name,
+        requestedQty: targetQty,
+        maxAvailable,
+        unit: item.saleUnit === "loose" ? "Loose Pill" : getUnitLabel(maxAvailable, { unit: item.unit, stripSize: item.stripSize }),
+        item,
+      });
+      updateQty(item.medicineId, item.batchId, maxAvailable);
+    } else {
+      updateQty(item.medicineId, item.batchId, targetQty);
+    }
+  };
 
   const printReceipt = () => {
     if (!lastInvoice) return;
@@ -306,6 +349,40 @@ export function PosTerminal() {
         const batchList: any[] = Array.isArray(batchesRes) ? batchesRes : Array.isArray(batchesRes?.data?.data) ? batchesRes.data.data : Array.isArray(batchesRes?.data) ? batchesRes.data : [];
         const firstBatch = batchList[0];
         if (firstBatch) {
+          const availableQty = firstBatch.quantity ?? Number(medicine.totalStock ?? 99999);
+          const existing = items.find((i) => i.batchId === firstBatch.id);
+          const currentQty = existing ? existing.quantity : 0;
+
+          if (currentQty + 1 > availableQty && !allowOversell) {
+            setStockLimitDialog({
+              open: true,
+              itemName: medicine.name,
+              requestedQty: currentQty + 1,
+              maxAvailable: availableQty,
+              unit: getUnitLabel(availableQty, medicine),
+            });
+            if (!existing) {
+              addItem({
+                medicineId: medicine.id,
+                batchId: firstBatch.id,
+                name: medicine.name,
+                sku: medicine.sku,
+                batchNo: firstBatch.batchNo,
+                unitPrice: parseFloat(medicine.priceMrp),
+                stripSize: medicine.stripSize ? parseInt(medicine.stripSize) : 1,
+                taxPct: parseFloat(medicine.taxPercent ?? "0"),
+                discountPct: 0,
+                quantity: availableQty,
+                scheduleClass: medicine.scheduleClass,
+                requiresPrescription: medicine.requiresPrescription,
+                unit: medicine.unit,
+                batchStock: availableQty,
+                totalStock: Number(medicine.totalStock ?? availableQty),
+              });
+            }
+            return;
+          }
+
           addItem({
             medicineId: medicine.id,
             batchId: firstBatch.id,
@@ -319,6 +396,9 @@ export function PosTerminal() {
             quantity: 1,
             scheduleClass: medicine.scheduleClass,
             requiresPrescription: medicine.requiresPrescription,
+            unit: medicine.unit,
+            batchStock: availableQty,
+            totalStock: Number(medicine.totalStock ?? availableQty),
           });
           toastSuccess("Item added", `${medicine.name} added to checkout.`);
         } else {
@@ -701,12 +781,38 @@ export function PosTerminal() {
                           toastWarning("Out of stock", `No active batch found for "${m.name}". Add stock via Inventory before billing.`, 7000);
                           return;
                         }
+                        const availableQty = first.quantity ?? Number(m.totalStock ?? 99999);
+                        const existing = items.find((i) => i.batchId === first.id);
+                        const currentQty = existing ? existing.quantity : 0;
+
+                        if (currentQty + 1 > availableQty && !allowOversell) {
+                          setStockLimitDialog({
+                            open: true,
+                            itemName: m.name,
+                            requestedQty: currentQty + 1,
+                            maxAvailable: availableQty,
+                            unit: getUnitLabel(availableQty, m),
+                          });
+                          if (!existing) {
+                            addItem({
+                              medicineId: m.id, batchId: first.id, name: m.name, sku: m.sku,
+                              batchNo: first.batchNo, unitPrice: parseFloat(m.priceMrp),
+                              stripSize: m.stripSize ? parseInt(m.stripSize) : 1,
+                              taxPct: parseFloat(m.taxPercent ?? "0"), discountPct: 0, quantity: availableQty,
+                              scheduleClass: m.scheduleClass, requiresPrescription: m.requiresPrescription,
+                              unit: m.unit, batchStock: availableQty, totalStock: Number(m.totalStock ?? availableQty),
+                            });
+                          }
+                          return;
+                        }
+
                         addItem({
                           medicineId: m.id, batchId: first.id, name: m.name, sku: m.sku,
                           batchNo: first.batchNo, unitPrice: parseFloat(m.priceMrp),
                           stripSize: m.stripSize ? parseInt(m.stripSize) : 1,
                           taxPct: parseFloat(m.taxPercent ?? "0"), discountPct: 0, quantity: 1,
                           scheduleClass: m.scheduleClass, requiresPrescription: m.requiresPrescription,
+                          unit: m.unit, batchStock: availableQty, totalStock: Number(m.totalStock ?? availableQty),
                         });
                         setSearch("");
                       } catch { toastError("Failed to load stock", "Could not fetch batch details. Check your connection and try again."); }
@@ -747,8 +853,8 @@ export function PosTerminal() {
                             {Number(m.totalStock) <= 0
                               ? "Out of stock"
                               : Number(m.totalStock) <= Number(m.reorderLevel || 10)
-                              ? `Low Stock: ${m.totalStock} left`
-                              : `${m.totalStock} in stock`}
+                              ? `Low Stock: ${formatStockUnit(Number(m.totalStock), m)} left`
+                              : formatStockUnit(Number(m.totalStock), m)}
                           </span>
                         )}
                       </div>
@@ -791,10 +897,22 @@ export function PosTerminal() {
                 <div className="flex items-start justify-between mb-1">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate text-gray-900">{item.name}</p>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
                       <span>{item.batchNo}</span>
                       <span>·</span>
-                      <span>₹{(item.saleUnit === "loose" ? item.unitPrice / (item.stripSize || 1) : item.unitPrice).toFixed(2)} / {item.saleUnit === "loose" ? "Tab" : "Strip"}</span>
+                      <span>₹{(item.saleUnit === "loose" ? item.unitPrice / (item.stripSize || 1) : item.unitPrice).toFixed(2)} / {item.saleUnit === "loose" ? "Tab" : getUnitLabel(1, { unit: item.unit, stripSize: item.stripSize })}</span>
+                      {item.batchStock !== undefined && (
+                        <>
+                          <span>·</span>
+                          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
+                            item.quantity >= (item.saleUnit === "loose" ? (item.batchStock * item.stripSize) : item.batchStock)
+                              ? "bg-amber-50 text-amber-800 border-amber-200"
+                              : "bg-slate-100 text-slate-700 border-slate-200"
+                          }`}>
+                            Max: {item.saleUnit === "loose" ? (item.batchStock * item.stripSize) : item.batchStock} {item.saleUnit === "loose" ? "Loose" : getUnitLabel(item.batchStock, { unit: item.unit, stripSize: item.stripSize })}
+                          </span>
+                        </>
+                      )}
                       {item.scheduleClass && CONTROLLED_CLASSES.includes(item.scheduleClass) && (
                         <span className="bg-red-50 text-red-600 text-[10px] font-bold px-1 rounded">{item.scheduleClass}</span>
                       )}
@@ -807,7 +925,7 @@ export function PosTerminal() {
                 <div className="flex items-center justify-between mt-2 pt-2 border-t border-muted/30">
                   <div className="flex items-center gap-2">
                     <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-md">
-                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity - 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
+                      <button onClick={() => handleCartQtyChange(item, item.quantity - 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
                         <Minus size={10} />
                       </button>
                       <input
@@ -816,11 +934,11 @@ export function PosTerminal() {
                         value={item.quantity}
                         onChange={(e) => {
                           const val = parseInt(e.target.value) || 1;
-                          updateQty(item.medicineId, item.batchId, Math.max(1, val));
+                          handleCartQtyChange(item, Math.max(1, val));
                         }}
                         className="w-12 text-center text-xs font-bold bg-white border rounded py-0.5 focus:outline-none focus:ring-1 focus:ring-primary font-mono"
                       />
-                      <button onClick={() => updateQty(item.medicineId, item.batchId, item.quantity + 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
+                      <button onClick={() => handleCartQtyChange(item, item.quantity + 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
                         <Plus size={10} />
                       </button>
                     </div>
@@ -1247,6 +1365,83 @@ export function PosTerminal() {
                 className="flex-1 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition inline-flex items-center justify-center gap-1.5 shadow-md"
               >
                 <Printer size={14} /> Print (Ctrl+P)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Stock Limit Alert Modal */}
+      {stockLimitDialog.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/60 backdrop-blur-xs animate-fade-in" onClick={() => setStockLimitDialog((s) => ({ ...s, open: false }))}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 w-full max-w-md p-6 space-y-4 animate-scale-in" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Stock Limit Exceeded</h3>
+                <p className="text-xs text-slate-500 font-medium">Quantity capped at available inventory</p>
+              </div>
+            </div>
+
+            <div className="bg-amber-50/80 border border-amber-200/80 rounded-xl p-3.5 text-xs text-amber-900 space-y-1.5">
+              <p className="font-bold text-sm text-slate-900 truncate">{stockLimitDialog.itemName}</p>
+              <div className="flex justify-between items-center text-slate-700 pt-1">
+                <span>Requested Quantity:</span>
+                <span className="font-mono font-bold text-red-600 line-through">{stockLimitDialog.requestedQty} {stockLimitDialog.unit}</span>
+              </div>
+              <div className="flex justify-between items-center text-slate-900 font-bold">
+                <span>Available Inventory Stock:</span>
+                <span className="font-mono text-emerald-700 bg-emerald-100/80 px-2 py-0.5 rounded border border-emerald-200">
+                  {stockLimitDialog.maxAvailable} {stockLimitDialog.unit}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-600 leading-relaxed">
+              You requested <strong>{stockLimitDialog.requestedQty}</strong> {stockLimitDialog.unit}, but only <strong>{stockLimitDialog.maxAvailable}</strong> {stockLimitDialog.unit} are available in stock. The cart quantity has been automatically set to <strong>{stockLimitDialog.maxAvailable}</strong>.
+            </p>
+
+            <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+              <div className="flex items-center gap-1.5">
+                <ShieldAlert size={14} className="text-slate-400" />
+                <span className="text-[11px] font-semibold text-slate-500">POS Mode:</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAllowOversell((prev) => !prev)}
+                className={`text-[10px] font-bold px-2.5 py-1 rounded-lg border transition-colors ${
+                  allowOversell
+                    ? "bg-amber-100 border-amber-300 text-amber-800"
+                    : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                }`}
+              >
+                {allowOversell ? "Over-Sell Allowed" : "Strict Capping"}
+              </button>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              {allowOversell && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (stockLimitDialog.item) {
+                      updateQty(stockLimitDialog.item.medicineId, stockLimitDialog.item.batchId, stockLimitDialog.requestedQty);
+                    }
+                    setStockLimitDialog((s) => ({ ...s, open: false }));
+                  }}
+                  className="px-4 py-2 text-xs font-bold bg-amber-600 hover:bg-amber-700 text-white rounded-xl transition-colors"
+                >
+                  Allow Over-Sell ({stockLimitDialog.requestedQty})
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setStockLimitDialog((s) => ({ ...s, open: false }))}
+                className="px-4 py-2 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl shadow-md transition-colors"
+              >
+                Got it (Cap at {stockLimitDialog.maxAvailable})
               </button>
             </div>
           </div>
