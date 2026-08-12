@@ -107,7 +107,7 @@ export class BillingService {
       const today = new Date().toISOString().split("T")[0]!;
 
       let rx: { id: string; status: string; expiryDate: string | null } | null = null;
-      let rxItemsByMedicine = new Map<string, {
+      const rxItemsByMedicine = new Map<string, {
         id: string;
         medicineId: string | null;
         quantityPrescribed: number | null;

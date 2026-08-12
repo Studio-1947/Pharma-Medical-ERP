@@ -38,13 +38,6 @@ export function formatPhoneNumber(phone: string): string {
   return cleaned;
 }
 
-/**
- * Builds public view link for prescriptions or invoices
- */
-export function getPublicViewUrl(type: "prescription" | "invoice", id: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || (typeof window !== "undefined" ? window.location.origin : "");
-  return `${baseUrl}/p/${type === "prescription" ? "rx" : "inv"}-${id}`;
-}
 
 /**
  * Dispatches message to WhatsApp via wa.me protocol
@@ -63,7 +56,6 @@ export function sendViaWhatsApp(params: DispatchParams): boolean {
   }
 
   const phone = formatPhoneNumber(rawPhone);
-  const link = getPublicViewUrl(params.type, params.id);
   const name = params.patientName ? `\n👤 *Patient*: ${params.patientName}` : "";
 
   let text = "";
@@ -77,7 +69,7 @@ export function sendViaWhatsApp(params: DispatchParams): boolean {
       itemsText = `\n\n*PRESCRIBED MEDICINES*:\n${list}`;
     }
 
-    text = `*Radha Madhav Medical Hall* 🏥\n*Digital Prescription Record*\n\n📄 *Prescription ID*: #${params.number || params.id.slice(0, 8)}${name}${doc}${itemsText}\n\n🔗 *View Digital Copy*: ${link}\n\n*Thank you for choosing Radha Madhav Medical Hall!*`;
+    text = `*Radha Madhav Medical Hall* 🏥\n*Digital Prescription Record*\n\n📄 *Prescription ID*: #${params.number || params.id.slice(0, 8)}${name}${doc}${itemsText}\n\n🔗 *View Digital Copy*: Contact the pharmacy counter for a secure copy.\n\n*Thank you for choosing Radha Madhav Medical Hall!*`;
   } else {
     let itemsText = "";
     if (Array.isArray(params.items) && params.items.length > 0) {
@@ -96,7 +88,7 @@ export function sendViaWhatsApp(params: DispatchParams): boolean {
     const tax = Number(params.taxAmount || 0) > 0 ? `\n*GST Tax*: ₹${Number(params.taxAmount).toFixed(2)}` : "";
     const total = params.totalAmount ? `\n💰 *TOTAL PAID*: ₹${Number(params.totalAmount).toFixed(2)}` : "";
 
-    text = `*Radha Madhav Medical Hall* 🏥\n*Tax Invoice / Bill of Supply*\n\n🧾 *Invoice No*: #${params.number || params.id.slice(0, 8)}${name}${itemsText}\n──────────────────${sub}${tax}${total}\n\n📄 *View / Download Digital Receipt*:\n🔗 ${link}\n\n*Thank you for choosing Radha Madhav Medical Hall!*\n_Goods once sold will not be taken back without valid reason._`;
+    text = `*Radha Madhav Medical Hall* 🏥\n*Tax Invoice / Bill of Supply*\n\n🧾 *Invoice No*: #${params.number || params.id.slice(0, 8)}${name}${itemsText}\n──────────────────${sub}${tax}${total}\n\n📄 *View / Download Digital Receipt*:\n🔗 Contact the pharmacy counter for a secure copy.\n\n*Thank you for choosing Radha Madhav Medical Hall!*\n_Goods once sold will not be taken back without valid reason._`;
   }
 
   const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
@@ -111,13 +103,12 @@ export function sendViaSms(params: DispatchParams): boolean {
   if (!params.phone) return false;
 
   const phone = params.phone.replace(/\D/g, "");
-  const link = getPublicViewUrl(params.type, params.id);
 
   let text = "";
   if (params.type === "prescription") {
-    text = `Radha Madhav Medical Hall: Your prescription #${params.number || params.id.slice(0, 8)} is ready. View here: ${link}`;
+    text = `Radha Madhav Medical Hall: Your prescription #${params.number || params.id.slice(0, 8)} is ready. Contact the pharmacy counter for a secure copy.`;
   } else {
-    text = `Radha Madhav Medical Hall: Your bill receipt #${params.number || params.id.slice(0, 8)} is ready. View here: ${link}`;
+    text = `Radha Madhav Medical Hall: Your bill receipt #${params.number || params.id.slice(0, 8)} is ready. Contact the pharmacy counter for a secure copy.`;
   }
 
   const url = `sms:${phone}?body=${encodeURIComponent(text)}`;

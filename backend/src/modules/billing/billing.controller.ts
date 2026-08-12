@@ -3,14 +3,10 @@ import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
 import { BillingService } from "./billing.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { Roles, Public } from "../../common/decorators/roles.decorator";
+import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
-import { resolveBranchScope, requireBranchScope } from "../../common/auth/branch-scope";
+import { assertBranchAccess, resolveBranchScope, requireBranchScope } from "../../common/auth/branch-scope";
 import {
-  CreateInvoiceDto,
-  QueryInvoiceDto, 
-  VoidInvoiceDto, 
-  ReturnInvoiceDto,
   createInvoiceSchema,
   queryInvoiceSchema,
   voidInvoiceSchema,
@@ -39,14 +35,13 @@ export class BillingController {
     return this.service.findAll({ ...query, branchId });
   }
 
-  @Public()
-  @Get("public/invoices/:id")
-  @ApiOperation({ summary: "Get public invoice view for patient WhatsApp/SMS link" })
-  findPublicOne(@Param("id") id: string) { return this.service.findOne(id); }
-
   @Get("invoices/:id")
   @Roles("admin", "pharmacist", "cashier", "doctor")
-  findOne(@Param("id") id: string) { return this.service.findOne(id); }
+  async findOne(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
+    const invoice = await this.service.findOne(id);
+    assertBranchAccess(user, invoice.data.branchId);
+    return invoice;
+  }
 
   @Post("invoices")
   @Roles("admin", "pharmacist", "cashier")
@@ -63,32 +58,41 @@ export class BillingController {
   @Post("invoices/:id/void")
   @Roles("admin", "pharmacist")
   @ApiOperation({ summary: "Void invoice and return stock" })
-  voidInvoice(@Param("id") id: string, @Body() body: unknown, @CurrentUser() user: JwtPayload) {
+  async voidInvoice(@Param("id") id: string, @Body() body: unknown, @CurrentUser() user: JwtPayload) {
+    const invoice = await this.service.findOne(id);
+    assertBranchAccess(user, invoice.data.branchId);
     return this.service.voidInvoice(id, voidInvoiceSchema.parse(body), user.sub);
   }
 
   @Post("invoices/:id/return")
   @Roles("admin", "pharmacist")
   @ApiOperation({ summary: "Create return invoice — restocks batches, creates refund payment" })
-  createReturn(
+  async createReturn(
     @Param("id") id: string,
     @Body() body: unknown,
     @CurrentUser() user: JwtPayload,
   ) {
+    const invoice = await this.service.findOne(id);
+    assertBranchAccess(user, invoice.data.branchId);
     return this.service.createReturn(id, returnInvoiceSchema.parse(body), user.sub);
   }
 
   @Post("payments")
   @Roles("admin", "pharmacist", "cashier")
   @ApiOperation({ summary: "Record a payment against an invoice" })
-  recordPayment(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
-    return this.service.recordPayment(recordPaymentSchema.parse(body), user.sub);
+  async recordPayment(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
+    const dto = recordPaymentSchema.parse(body);
+    const invoice = await this.service.findOne(dto.invoiceId);
+    assertBranchAccess(user, invoice.data.branchId);
+    return this.service.recordPayment(dto, user.sub);
   }
 
   @Get("invoices/:id/pdf")
   @Roles("admin", "pharmacist", "cashier")
   @ApiOperation({ summary: "Get presigned download URL for invoice PDF" })
-  getPdf(@Param("id") id: string) {
+  async getPdf(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
+    const invoice = await this.service.findOne(id);
+    assertBranchAccess(user, invoice.data.branchId);
     return this.service.getPdfUrl(id);
   }
 

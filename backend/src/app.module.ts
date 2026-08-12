@@ -43,7 +43,10 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
           REFRESH_TOKEN_EXPIRES_IN: z.string().default("7d"),
           PORT: z.coerce.number().default(4000),
           NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
-          CORS_ORIGIN: z.string().default("http://localhost:3000"),
+          CORS_ORIGIN: z.string().default("http://localhost:3000").refine(
+            (value) => !value.split(",").map((origin) => origin.trim()).includes("*"),
+            "CORS_ORIGIN must name explicit trusted origins; wildcard origins are not allowed",
+          ),
           S3_ENDPOINT: z.string().optional(),
           S3_BUCKET: z.string().optional(),
           S3_ACCESS_KEY: z.string().optional(),

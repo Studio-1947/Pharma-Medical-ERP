@@ -54,6 +54,7 @@ interface Doctor {
   email: string;
   specialty?: string;
   branchId?: string | null;
+  branchName?: string | null;
   doctorProfile?: {
     specialty?: string;
     opdRoom?: string;
@@ -1143,11 +1144,17 @@ export function ClinicQueue() {
                       </div>
                     </div>
 
-                    {/* Room & Status */}
-                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100">
-                      <div className="flex items-center gap-1.5 text-slate-600 font-medium">
-                        <MapPin size={13} className="text-slate-400 shrink-0" />
-                        <span>{sched.opdRoom}</span>
+                    {/* Room, Branch & Status */}
+                    <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 flex-wrap gap-1.5">
+                      <div className="flex items-center gap-2 flex-wrap text-slate-600 font-medium">
+                        <span className="inline-flex items-center gap-1 text-[11px] font-bold text-slate-800 bg-slate-100 border border-slate-200/80 px-2 py-0.5 rounded-md">
+                          <Building2 size={12} className="text-emerald-600 shrink-0" />
+                          {doc.branchName || "All Branches"}
+                        </span>
+                        <span className="flex items-center gap-1 text-[11px] text-slate-600 font-medium">
+                          <MapPin size={12} className="text-slate-400 shrink-0" />
+                          <span>{sched.opdRoom}</span>
+                        </span>
                       </div>
                       <div className={`flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md border ${
                         availStatus === "on_leave"

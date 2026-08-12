@@ -7,7 +7,7 @@ import { ApiBearerAuth, ApiOperation, ApiTags, ApiConsumes, ApiBody } from "@nes
 import { PrescriptionsService } from "./prescriptions.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
-import { Roles, Public } from "../../common/decorators/roles.decorator";
+import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
 import { S3Service } from "../../common/s3/s3.service";
 import {
@@ -17,7 +17,7 @@ import {
   queryPrescriptionSchema,
 } from "@pharmerp/types";
 
-import { resolveBranchScope } from "../../common/auth/branch-scope";
+import { assertBranchAccess, resolveBranchScope } from "../../common/auth/branch-scope";
 
 @ApiTags("prescriptions")
 @ApiBearerAuth()
@@ -74,18 +74,13 @@ export class PrescriptionsController {
     return this.service.findAll({ ...dto, branchId });
   }
 
-  @Public()
-  @Get("public/:id")
-  @ApiOperation({ summary: "Get public prescription view for patient WhatsApp/SMS link" })
-  findPublicOne(@Param("id") id: string) {
-    return this.service.findOne(id);
-  }
-
   @Get(":id")
   @Roles("admin", "pharmacist", "cashier", "doctor")
   @ApiOperation({ summary: "Get prescription by ID with items and patient" })
-  findOne(@Param("id") id: string) {
-    return this.service.findOne(id);
+  async findOne(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
+    const prescription = await this.service.findOne(id);
+    assertBranchAccess(user, prescription.data.branchId);
+    return prescription;
   }
 
   @Post()
@@ -98,25 +93,31 @@ export class PrescriptionsController {
   @Patch(":id")
   @Roles("admin", "pharmacist")
   @ApiOperation({ summary: "Edit a prescription that is still pending verification" })
-  update(@Param("id") id: string, @Body() body: unknown) {
+  async update(@Param("id") id: string, @Body() body: unknown, @CurrentUser() user: JwtPayload) {
+    const prescription = await this.service.findOne(id);
+    assertBranchAccess(user, prescription.data.branchId);
     return this.service.update(id, updatePrescriptionSchema.parse(body));
   }
 
   @Post(":id/verify")
   @Roles("admin", "pharmacist")
   @ApiOperation({ summary: "Verify or reject a prescription" })
-  verify(
+  async verify(
     @Param("id") id: string,
     @Body() body: unknown,
     @CurrentUser() user: JwtPayload,
   ) {
+    const prescription = await this.service.findOne(id);
+    assertBranchAccess(user, prescription.data.branchId);
     return this.service.verify(id, verifyPrescriptionSchema.parse(body), user.sub);
   }
 
   @Delete(":id")
   @Roles("admin")
   @ApiOperation({ summary: "Soft delete a prescription" })
-  remove(@Param("id") id: string) {
+  async remove(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
+    const prescription = await this.service.findOne(id);
+    assertBranchAccess(user, prescription.data.branchId);
     return this.service.remove(id);
   }
 }
