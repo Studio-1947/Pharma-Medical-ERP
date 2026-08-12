@@ -583,7 +583,7 @@ export function PosTerminal() {
                     value={patientSearch}
                     onChange={(e) => setPatientSearch(e.target.value)}
                     placeholder="Search patient by name or phone (optional)..."
-                    className="w-full border rounded-xl pl-8 pr-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/40 bg-background"
+                    className="w-full border border-slate-200 rounded-xl pl-8 pr-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 bg-white shadow-sm transition-all duration-200"
                   />
                   {patientSearch.length >= 3 && (
                     <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-white border rounded-xl shadow-lg max-h-56 overflow-y-auto divide-y divide-slate-100">
@@ -670,7 +670,7 @@ export function PosTerminal() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Scan barcode or type name/SKU… (F2)"
                 data-barcode-capture="true"
-                className="w-full border rounded-xl pl-9 pr-3 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-background shadow-sm"
+                className="w-full border border-slate-200 rounded-xl pl-9 pr-3 py-3 text-sm focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 bg-white shadow-sm transition-all duration-200"
               />
             </div>
             <button
