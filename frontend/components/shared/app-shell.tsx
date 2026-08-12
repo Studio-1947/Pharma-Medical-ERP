@@ -10,6 +10,7 @@ import { useNavigation } from "@/lib/navigation-context";
 import { ImpersonationBanner } from "@/components/shared/impersonation-banner";
 import { ShieldOff, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { MobileBottomNav } from "@/components/shared/mobile-bottom-nav";
 
 /**
  * Blocks a route the current role has no permission for.
@@ -58,12 +59,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Header onMenuClick={() => setMobileNavOpen(true)} />
         <ImpersonationBanner />
-        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gradient-to-br from-slate-50 via-slate-100/60 to-emerald-50/20">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pb-16 lg:pb-8 bg-gradient-to-br from-slate-50 via-slate-100/60 to-emerald-50/20">
           <div className="max-w-7xl mx-auto space-y-6">
             {allowed ? children : <AccessDenied />}
           </div>
         </main>
       </div>
+      <MobileBottomNav onOpenMenu={() => setMobileNavOpen(true)} />
     </div>
   );
 }

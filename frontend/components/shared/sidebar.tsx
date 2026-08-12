@@ -44,8 +44,8 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
       className={clsx(
         "flex flex-col bg-gradient-to-b from-slate-950 via-slate-900 to-emerald-950 text-white border-r border-slate-800/60 shadow-xl overflow-visible",
         // Mobile: fixed off-canvas drawer. Desktop (lg+): static column.
-        "fixed inset-y-0 left-0 z-50 w-64 transition-all duration-300 ease-in-out",
-        mobileOpen ? "translate-x-0" : "-translate-x-full",
+        "fixed inset-y-0 left-0 z-50 w-72 sm:w-64 transition-all duration-300 ease-in-out",
+        mobileOpen ? "translate-x-0 shadow-2xl ring-1 ring-white/10" : "-translate-x-full",
         "lg:relative lg:translate-x-0 lg:shrink-0",
         collapsed ? "lg:w-16" : "lg:w-64",
       )}
@@ -97,9 +97,10 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
             <button
               onClick={onMobileClose}
               aria-label="Close menu"
-              className="lg:hidden shrink-0 p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+              className="lg:hidden shrink-0 p-2 rounded-xl bg-white/10 hover:bg-white/20 text-slate-200 hover:text-white transition-colors flex items-center gap-1 font-bold text-xs"
             >
-              <X size={18} />
+              <X size={16} />
+              <span>Close</span>
             </button>
           </div>
         )}
