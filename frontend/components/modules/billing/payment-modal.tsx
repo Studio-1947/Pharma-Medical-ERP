@@ -101,22 +101,22 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading, needsRx
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-md sm:mx-4 max-h-[94dvh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+      <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-md sm:mx-4 max-h-[94dvh] overflow-y-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden" onClick={(e) => e.stopPropagation()}>
 
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b">
+        <div className="flex items-center justify-between px-6 py-3.5 border-b">
           <h2 className="text-lg font-bold text-gray-900">Collect Payment</h2>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-colors">
             <X size={18} />
           </button>
         </div>
 
-        <div className="px-4 sm:px-6 py-5 space-y-5">
+        <div className="px-4 sm:px-6 py-4 space-y-3.5">
 
           {/* Amount due */}
-          <div className="bg-slate-50 rounded-xl px-5 py-4 text-center border border-slate-200">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-1">Amount Due</p>
-            <p className="text-4xl font-black text-slate-900">₹{total.toFixed(2)}</p>
+          <div className="bg-slate-50 rounded-xl px-4 py-2.5 text-center border border-slate-200">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Amount Due</p>
+            <p className="text-3xl font-black text-slate-900">₹{total.toFixed(2)}</p>
           </div>
 
           {/* Schedule H Prescription Warning Block inside Modal */}
@@ -170,7 +170,7 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading, needsRx
                     key={m}
                     type="button"
                     onClick={() => handleModeSwitch(m)}
-                    className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border-2 text-xs font-semibold transition-all duration-150 ${
+                    className={`flex flex-col items-center gap-1 py-2.5 px-2 rounded-xl border-2 text-xs font-semibold transition-all duration-150 ${
                       active
                         ? "border-slate-800 bg-slate-800 text-white shadow-md shadow-slate-800/30"
                         : "border-gray-200 bg-gray-50 text-gray-600 hover:border-slate-400 hover:bg-slate-50 hover:text-slate-800"
@@ -241,10 +241,10 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading, needsRx
             </div>
 
           ) : mode === "cash" ? (
-            <div className="space-y-3">
+            <div className="space-y-2.5">
               {/* Quick amount buttons */}
               <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Quick Amount</p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Quick Amount</p>
                 <div className="grid grid-cols-4 gap-1.5">
                   {[100, 200, 500, 1000].map((amt) => (
                     <button key={amt} type="button"
@@ -262,7 +262,7 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading, needsRx
               </div>
 
               {/* Cash received + change */}
-              <div className="bg-gray-50 rounded-xl p-4 border space-y-3">
+              <div className="bg-gray-50 rounded-xl p-3 border space-y-2">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-gray-700">Cash Received</span>
                   <div className="relative">
@@ -272,11 +272,11 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading, needsRx
                       onChange={(e) => setCashTendered(e.target.value)}
                       type="number"
                       step="0.01"
-                      className="border rounded-lg pl-7 pr-3 py-2 text-sm font-bold w-32 bg-white focus:outline-none focus:ring-2 focus:ring-primary/50 text-right"
+                      className="border rounded-lg pl-7 pr-3 py-1.5 text-sm font-bold w-32 bg-white focus:outline-none focus:ring-2 focus:ring-primary/50 text-right"
                     />
                   </div>
                 </div>
-                <div className="flex items-center justify-between border-t pt-2.5">
+                <div className="flex items-center justify-between border-t pt-2">
                   <span className="text-sm font-semibold text-gray-600">Change Due</span>
                   <span className={`text-xl font-black ${changeDue > 0 ? "text-emerald-600" : "text-gray-400"}`}>
                     ₹{changeDue.toFixed(2)}
@@ -298,14 +298,14 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading, needsRx
                   mode === "card" ? "e.g. XXXX 4242" :
                   "Optional reference"
                 }
-                className="w-full border rounded-xl px-4 py-3 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:bg-white transition-colors"
+                className="w-full border rounded-xl px-4 py-2.5 text-sm bg-gray-50 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:bg-white transition-colors"
               />
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-6 pb-6">
+        <div className="px-6 pb-5 pt-1">
           <button
             onClick={handleConfirm}
             disabled={loading || (needsRx && !prescriptionId?.trim())}
