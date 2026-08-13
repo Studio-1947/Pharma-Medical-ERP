@@ -12,12 +12,8 @@ import { UserPlus, Users, ShieldAlert, Eye, EyeOff } from "lucide-react";
 
 const ROLE_OPTIONS: { value: string; label: string }[] = [
   { value: UserRole.ADMIN, label: "Admin" },
-  { value: UserRole.PHARMACIST, label: "Pharmacist" },
-  { value: UserRole.CASHIER, label: "Cashier" },
-  { value: UserRole.INVENTORY_MANAGER, label: "Inventory Manager" },
-  { value: UserRole.DISTRIBUTION_STAFF, label: "Distribution Staff" },
-  { value: UserRole.HR_MANAGER, label: "HR Manager" },
-  { value: UserRole.REPORTS_ANALYST, label: "Reports Analyst" },
+  { value: UserRole.SHOP_MANAGER, label: "Shop Manager" },
+  { value: UserRole.DOCTOR, label: "Doctor" },
 ];
 
 export default function UsersPage() {

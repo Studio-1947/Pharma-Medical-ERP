@@ -18,9 +18,8 @@ import { Modal } from "@/components/ui/modal";
 
 const ROLE_OPTIONS: UserRole[] = [
   "admin" as UserRole,
-  "pharmacist" as UserRole,
-  "cashier" as UserRole,
-  "inventory_manager" as UserRole,
+  "shop_manager" as UserRole,
+  "doctor" as UserRole,
   "super_admin" as UserRole,
 ];
 

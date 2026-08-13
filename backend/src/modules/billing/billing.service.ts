@@ -153,8 +153,8 @@ export class BillingService {
           .from(schema.users)
           .where(eq(schema.users.id, dto.overriddenBy));
 
-        if (!approver || !["super_admin", "admin", "pharmacist"].includes(approver.role)) {
-          throw new UnprocessableEntityException("Override approver must be a pharmacist or admin");
+        if (!approver || !["super_admin", "admin", "shop_manager"].includes(approver.role)) {
+          throw new UnprocessableEntityException("Override approver must be a shop manager or admin");
         }
       }
 

@@ -17,7 +17,7 @@ const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
  * Business modules take the acting user from the token's `sub`, which during
  * impersonation is the *target*. A sale written while impersonating a cashier
  * is therefore stamped with the cashier's id, and a prescription verified
- * while impersonating a pharmacist records that pharmacist as having signed
+ * while impersonating a shop manager records that shop manager as having signed
  * it off. For Schedule H/H1/X dispensing that attribution is a legal record,
  * and an audit row merely bracketing the session in time is not the same as
  * the record naming the right person.

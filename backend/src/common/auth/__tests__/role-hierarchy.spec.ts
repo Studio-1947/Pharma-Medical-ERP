@@ -23,11 +23,11 @@ function target(role: string, branchId?: string | null, id = "target-1") {
 
 describe("normaliseRole / isValidRole", () => {
   it("lowercases and trims the uppercase role keys the invite form posts", () => {
-    expect(normaliseRole("  CASHIER ")).toBe("cashier");
+    expect(normaliseRole("  SHOP_MANAGER ")).toBe("shop_manager");
   });
 
   it("accepts real enum members and rejects junk", () => {
-    expect(isValidRole("pharmacist")).toBe(true);
+    expect(isValidRole("shop_manager")).toBe(true);
     expect(isValidRole("wizard")).toBe(false);
   });
 });
@@ -44,7 +44,7 @@ describe("assertCanAssignRole", () => {
   });
 
   it("normalises the role it returns so an invalid enum literal never reaches the DB", () => {
-    expect(assertCanAssignRole(caller("super_admin"), "CASHIER")).toBe("cashier");
+    expect(assertCanAssignRole(caller("super_admin"), "SHOP_MANAGER")).toBe("shop_manager");
   });
 
   // The escalation this module exists to prevent: PATCH /users/:id/role was
@@ -62,8 +62,8 @@ describe("assertCanAssignRole", () => {
   });
 
   it("lets a branch admin grant branch-level roles", () => {
-    expect(assertCanAssignRole(caller("admin", BRANCH_A), "cashier")).toBe(
-      "cashier",
+    expect(assertCanAssignRole(caller("admin", BRANCH_A), "shop_manager")).toBe(
+      "shop_manager",
     );
   });
 
@@ -75,7 +75,7 @@ describe("assertCanAssignRole", () => {
 
   it("rejects a non-administrative caller entirely", () => {
     expect(() =>
-      assertCanAssignRole(caller("pharmacist", BRANCH_A), "cashier"),
+      assertCanAssignRole(caller("shop_manager", BRANCH_A), "doctor"),
     ).toThrow(ForbiddenException);
   });
 });
@@ -89,7 +89,7 @@ describe("assertCanManageUser", () => {
 
   it("lets a branch admin manage staff in their own branch", () => {
     expect(() =>
-      assertCanManageUser(caller("admin", BRANCH_A), target("cashier", BRANCH_A)),
+      assertCanManageUser(caller("admin", BRANCH_A), target("shop_manager", BRANCH_A)),
     ).not.toThrow();
   });
 
@@ -109,19 +109,19 @@ describe("assertCanManageUser", () => {
   // rather than relying on the caller not knowing the id.
   it("blocks a branch admin reaching into another branch's staff", () => {
     expect(() =>
-      assertCanManageUser(caller("admin", BRANCH_A), target("cashier", BRANCH_B)),
+      assertCanManageUser(caller("admin", BRANCH_A), target("shop_manager", BRANCH_B)),
     ).toThrow(ForbiddenException);
   });
 
   it("blocks an admin with no branch assignment", () => {
     expect(() =>
-      assertCanManageUser(caller("admin"), target("cashier", BRANCH_A)),
+      assertCanManageUser(caller("admin"), target("shop_manager", BRANCH_A)),
     ).toThrow(ForbiddenException);
   });
 
   it("blocks a non-administrative role", () => {
     expect(() =>
-      assertCanManageUser(caller("cashier", BRANCH_A), target("cashier", BRANCH_A)),
+      assertCanManageUser(caller("shop_manager", BRANCH_A), target("shop_manager", BRANCH_A)),
     ).toThrow(ForbiddenException);
   });
 });
@@ -157,7 +157,7 @@ describe("resolveAssignableBranch", () => {
 describe("assertNotLastSuperAdmin", () => {
   it("ignores non-super_admin targets", () => {
     expect(() =>
-      assertNotLastSuperAdmin(target("cashier"), 1, "demote"),
+      assertNotLastSuperAdmin(target("shop_manager"), 1, "demote"),
     ).not.toThrow();
   });
 

@@ -44,7 +44,7 @@ export class PrescriptionsService {
   }
 
   async create(dto: CreatePrescriptionDto, currentUser?: { sub: string; role: string; branchId?: string }) {
-    // A prescription written by a doctor skips pharmacist verification, so it
+    // A prescription written by a doctor skips shop_manager verification, so it
     // must be attributed to the doctor who actually signed in. Taking
     // doctorName from the request body would let one prescriber issue
     // pre-verified controlled-drug prescriptions in another's name, which is
@@ -80,7 +80,7 @@ export class PrescriptionsService {
   }
 
   /**
-   * Editable only before a pharmacist has verified it. Once verified the
+   * Editable only before a shop manager has verified it. Once verified the
    * prescription is the legal basis for what was dispensed — amending the
    * doctor, dates or controlled flag after the fact would break that record.
    */
@@ -116,7 +116,7 @@ export class PrescriptionsService {
       await this.notificationsService.create({
         type: "prescription",
         title: isVerified ? "Prescription Verified" : "Prescription Rejected",
-        message: `Prescription #${id.slice(0, 8)} has been ${isVerified ? "verified by pharmacist" : "rejected"}.`,
+        message: `Prescription #${id.slice(0, 8)} has been ${isVerified ? "verified by shop manager" : "rejected"}.`,
         resourceType: "prescription",
         resourceId: id,
       });

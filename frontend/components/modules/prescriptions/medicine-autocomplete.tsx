@@ -12,7 +12,7 @@ import { Loader2, Pill, CheckCircle2, X } from "lucide-react";
  * Catalogue-backed medicine picker for prescription rows.
  *
  * A prescriber typing a drug name by hand is both slow and lossy — the row ends
- * up with no `medicineId`, so the pharmacist has to re-match it against stock at
+ * up with no `medicineId`, so the shop manager has to re-match it against stock at
  * dispensing time and a typo becomes their problem. Searching the catalogue
  * while they type pins the row to a real medicine and carries the strength over
  * into the dosage field.

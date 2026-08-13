@@ -19,10 +19,7 @@ export class BranchesController {
   @Roles(
     UserRole.SUPER_ADMIN,
     UserRole.ADMIN,
-    UserRole.PHARMACIST,
-    UserRole.INVENTORY_MANAGER,
-    UserRole.CASHIER,
-    UserRole.REPORTS_ANALYST,
+    UserRole.SHOP_MANAGER,
   )
   @ApiOperation({ summary: "List all branches" })
   findAll() {

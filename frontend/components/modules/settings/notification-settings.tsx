@@ -34,7 +34,7 @@ const DEFAULT_SETTINGS: NotifToggle[] = [
   {
     id: "prescription_pending",
     label: "Pending Prescription",
-    description: "Notify pharmacists of unverified prescriptions",
+    description: "Notify shop managers of unverified prescriptions",
     icon: <Bell size={16} className="text-emerald-500" />,
     email: false,
     sms: false,

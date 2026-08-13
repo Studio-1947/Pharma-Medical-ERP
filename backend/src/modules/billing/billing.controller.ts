@@ -22,7 +22,7 @@ export class BillingController {
   constructor(private readonly service: BillingService) {}
 
   @Get("invoices")
-  @Roles("admin", "pharmacist", "cashier", "reports_analyst", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   findAll(@Query() q: unknown, @CurrentUser() user: JwtPayload) {
     const query = queryInvoiceSchema.parse(q);
     // Doctors get this route only to read one patient's billing history inside
@@ -36,7 +36,7 @@ export class BillingController {
   }
 
   @Get("invoices/:id")
-  @Roles("admin", "pharmacist", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   async findOne(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
     const invoice = await this.service.findOne(id);
     assertBranchAccess(user, invoice.data.branchId);
@@ -44,7 +44,7 @@ export class BillingController {
   }
 
   @Post("invoices")
-  @Roles("admin", "pharmacist", "cashier")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Create invoice — atomically decrements stock (FEFO)" })
   create(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
     const dto = createInvoiceSchema.parse(body);
@@ -56,7 +56,7 @@ export class BillingController {
   }
 
   @Post("invoices/:id/void")
-  @Roles("admin", "pharmacist")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Void invoice and return stock" })
   async voidInvoice(@Param("id") id: string, @Body() body: unknown, @CurrentUser() user: JwtPayload) {
     const invoice = await this.service.findOne(id);
@@ -65,7 +65,7 @@ export class BillingController {
   }
 
   @Post("invoices/:id/return")
-  @Roles("admin", "pharmacist")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Create return invoice — restocks batches, creates refund payment" })
   async createReturn(
     @Param("id") id: string,
@@ -78,7 +78,7 @@ export class BillingController {
   }
 
   @Post("payments")
-  @Roles("admin", "pharmacist", "cashier")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Record a payment against an invoice" })
   async recordPayment(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
     const dto = recordPaymentSchema.parse(body);
@@ -88,7 +88,7 @@ export class BillingController {
   }
 
   @Get("invoices/:id/pdf")
-  @Roles("admin", "pharmacist", "cashier")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Get presigned download URL for invoice PDF" })
   async getPdf(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
     const invoice = await this.service.findOne(id);
@@ -97,7 +97,7 @@ export class BillingController {
   }
 
   @Get("reports/end-of-day")
-  @Roles("admin", "reports_analyst")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "End-of-day sales summary for a branch" })
   eod(
     @CurrentUser() user: JwtPayload,

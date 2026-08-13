@@ -21,7 +21,7 @@ export class ReportsController {
   ) {}
 
   @Get("branch-comparison")
-  // Deliberately not open to reports_analyst: this is the one report that shows
+  // Deliberately not open to shop_manager: this is the one report that shows
   // every branch's numbers side by side, which is an org-wide view.
   @Roles("super_admin", "admin")
   @ApiOperation({
@@ -41,7 +41,7 @@ export class ReportsController {
   }
 
   @Get("sales")
-  @Roles("admin", "pharmacist", "reports_analyst")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Sales trend for the last N days, grouped by day/week/month" })
   getSalesTrend(
     @CurrentUser() user: JwtPayload,
@@ -54,7 +54,7 @@ export class ReportsController {
   }
 
   @Get("summary")
-  @Roles("admin", "pharmacist", "reports_analyst")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Aggregate revenue + invoice count for the last N days" })
   getSummary(
     @CurrentUser() user: JwtPayload,
@@ -66,7 +66,7 @@ export class ReportsController {
   }
 
   @Get("top-products")
-  @Roles("admin", "pharmacist", "reports_analyst")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Top N products by revenue" })
   getTopProducts(
     @CurrentUser() user: JwtPayload,
@@ -79,7 +79,7 @@ export class ReportsController {
   }
 
   @Get("payment-methods")
-  @Roles("admin", "pharmacist", "reports_analyst")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Payment method revenue breakdown" })
   getPaymentMethods(
     @CurrentUser() user: JwtPayload,
@@ -91,7 +91,7 @@ export class ReportsController {
   }
 
   @Get("purchase")
-  @Roles("admin", "pharmacist", "reports_analyst", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Purchase order summary for a date range" })
   getPurchaseSummary(
     @CurrentUser() user: JwtPayload,
@@ -105,7 +105,7 @@ export class ReportsController {
   }
 
   @Get("gst")
-  @Roles("admin", "pharmacist")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Export GSTR-1 data as CSV" })
   async getGstReport(
     @CurrentUser() user: JwtPayload,
@@ -129,7 +129,7 @@ export class ReportsController {
   }
 
   @Get("gst/gstr1-json")
-  @Roles("admin", "pharmacist")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Download GSTR-1 return in official Government GST Portal JSON format" })
   async getGstr1Json(
     @CurrentUser() user: JwtPayload,
@@ -147,7 +147,7 @@ export class ReportsController {
   }
 
   @Get("export/excel")
-  @Roles("admin", "pharmacist", "reports_analyst")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Export report as styled .xlsx Excel spreadsheet" })
   async exportExcel(
     @CurrentUser() user: JwtPayload,
@@ -217,7 +217,7 @@ export class ReportsController {
   }
 
   @Get("abc-analysis")
-  @Roles("admin", "reports_analyst")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "ABC product analysis (A=top 70% revenue, B=next 20%, C=bottom 10%) — powered by ClickHouse" })
   getAbcAnalysis(
     @CurrentUser() user: JwtPayload,
@@ -229,7 +229,7 @@ export class ReportsController {
   }
 
   @Get("hourly-pattern")
-  @Roles("admin", "reports_analyst")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "24h × 7-day sales heatmap — powered by ClickHouse" })
   getHourlySalesPattern(
     @CurrentUser() user: JwtPayload,
@@ -241,7 +241,7 @@ export class ReportsController {
   }
 
   @Get("schedule-h-register")
-  @Roles("admin", "pharmacist")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Export Schedule H dispensing register as CSV" })
   async getScheduleHReport(
     @CurrentUser() user: JwtPayload,

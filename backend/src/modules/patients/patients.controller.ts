@@ -15,26 +15,26 @@ export class PatientsController {
   constructor(private readonly service: PatientsService) {}
 
   @Get()
-  @Roles("admin", "pharmacist", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   findAll(@Query() q: unknown, @CurrentUser() user: JwtPayload) {
     return this.service.findAll(queryPatientSchema.parse(q), user);
   }
 
   @Get(":id")
-  @Roles("admin", "pharmacist", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   findOne(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
     return this.service.findOne(id, user);
   }
 
   @Post()
-  @Roles("admin", "pharmacist", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiOperation({ summary: "Register a new patient" })
   create(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
     return this.service.create(createPatientSchema.parse(body), user);
   }
 
   @Patch(":id")
-  @Roles("admin", "pharmacist", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   update(@Param("id") id: string, @Body() body: unknown, @CurrentUser() user: JwtPayload) {
     return this.service.update(id, updatePatientSchema.parse(body), user);
   }

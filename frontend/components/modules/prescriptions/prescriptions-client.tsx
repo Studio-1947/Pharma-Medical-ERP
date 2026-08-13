@@ -261,7 +261,7 @@ function CreatePrescriptionModal({
 
     // A handwritten prescription is captured as an image with no typed rows, so
     // either form of content is enough on its own — but a record with neither is
-    // an empty prescription the pharmacist cannot dispense against.
+    // an empty prescription the shop manager cannot dispense against.
     if (rxItems.length === 0 && !scanKey) {
       setFormError("Add at least one medicine or upload a scan of the prescription.");
       return;
@@ -591,7 +591,7 @@ function CreatePrescriptionModal({
             <label className="text-sm font-medium">Prescription Scan</label>
             <p className="text-xs text-muted-foreground mt-0.5">
               For handwritten prescriptions — photograph the paper slip. The
-              pharmacist reads this when verifying.
+              the shop manager reads this when verifying.
             </p>
           </div>
           <PrescriptionScanUpload value={scanKey} onChange={setScanKey} />
@@ -785,10 +785,10 @@ export function PrescriptionsClient() {
   const { can } = usePermissions();
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
   // Doctors reach this page to read prescription history; signing one off is a
-  // pharmacist's call, and the API enforces the same split.
+  // shop manager's call, and the API enforces the same split.
   const canVerify = can("prescriptions.verify");
-  // PATCH /prescriptions/:id is admin+pharmacist only; showing the pencil to a
-  // doctor or cashier just produced a 403 when they clicked Save.
+  // PATCH /prescriptions/:id is admin+shop_manager only; showing the pencil to a
+  // doctor just produced a 403 when they clicked Save.
   const canEdit = can("prescriptions.edit");
 
   const [activeTab, setActiveTab] = useState<TabKey>("all");

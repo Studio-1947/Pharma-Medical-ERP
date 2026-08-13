@@ -34,14 +34,14 @@ export class BatchController {
   constructor(private readonly service: BatchService) {}
 
   @Get()
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "List batches (filter by medicine, status, expiry)" })
   findAll(@Query() query: unknown) {
     return this.service.findAll(queryBatchSchema.parse(query));
   }
 
   @Get("expiring")
-  @Roles("admin", "inventory_manager", "pharmacist")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Batches expiring within N days (default 90)" })
   getExpiring(
     @CurrentUser() user: JwtPayload,
@@ -53,28 +53,28 @@ export class BatchController {
   }
 
   @Get(":id")
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Get a single batch" })
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);
   }
 
   @Get(":id/movements")
-  @Roles("admin", "pharmacist", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Stock movement history for a batch" })
   getMovements(@Param("id") id: string) {
     return this.service.getMovements(id);
   }
 
   @Get(":id/barcode-label")
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Get printable barcode label data + base64 barcode image for a batch" })
   getBarcodeLabel(@Param("id") id: string) {
     return this.service.getBarcodeLabel(id);
   }
 
   @Post()
-  @Roles("admin", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Receive a new batch (logs purchase movement)" })
   create(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
     const dto = createBatchSchema.parse(body);
@@ -86,14 +86,14 @@ export class BatchController {
   }
 
   @Patch(":id")
-  @Roles("admin", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Update batch details (batch number, expiry, cost, MRP)" })
   update(@Param("id") id: string, @Body() body: unknown) {
     return this.service.update(id, updateBatchSchema.parse(body));
   }
 
   @Patch(":id/status")
-  @Roles("admin", "inventory_manager", "pharmacist")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Update batch status (quarantine, recall, etc.)" })
   updateStatus(
     @Param("id") id: string,
@@ -115,7 +115,7 @@ export class BatchController {
   }
 
   @Patch(":id/adjust")
-  @Roles("admin", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Manual stock adjustment with mandatory notes" })
   adjust(
     @Param("id") id: string,
@@ -130,7 +130,7 @@ export class BatchController {
   }
 
   @Post(":id/reserve")
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Reserve stock on a batch for an active cart" })
   reserve(@Param("id") id: string, @Body() body: unknown) {
     const dto = reserveBatchStockSchema.parse(body);
@@ -138,7 +138,7 @@ export class BatchController {
   }
 
   @Post(":id/release")
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Release reserved stock on a batch" })
   release(@Param("id") id: string, @Body() body: unknown) {
     const dto = releaseBatchStockSchema.parse(body);

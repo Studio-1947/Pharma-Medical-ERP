@@ -76,7 +76,7 @@ const EMPTY: FormState = {
   password: "",
   firstName: "",
   lastName: "",
-  role: "cashier",
+  role: "shop_manager",
   branchId: "",
   specialty: "General Medicine & Primary Care",
   consultationFee: "400",

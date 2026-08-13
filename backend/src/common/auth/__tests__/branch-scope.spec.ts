@@ -27,11 +27,11 @@ describe("resolveBranchScope", () => {
   });
 
   it("pins a branch role to its own branch when none is requested", () => {
-    expect(resolveBranchScope(user("pharmacist", BRANCH_A))).toBe(BRANCH_A);
+    expect(resolveBranchScope(user("shop_manager", BRANCH_A))).toBe(BRANCH_A);
   });
 
   it("allows a branch role to request its own branch", () => {
-    expect(resolveBranchScope(user("pharmacist", BRANCH_A), BRANCH_A)).toBe(
+    expect(resolveBranchScope(user("shop_manager", BRANCH_A), BRANCH_A)).toBe(
       BRANCH_A,
     );
   });
@@ -40,7 +40,7 @@ describe("resolveBranchScope", () => {
   // param, so a branch user must not be able to read another branch's data.
   it("rejects a branch role reaching into another branch", () => {
     expect(() =>
-      resolveBranchScope(user("pharmacist", BRANCH_A), BRANCH_B),
+      resolveBranchScope(user("shop_manager", BRANCH_A), BRANCH_B),
     ).toThrow(ForbiddenException);
   });
 
@@ -52,7 +52,7 @@ describe("resolveBranchScope", () => {
   });
 
   it("rejects a non-super_admin with no branch assigned", () => {
-    expect(() => resolveBranchScope(user("reports_analyst"))).toThrow(
+    expect(() => resolveBranchScope(user("doctor"))).toThrow(
       ForbiddenException,
     );
   });
@@ -60,7 +60,7 @@ describe("resolveBranchScope", () => {
 
 describe("requireBranchScope", () => {
   it("returns the caller's branch for a branch role", () => {
-    expect(requireBranchScope(user("pharmacist", BRANCH_A))).toBe(BRANCH_A);
+    expect(requireBranchScope(user("shop_manager", BRANCH_A))).toBe(BRANCH_A);
   });
 
   it("rejects super_admin's all-branches case where a branch is mandatory", () => {
@@ -71,7 +71,7 @@ describe("requireBranchScope", () => {
 
   it("still blocks cross-branch access", () => {
     expect(() =>
-      requireBranchScope(user("inventory_manager", BRANCH_A), BRANCH_B),
+      requireBranchScope(user("shop_manager", BRANCH_A), BRANCH_B),
     ).toThrow(ForbiddenException);
   });
 });

@@ -15,7 +15,7 @@ export class AlertsController {
   constructor(private readonly repo: AlertsRepository) {}
 
   @Get()
-  @Roles("admin", "super_admin", "inventory_manager", "pharmacist")
+  @Roles("admin", "super_admin", "shop_manager")
   @ApiOperation({ summary: "List system alerts for your branch (expiry, reorder)" })
   async findAll(
     @CurrentUser() user: JwtPayload,
@@ -34,7 +34,7 @@ export class AlertsController {
   }
 
   @Get("unread-count")
-  @Roles("admin", "super_admin", "inventory_manager", "pharmacist")
+  @Roles("admin", "super_admin", "shop_manager")
   @ApiOperation({ summary: "Unread alert count for your branch" })
   async unreadCount(@CurrentUser() user: JwtPayload) {
     return { count: await this.repo.unreadCount(resolveBranchScope(user)) };
@@ -42,7 +42,7 @@ export class AlertsController {
 
   // Declared before :id/read so "read-all" is not captured as an alert id.
   @Patch("read-all")
-  @Roles("admin", "super_admin", "inventory_manager", "pharmacist")
+  @Roles("admin", "super_admin", "shop_manager")
   @ApiOperation({ summary: "Mark all of your branch's alerts as read" })
   async markAllRead(@CurrentUser() user: JwtPayload) {
     // Scoped: this used to clear every unread alert in the company, so one
@@ -52,7 +52,7 @@ export class AlertsController {
   }
 
   @Patch(":id/read")
-  @Roles("admin", "super_admin", "inventory_manager", "pharmacist")
+  @Roles("admin", "super_admin", "shop_manager")
   @ApiOperation({ summary: "Mark an alert as read" })
   async markRead(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
     const ok = await this.repo.markRead(id, resolveBranchScope(user));

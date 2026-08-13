@@ -34,28 +34,28 @@ export class ProcurementController {
   // ─── Suppliers ───────────────────────────────────────────────────────────────
 
   @Get("suppliers")
-  @Roles("admin", "pharmacist", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "List all suppliers" })
   findAllSuppliers(@Query() q: unknown) {
     return this.service.findAllSuppliers(querySupplierSchema.parse(q));
   }
 
   @Get("suppliers/:id")
-  @Roles("admin", "pharmacist", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Get supplier by ID" })
   findSupplierById(@Param("id") id: string) {
     return this.service.findSupplierById(id);
   }
 
   @Post("suppliers")
-  @Roles("admin", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Create a new supplier" })
   createSupplier(@Body() body: unknown) {
     return this.service.createSupplier(createSupplierSchema.parse(body));
   }
 
   @Patch("suppliers/:id")
-  @Roles("admin", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Update supplier details" })
   updateSupplier(@Param("id") id: string, @Body() body: unknown) {
     return this.service.updateSupplier(id, updateSupplierSchema.parse(body));
@@ -71,21 +71,21 @@ export class ProcurementController {
   // ─── Supplier bills, payments & ledger ─────────────────────────────────────────
 
   @Get("suppliers/:id/bills")
-  @Roles("admin", "pharmacist", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "List a supplier's bills (one per delivery), with paid/unpaid status" })
   listSupplierBills(@Param("id") id: string, @Query() q: unknown) {
     return this.service.listSupplierBills(id, querySupplierBillsSchema.parse(q));
   }
 
   @Get("suppliers/:id/bills/:grnId")
-  @Roles("admin", "pharmacist", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Get a single supplier bill with itemized medicines and payment status" })
   getSupplierBill(@Param("id") id: string, @Param("grnId") grnId: string) {
     return this.service.getSupplierBill(id, grnId);
   }
 
   @Post("suppliers/:id/payments")
-  @Roles("admin", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Record a payment made to a supplier, optionally against a specific bill" })
   recordSupplierPayment(
     @Param("id") id: string,
@@ -96,7 +96,7 @@ export class ProcurementController {
   }
 
   @Get("suppliers/:id/ledger")
-  @Roles("admin", "pharmacist", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Supplier account statement — bills and payments with running balance" })
   async getSupplierLedger(
     @Param("id") id: string,
@@ -118,7 +118,7 @@ export class ProcurementController {
   }
 
   @Get("suppliers/:id/returns")
-  @Roles("admin", "pharmacist", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "List expiry/damage returns for every batch delivered by this supplier" })
   listSupplierReturns(@Param("id") id: string) {
     return this.service.listSupplierReturns(id);
@@ -127,14 +127,14 @@ export class ProcurementController {
   // ─── Supplier returns (expiry/damage) ──────────────────────────────────────────
 
   @Post("returns")
-  @Roles("admin", "pharmacist", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Record expired/damaged stock being returned to its supplier" })
   recordSupplierReturn(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
     return this.service.recordSupplierReturn(createSupplierReturnSchema.parse(body), user.sub);
   }
 
   @Post("returns/:id/replace")
-  @Roles("admin", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Resolve a return: supplier sent replacement stock" })
   resolveReturnReplacement(
     @Param("id") id: string,
@@ -149,7 +149,7 @@ export class ProcurementController {
   }
 
   @Post("returns/:id/credit-note")
-  @Roles("admin", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Resolve a return: supplier issued a credit note" })
   resolveReturnCreditNote(
     @Param("id") id: string,
@@ -166,21 +166,21 @@ export class ProcurementController {
   // ─── Purchase Orders ──────────────────────────────────────────────────────────
 
   @Get("purchase-orders")
-  @Roles("admin", "pharmacist", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "List purchase orders with filters" })
   findAllPOs(@Query() q: unknown) {
     return this.service.findAllPOs(queryPurchaseOrderSchema.parse(q));
   }
 
   @Get("purchase-orders/:id")
-  @Roles("admin", "pharmacist", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Get purchase order by ID with items and GRNs" })
   findPOById(@Param("id") id: string) {
     return this.service.findPOById(id);
   }
 
   @Post("purchase-orders")
-  @Roles("admin", "pharmacist", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Create a draft purchase order" })
   createPO(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
     const dto = createPurchaseOrderSchema.parse(body);
@@ -191,7 +191,7 @@ export class ProcurementController {
   }
 
   @Post("auto-draft-pos")
-  @Roles("admin", "pharmacist", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Auto-generate draft POs for all low stock items in current branch" })
   autoGenerateDraftPOs(@Body() body: any, @CurrentUser() user: JwtPayload) {
     const branchId = requireBranchScope(user, body?.branchId);
@@ -199,7 +199,7 @@ export class ProcurementController {
   }
 
   @Patch("purchase-orders/:id")
-  @Roles("admin", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Update a draft purchase order (replaces line items)" })
   updatePO(@Param("id") id: string, @Body() body: unknown) {
     return this.service.updatePO(id, createPurchaseOrderSchema.parse(body));
@@ -231,7 +231,7 @@ export class ProcurementController {
   }
 
   @Post("purchase-orders/:id/grn")
-  @Roles("admin", "pharmacist", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Create goods received note — receives stock into warehouse" })
   createGRN(
     @Param("id") id: string,

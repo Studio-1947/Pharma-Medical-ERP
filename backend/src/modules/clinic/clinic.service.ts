@@ -18,7 +18,7 @@ const TERMINAL_STATUSES = new Set(["completed", "cancelled"]);
  * this, any doctor could read a colleague's full list of patients by editing
  * the param, or drop it entirely and read every queue in the system.
  *
- * Reception roles (admin, cashier) legitimately work across all of a branch's
+ * Reception roles (admin, shop_manager) legitimately work across all of a branch's
  * doctors, so for them the param stays a free filter; branch scoping is what
  * bounds their reach.
  */
