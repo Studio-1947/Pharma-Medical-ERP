@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera, ShieldAlert, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, LayoutGrid, Table, Percent, Edit3, SlidersHorizontal } from "lucide-react";
 import { useCartStore, CartItem } from "@/stores/cart.store";
@@ -46,6 +47,9 @@ export function PosTerminal() {
   const [clearConfirm, setClearConfirm] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  // Out-of-stock / unlinked medicines skipped when a prescription is auto-loaded
+  // from the clinic queue ("Open in POS"). Shown as a dismissible amber banner.
+  const [rxLoadWarnings, setRxLoadWarnings] = useState<string[]>([]);
 
   const [allowOversell, setAllowOversell] = useState(false);
   const [stockLimitDialog, setStockLimitDialog] = useState<{
@@ -582,6 +586,110 @@ export function PosTerminal() {
     }
   };
 
+  // ── Rx auto-load from URL (clinic queue "Open in POS") ─────────────────────
+  const searchParams = useSearchParams();
+  const urlRxId = searchParams.get("rxId");
+  const urlPatientId = searchParams.get("patientId");
+  // Re-run only when the URL rxId actually changes; identical navigation
+  // (e.g. the user returning to the same link) must not re-fill the cart.
+  const handledRxRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!urlRxId) return;
+    if (handledRxRef.current === urlRxId) return;
+    handledRxRef.current = urlRxId;
+    loadRxIntoCart(urlRxId, urlPatientId ?? undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlRxId, urlPatientId]);
+
+  async function loadRxIntoCart(rxId: string, patientIdFromUrl?: string) {
+    setRxLoadWarnings([]);
+    try {
+      const res: any = await apiClient.get(`/prescriptions/${rxId}`);
+      const rx = res?.data?.data ?? res?.data ?? null;
+      const rxItems: any[] = Array.isArray(rx?.items) ? rx.items : [];
+
+      // Start a fresh prescription session: drop any persisted cart first, then
+      // link patient + Rx so checkout carries them automatically.
+      clear();
+      if (patientIdFromUrl) setPatient(patientIdFromUrl);
+      setPrescriptionId(rxId);
+
+      if (rxItems.length === 0) {
+        toastInfo("Prescription loaded", "This prescription has no medicine items to add to the cart.");
+        return;
+      }
+
+      const warnings: string[] = [];
+      for (const item of rxItems) {
+        const med = item?.medicine ?? null;
+        const medId = item.medicineId ?? med?.id;
+        const label = med?.name ?? item.medicineName ?? "Medicine";
+        if (!medId) {
+          // Free-text line the doctor did not link to a catalogue medicine.
+          warnings.push(label);
+          continue;
+        }
+        try {
+          const batchesRes: any = await apiClient.get(`/inventory/medicines/${medId}/batches`, {
+            params: { branchId: activeBranchId },
+          });
+          const batchList: any[] = Array.isArray(batchesRes) ? batchesRes
+            : Array.isArray(batchesRes?.data?.data) ? batchesRes.data.data
+            : Array.isArray(batchesRes?.data) ? batchesRes.data
+            : [];
+          const first = batchList[0];
+          const availableQty = first?.quantity ?? 0;
+          if (!first || availableQty <= 0) {
+            warnings.push(label);
+            continue;
+          }
+
+          const requestedQty = item.quantityPrescribed || 1;
+          const addPayload: any = {
+            medicineId: medId,
+            batchId: first.id,
+            name: label,
+            sku: med?.sku ?? item.medicineName ?? "",
+            batchNo: first.batchNo,
+            unitPrice: parseFloat(med?.priceMrp ?? "0") || 0,
+            stripSize: med?.stripSize ? Number(med.stripSize) : 1,
+            taxPct: parseFloat(med?.taxPercent ?? "0") || 0,
+            discountPct: 0,
+            quantity: requestedQty,
+            scheduleClass: med?.scheduleClass,
+            requiresPrescription: med?.requiresPrescription,
+            unit: med?.unit,
+            batchStock: availableQty,
+            totalStock: availableQty,
+          };
+
+          if (requestedQty > availableQty && !allowOversell) {
+            // Existing stock-cap behaviour: add what is available and surface
+            // the "Stock Limit Exceeded" dialog so the counter staff notice.
+            setStockLimitDialog({
+              open: true,
+              itemName: label,
+              requestedQty,
+              maxAvailable: availableQty,
+              unit: getUnitLabel(availableQty, med ?? {}),
+            });
+            addItem({ ...addPayload, quantity: availableQty });
+          } else {
+            addItem(addPayload);
+          }
+        } catch {
+          toastError("Could not load stock", `Failed to check stock for "${label}". Add it manually if needed.`);
+        }
+      }
+      if (warnings.length > 0) {
+        setRxLoadWarnings(warnings);
+      }
+    } catch {
+      toastError("Prescription load failed", "Could not load the prescription. Check the link and try again.");
+    }
+  }
+
   const searchRaw = searchResults as any;
   const medicines: any[] = Array.isArray(searchRaw?.data?.data) ? searchRaw.data.data : Array.isArray(searchRaw?.data) ? searchRaw.data : [];
 
@@ -672,6 +780,39 @@ export function PosTerminal() {
               Cancel
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Rx auto-load out-of-stock warning banner */}
+      {rxLoadWarnings.length > 0 && (
+        <div className="flex flex-col gap-1.5 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 shadow-sm text-xs">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2 font-bold text-amber-900">
+              <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+              These items from the prescription are out of stock and were NOT added to cart:
+            </div>
+            <button
+              type="button"
+              onClick={() => setRxLoadWarnings([])}
+              className="text-amber-500 hover:text-amber-800 p-0.5 shrink-0"
+              title="Dismiss"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5 pl-6">
+            {rxLoadWarnings.map((w, i) => (
+              <span
+                key={`${w}-${i}`}
+                className="bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md font-semibold"
+              >
+                {w}
+              </span>
+            ))}
+          </div>
+          <p className="pl-6 text-[11px] text-amber-800 font-medium">
+            Please source from another branch or inform the patient.
+          </p>
         </div>
       )}
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -997,6 +998,7 @@ const TIME_SLOT_OPTIONS = [
 ];
 
 export function ClinicQueue() {
+  const router = useRouter();
   const qc = useQueryClient();
   const { error: toastError, success: toastSuccess } = useToast();
   const [date, setDate] = useState(localDateString());
@@ -1484,7 +1486,7 @@ export function ClinicQueue() {
                             </div>
                           </td>
                           <td className="px-5 py-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center justify-end gap-2 flex-wrap">
                               {t.status === "pending" && (
                                 <button
                                   onClick={() => callPatient(t.id)}
@@ -1499,6 +1501,21 @@ export function ClinicQueue() {
                                   className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-2xs flex items-center gap-1"
                                 >
                                   <CheckCircle2 size={12} /> Complete
+                                </button>
+                              )}
+                              {t.status === "completed" && t.prescriptionId && (
+                                <button
+                                  onClick={() => {
+                                    const url = `/billing/pos?rxId=${t.prescriptionId}${
+                                      t.patient?.id ? `&patientId=${t.patient.id}` : ""
+                                    }`;
+                                    router.push(url);
+                                  }}
+                                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition-all shadow-2xs flex items-center gap-1.5"
+                                  title="Open prescription in POS and auto-fill cart"
+                                >
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                                  Open in POS ↗
                                 </button>
                               )}
                               {(t.status === "pending" || t.status === "called") && (
