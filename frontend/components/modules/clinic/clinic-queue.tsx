@@ -174,9 +174,19 @@ function getDoctorSchedule(d?: Doctor, index = 0): DoctorSchedule {
 
 function doctorName(d?: Doctor) {
   if (!d) return "--";
-  const name = [d.firstName, d.lastName].filter(Boolean).join(" ");
-  return name ? `Dr. ${name}` : d.email;
+  const name = [d.firstName, d.lastName].filter(Boolean).join(" ").trim();
+  if (name) {
+    return name.startsWith("Dr.") ? name : `Dr. ${name}`;
+  }
+  if (d.email) {
+    const rawName = (d.email.split("@")[0] ?? "doctor").replace(/[^a-zA-Z0-9]/g, " ").trim();
+    const capitalized = rawName.charAt(0).toUpperCase() + rawName.slice(1);
+    return `Dr. ${capitalized}`;
+  }
+  return "Doctor";
 }
+
+export { doctorName };
 
 function statusBadge(status: ClinicToken["status"]) {
   switch (status) {
@@ -225,8 +235,9 @@ export function EditDoctorProfileModal({
   const isAdmin = currentUser?.role === "admin" || currentUser?.role === "super_admin";
 
   const dp = doctor?.doctorProfile;
-  const sched = dp?.weeklySchedule ?? [];
 
+  const [firstName, setFirstName] = useState(doctor?.firstName ?? "");
+  const [lastName, setLastName] = useState(doctor?.lastName ?? "");
   const [branchId, setBranchId] = useState(doctor?.branchId ?? "");
   const [specialty, setSpecialty] = useState("General Medicine & Primary Care");
   const [fee, setFee] = useState("400");
@@ -244,6 +255,8 @@ export function EditDoctorProfileModal({
     if (doctor) {
       const dProfile = doctor.doctorProfile;
       const sList = dProfile?.weeklySchedule ?? [];
+      setFirstName(doctor.firstName ?? "");
+      setLastName(doctor.lastName ?? "");
       setBranchId(doctor.branchId ?? "");
       setSpecialty(dProfile?.specialty ?? "General Medicine & Primary Care");
       setFee(dProfile?.consultationFee ? String(dProfile.consultationFee) : "400");
@@ -266,6 +279,8 @@ export function EditDoctorProfileModal({
 
     const profileData = {
       ...(isAdmin ? { branchId: branchId === "" ? null : branchId } : {}),
+      firstName: firstName.trim() || undefined,
+      lastName: lastName.trim() || undefined,
       specialty: specialty.trim() || "General Medicine & Primary Care",
       consultationFee: parseFloat(fee) || 400,
       opdRoom: opdRoom.trim() || "OPD Cabin 101 (Ground Floor)",
@@ -281,8 +296,15 @@ export function EditDoctorProfileModal({
     apiClient
       .patch(`/clinic/doctors/${doctor.id}/profile`, profileData)
       .then(() => {
+        if (currentUser && currentUser.id === doctor.id) {
+          useAuthStore.getState().setUser({
+            ...currentUser,
+            firstName: firstName.trim() || undefined,
+            lastName: lastName.trim() || undefined,
+          } as any);
+        }
         qc.invalidateQueries({ queryKey: queryKeys.clinicTokens.doctors() });
-        toastSuccess("Doctor Profile Updated", `${doctorName(doctor)} OPD profile and timings updated.`);
+        toastSuccess("Doctor Profile Updated", `OPD profile and timings updated for ${doctorName({ firstName, lastName, email: doctor.email } as any)}.`);
         onClose();
       })
       .catch((err: any) => {
@@ -291,16 +313,69 @@ export function EditDoctorProfileModal({
       .finally(() => setSubmitting(false));
   };
 
+  const DAY_PRESETS = [
+    "Mon - Fri",
+    "Mon - Sat",
+    "Mon, Wed, Fri",
+    "Tue, Thu, Sat",
+    "Saturday",
+    "Sunday",
+    "Weekend (Sat, Sun)",
+    "Mon - Sun (Everyday)",
+  ];
+
+  const TIME_PRESETS = [
+    "09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM",
+    "09:00 AM - 01:00 PM",
+    "10:00 AM - 02:00 PM & 05:00 PM - 08:00 PM",
+    "09:00 AM - 02:00 PM",
+    "04:00 PM - 08:00 PM",
+    "10:00 AM - 04:00 PM",
+    "On Call Emergency Only",
+  ];
+
   return (
     <Modal
-      title={`Edit Doctor Profile — ${doctorName(doctor)}`}
-      subtitle="Update assigned OPD branch clinic, specialization, consultation fee, cabin & weekly timings"
+      title={`Edit Doctor Profile — ${doctorName({ ...doctor, firstName, lastName })}`}
+      subtitle="Update doctor name, assigned OPD clinic, specialization, consultation fee, cabin & weekly timings"
       icon={<Edit size={18} className="text-emerald-600" />}
       open={open}
       onClose={onClose}
       size="lg"
     >
       <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+        {/* Doctor Name Section */}
+        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 space-y-2">
+          <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">
+            Doctor Full Name
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold block mb-0.5">First Name</span>
+              <input
+                type="text"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="e.g. Anjali"
+                className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-slate-800 font-medium"
+              />
+            </div>
+            <div>
+              <span className="text-[10px] text-slate-500 font-semibold block mb-0.5">Last Name</span>
+              <input
+                type="text"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="e.g. Chettri"
+                className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-slate-800 font-medium"
+              />
+            </div>
+          </div>
+          <p className="text-[11px] text-slate-500">
+            Will display as: <strong className="text-emerald-700 font-bold">{doctorName({ firstName, lastName, email: doctor.email } as any)}</strong>
+          </p>
+        </div>
+
         {/* Branch Mapping Selector */}
         <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3.5 space-y-1">
           <div className="flex items-center justify-between">
@@ -430,50 +505,111 @@ export function EditDoctorProfileModal({
           </div>
         </div>
 
-        <div className="space-y-2 pt-2 border-t border-slate-100">
-          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
-            Weekly OPD Timings & Duty Roster
-          </label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-            <div>
-              <span className="text-[10px] text-slate-500 font-semibold block mb-0.5">Slot 1 Days</span>
-              <input
-                type="text"
-                value={slot1Days}
-                onChange={(e) => setSlot1Days(e.target.value)}
-                placeholder="Mon - Fri"
-                className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white"
-              />
+        {/* Weekly OPD Schedule Builder */}
+        <div className="space-y-3 pt-3 border-t border-slate-100">
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block flex items-center gap-1.5">
+              <Calendar size={14} className="text-emerald-600 shrink-0" />
+              Weekly OPD Days & Timings Roster
+            </label>
+            <span className="text-[11px] text-emerald-700 font-medium bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+              Interactive Schedule Picker
+            </span>
+          </div>
+
+          {/* Slot 1 Config */}
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2.5">
+            <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">Primary OPD Roster (Slot 1)</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-[10px] text-slate-500 font-semibold block mb-1">Select Days</span>
+                <select
+                  value={slot1Days}
+                  onChange={(e) => setSlot1Days(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium text-slate-800"
+                >
+                  {DAY_PRESETS.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={slot1Days}
+                  onChange={(e) => setSlot1Days(e.target.value)}
+                  placeholder="Or custom days e.g. Mon - Fri"
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] bg-white mt-1 text-slate-700"
+                />
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 font-semibold block mb-1">Select Shift Hours</span>
+                <select
+                  value={slot1Hours}
+                  onChange={(e) => setSlot1Hours(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium text-slate-800"
+                >
+                  {TIME_PRESETS.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  value={slot1Hours}
+                  onChange={(e) => setSlot1Hours(e.target.value)}
+                  placeholder="Or custom hours e.g. 09:00 AM - 01:00 PM"
+                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] bg-white mt-1 text-slate-700"
+                />
+              </div>
             </div>
-            <div>
-              <span className="text-[10px] text-slate-500 font-semibold block mb-0.5">Slot 1 Hours</span>
-              <input
-                type="text"
-                value={slot1Hours}
-                onChange={(e) => setSlot1Hours(e.target.value)}
-                placeholder="09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM"
-                className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white"
-              />
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 font-semibold block mb-0.5">Slot 2 Days (Optional)</span>
-              <input
-                type="text"
-                value={slot2Days}
-                onChange={(e) => setSlot2Days(e.target.value)}
-                placeholder="Saturday"
-                className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white"
-              />
-            </div>
-            <div>
-              <span className="text-[10px] text-slate-500 font-semibold block mb-0.5">Slot 2 Hours (Optional)</span>
-              <input
-                type="text"
-                value={slot2Hours}
-                onChange={(e) => setSlot2Hours(e.target.value)}
-                placeholder="09:00 AM - 02:00 PM"
-                className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs bg-white"
-              />
+          </div>
+
+          {/* Slot 2 Config */}
+          <div className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 space-y-2.5">
+            <span className="text-[11px] font-bold text-slate-700 uppercase tracking-wider block">Secondary OPD Roster (Slot 2 - Optional)</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-[10px] text-slate-500 font-semibold block mb-1">Select Days</span>
+                <select
+                  value={slot2Days}
+                  onChange={(e) => setSlot2Days(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium text-slate-800"
+                >
+                  <option value="">None / Off</option>
+                  {DAY_PRESETS.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+                {slot2Days && (
+                  <input
+                    type="text"
+                    value={slot2Days}
+                    onChange={(e) => setSlot2Days(e.target.value)}
+                    placeholder="Or custom days e.g. Saturday"
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] bg-white mt-1 text-slate-700"
+                  />
+                )}
+              </div>
+              <div>
+                <span className="text-[10px] text-slate-500 font-semibold block mb-1">Select Shift Hours</span>
+                <select
+                  value={slot2Hours}
+                  disabled={!slot2Days}
+                  onChange={(e) => setSlot2Hours(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs bg-white font-medium text-slate-800 disabled:opacity-50"
+                >
+                  {TIME_PRESETS.map((t) => (
+                    <option key={t} value={t}>{t}</option>
+                  ))}
+                </select>
+                {slot2Days && (
+                  <input
+                    type="text"
+                    value={slot2Hours}
+                    onChange={(e) => setSlot2Hours(e.target.value)}
+                    placeholder="Or custom hours e.g. 09:00 AM - 02:00 PM"
+                    className="w-full border border-slate-200 rounded-lg px-2.5 py-1 text-[11px] bg-white mt-1 text-slate-700"
+                  />
+                )}
+              </div>
             </div>
           </div>
         </div>

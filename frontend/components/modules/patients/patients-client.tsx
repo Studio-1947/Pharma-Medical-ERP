@@ -8,14 +8,18 @@ import { useToast } from "@/components/ui/toast";
 import { UserPlus, Search, Edit2, Trash2, Phone, Calendar, Star, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
+import { isValidPhoneNumber } from "@/lib/phone-validation";
 
 interface Patient {
   id: string;
   name: string;
   phone: string;
   email?: string | null;
+  dateOfBirth?: string | null;
   gender?: string | null;
   bloodGroup?: string | null;
+  address?: string | null;
+  state?: string | null;
   allergies?: string[] | null;
   loyaltyPoints: number;
   outstandingBalance: string;
@@ -27,22 +31,28 @@ interface PatientFormData {
   name: string;
   phone: string;
   email: string;
+  ageYears: string;
   dateOfBirth: string;
   gender: string;
   address: string;
   state: string;
+  pincode: string;
   bloodGroup: string;
+  dobMode: "dob" | "age";
 }
 
 const emptyForm: PatientFormData = {
   name: "",
   phone: "",
   email: "",
+  ageYears: "",
   dateOfBirth: "",
   gender: "",
   address: "",
-  state: "",
+  state: "West Bengal",
+  pincode: "",
   bloodGroup: "",
+  dobMode: "age",
 };
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
@@ -63,32 +73,72 @@ function PatientHistoryModal({ patient, onClose }: { patient: Patient | null; on
 
   const invoices: any[] = (invoicesRes as any)?.data ?? [];
 
+  // Calculate age if dateOfBirth is present
+  let ageDisplay = "N/A";
+  if (patient.dateOfBirth) {
+    const dob = new Date(patient.dateOfBirth);
+    const ageYears = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+    if (!isNaN(ageYears) && ageYears >= 0) {
+      ageDisplay = `${ageYears} yrs (${format(dob, "dd MMM yyyy")})`;
+    }
+  }
+
   return (
     <Modal
       title={`Patient Profile — ${patient.name}`}
-      subtitle={`Phone: ${patient.phone} • Loyalty Points: ${patient.loyaltyPoints ?? 0}`}
+      subtitle={`Phone: ${patient.phone} • Member since ${patient.createdAt ? format(new Date(patient.createdAt), "MMM yyyy") : "N/A"}`}
       open={!!patient}
       onClose={onClose}
       size="lg"
     >
       <div className="p-6 space-y-6">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
-          <div>
-            <span className="text-slate-400 block font-semibold uppercase">Blood Group</span>
-            <span className="font-bold text-slate-800">{patient.bloodGroup ?? "N/A"}</span>
+        {/* Full Demographics Grid */}
+        <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-3">
+          <p className="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">Patient Demographics &amp; Contact</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 text-xs">
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Gender</span>
+              <span className="font-bold text-slate-900 capitalize">{patient.gender || "Not stated"}</span>
+            </div>
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Age / Date of Birth</span>
+              <span className="font-bold text-slate-900">{ageDisplay}</span>
+            </div>
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Blood Group</span>
+              <span className={`font-black ${patient.bloodGroup ? "text-rose-600" : "text-slate-700"}`}>{patient.bloodGroup || "N/A"}</span>
+            </div>
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Email</span>
+              <span className="font-semibold text-slate-800 truncate block" title={patient.email ?? ""}>{patient.email || "N/A"}</span>
+            </div>
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs sm:col-span-2">
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Address &amp; Location</span>
+              <span className="font-semibold text-slate-800 block truncate" title={patient.address ?? ""}>{patient.address || "N/A"}</span>
+            </div>
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">State</span>
+              <span className="font-semibold text-slate-800">{patient.state || "West Bengal"}</span>
+            </div>
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Loyalty Balance</span>
+              <span className="font-bold text-amber-700">{patient.loyaltyPoints ?? 0} pts</span>
+            </div>
           </div>
-          <div>
-            <span className="text-slate-400 block font-semibold uppercase">Gender</span>
-            <span className="font-bold text-slate-800 capitalize">{patient.gender ?? "N/A"}</span>
-          </div>
-          <div>
-            <span className="text-slate-400 block font-semibold uppercase">Loyalty Balance</span>
-            <span className="font-bold text-yellow-700">{patient.loyaltyPoints ?? 0} pts</span>
-          </div>
-          <div>
-            <span className="text-slate-400 block font-semibold uppercase">Outstanding</span>
-            <span className="font-bold text-slate-800">₹{parseFloat(patient.outstandingBalance ?? "0").toFixed(2)}</span>
-          </div>
+
+          {/* Allergies list */}
+          {patient.allergies && patient.allergies.length > 0 && (
+            <div className="pt-1 flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase text-rose-500">Known Allergies:</span>
+              <div className="flex flex-wrap gap-1">
+                {patient.allergies.map((alg, i) => (
+                  <span key={i} className="text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-md">
+                    {alg}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div>
@@ -136,6 +186,7 @@ export function PatientsClient() {
   const { user } = useAuthStore();
   const { success: toastSuccess, error: toastError } = useToast();
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const isDoctor = user?.role === "doctor";
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [historyTarget, setHistoryTarget] = useState<Patient | null>(null);
   const [search, setSearch] = useState("");
@@ -175,6 +226,7 @@ export function PatientsClient() {
     mutationFn: (data: object) => apiClient.post("/patients", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.patients.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clinicTokens.all() });
       handleClose();
     },
     onError: (err: any) => {
@@ -216,15 +268,26 @@ export function PatientsClient() {
 
   function openEdit(patient: Patient) {
     setEditingPatient(patient);
+    const dobStr = patient.dateOfBirth ? patient.dateOfBirth.split("T")[0] : "";
+    let calcAge = "";
+    if (dobStr) {
+      const bDate = new Date(dobStr);
+      const ageDiff = Math.floor((Date.now() - bDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+      if (ageDiff >= 0) calcAge = String(ageDiff);
+    }
+
     setForm({
       name: patient.name ?? "",
       phone: patient.phone ?? "",
       email: patient.email ?? "",
-      dateOfBirth: "",
+      ageYears: calcAge,
+      dateOfBirth: dobStr ?? "",
       gender: patient.gender ?? "",
-      address: "",
-      state: "",
+      address: patient.address ?? "",
+      state: patient.state ?? "West Bengal",
+      pincode: "",
       bloodGroup: patient.bloodGroup ?? "",
+      dobMode: dobStr ? "dob" : "age",
     });
     setFormError("");
     setIsOpen(true);
@@ -241,7 +304,11 @@ export function PatientsClient() {
     e.preventDefault();
     setFormError("");
     if (!form.name.trim() || !form.phone.trim()) {
-      setFormError("Name and phone are required.");
+      setFormError("Name and Phone are required.");
+      return;
+    }
+    if (!isValidPhoneNumber(form.phone)) {
+      setFormError("Please enter a valid 10-digit mobile number (e.g. 9876543210 or +91 9876543210).");
       return;
     }
     const payload: Record<string, any> = {
@@ -249,10 +316,24 @@ export function PatientsClient() {
       phone: form.phone.trim(),
     };
     if (form.email.trim()) payload.email = form.email.trim();
-    if (form.dateOfBirth) payload.dateOfBirth = new Date(form.dateOfBirth).toISOString();
+
+    let dobValue = form.dateOfBirth;
+    if (form.dobMode === "age" && form.ageYears.trim()) {
+      const ageNum = parseInt(form.ageYears.trim(), 10);
+      if (!isNaN(ageNum) && ageNum > 0 && ageNum < 130) {
+        const birthYear = new Date().getFullYear() - ageNum;
+        dobValue = `${birthYear}-01-01`;
+      }
+    }
+    if (dobValue) payload.dateOfBirth = new Date(dobValue).toISOString();
     if (form.gender) payload.gender = form.gender;
-    if (form.address.trim()) payload.address = form.address.trim();
-    if (form.state.trim()) payload.state = form.state.trim();
+
+    let fullAddress = form.address.trim();
+    if (form.pincode.trim()) {
+      fullAddress = fullAddress ? `${fullAddress} - ${form.pincode.trim()}` : `PIN: ${form.pincode.trim()}`;
+    }
+    if (fullAddress) payload.address = fullAddress;
+    payload.state = form.state.trim() || "West Bengal";
     if (form.bloodGroup) payload.bloodGroup = form.bloodGroup;
 
     if (editingPatient) {
@@ -269,8 +350,14 @@ export function PatientsClient() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Patients</h1>
-          <p className="text-muted-foreground mt-1">Manage registered patients and their records.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+            {isDoctor ? "My Served Patients" : "Patients"}
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {isDoctor
+              ? "Directory of patients assigned to your consultations and prescriptions."
+              : "Manage registered patients and their records."}
+          </p>
         </div>
         <button
           onClick={openCreate}
@@ -300,8 +387,14 @@ export function PatientsClient() {
       ) : patients.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <UserPlus className="mx-auto mb-3 opacity-30" size={48} />
-          <p className="font-medium">No patients registered yet.</p>
-          <p className="text-sm mt-1">Click &quot;Register Patient&quot; to add the first patient.</p>
+          <p className="font-medium">
+            {isDoctor ? "No patients assigned to your consultations yet." : "No patients registered yet."}
+          </p>
+          <p className="text-sm mt-1">
+            {isDoctor
+              ? "Patients booked for your clinic queue or prescriptions will automatically appear here."
+              : "Click \"Register Patient\" to add the first patient."}
+          </p>
         </div>
       ) : (
         <div className="bg-card rounded-xl border shadow-sm overflow-hidden">
@@ -477,32 +570,118 @@ export function PatientsClient() {
             {/* Personal info */}
             <div>
               <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-3">Personal Details</p>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={labelCls}>Gender</label>
-                    <select
-                      value={form.gender}
-                      onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))}
-                      className={inputCls}
-                    >
-                      <option value="">Select gender</option>
-                      <option value="male">Male</option>
-                      <option value="female">Female</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelCls}>Date of Birth</label>
-                    <input
-                      type="date"
-                      value={form.dateOfBirth}
-                      onChange={(e) => setForm((f) => ({ ...f, dateOfBirth: e.target.value }))}
-                      max={new Date().toISOString().split("T")[0]}
-                      className={inputCls}
-                    />
+              <div className="space-y-4">
+                {/* Gender Radio Buttons */}
+                <div>
+                  <label className={labelCls}>Gender</label>
+                  <div className="flex items-center gap-2 mt-1">
+                    {[
+                      { value: "male", label: "Male" },
+                      { value: "female", label: "Female" },
+                      { value: "other", label: "Other" },
+                    ].map((g) => (
+                      <label
+                        key={g.value}
+                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold cursor-pointer transition-all ${
+                          form.gender === g.value
+                            ? "bg-emerald-50 border-emerald-500 text-emerald-800 shadow-xs"
+                            : "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="patientGender"
+                          value={g.value}
+                          checked={form.gender === g.value}
+                          onChange={(e) => setForm((f) => ({ ...f, gender: e.target.value }))}
+                          className="accent-emerald-600 w-3.5 h-3.5 cursor-pointer"
+                        />
+                        <span>{g.label}</span>
+                      </label>
+                    ))}
                   </div>
                 </div>
+
+                {/* Age vs DOB Toggle & Inputs */}
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className={labelCls}>Age &amp; Date of Birth</label>
+                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-[10px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, dobMode: "age" }))}
+                        className={`px-2 py-0.5 rounded-md transition-all ${
+                          form.dobMode === "age" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        Age (Years)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setForm((f) => ({ ...f, dobMode: "dob" }))}
+                        className={`px-2 py-0.5 rounded-md transition-all ${
+                          form.dobMode === "dob" ? "bg-white text-slate-900 shadow-xs" : "text-slate-500 hover:text-slate-800"
+                        }`}
+                      >
+                        Exact Date of Birth
+                      </button>
+                    </div>
+                  </div>
+
+                  {form.dobMode === "age" ? (
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="1"
+                        max="120"
+                        value={form.ageYears}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const ageNum = parseInt(val, 10);
+                          let approxDob = "";
+                          if (!isNaN(ageNum) && ageNum > 0 && ageNum < 120) {
+                            const bYear = new Date().getFullYear() - ageNum;
+                            approxDob = `${bYear}-01-01`;
+                          }
+                          setForm((f) => ({ ...f, ageYears: val, dateOfBirth: approxDob }));
+                        }}
+                        placeholder="Enter patient age in years (e.g. 45)"
+                        className={inputCls}
+                      />
+                      {form.dateOfBirth && (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                          Birth Year: {form.dateOfBirth.split("-")[0]}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <div>
+                      <input
+                        type="date"
+                        value={form.dateOfBirth}
+                        onChange={(e) => {
+                          const dobVal = e.target.value;
+                          let calcAge = "";
+                          if (dobVal) {
+                            const bDate = new Date(dobVal);
+                            const ageDiff = Math.floor((Date.now() - bDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+                            if (ageDiff >= 0) calcAge = String(ageDiff);
+                          }
+                          setForm((f) => ({ ...f, dateOfBirth: dobVal, ageYears: calcAge }));
+                        }}
+                        max={new Date().toISOString().split("T")[0]}
+                        className={inputCls}
+                      />
+                      {form.ageYears && (
+                        <p className="text-[11px] font-semibold text-emerald-700 mt-1">
+                          Calculated Age: {form.ageYears} years old
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Blood Group */}
                 <div>
                   <label className={labelCls}>Blood Group</label>
                   <div className="flex flex-wrap gap-2 mt-1">
@@ -529,7 +708,7 @@ export function PatientsClient() {
 
             {/* Address */}
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-3">Address</p>
+              <p className="text-[11px] font-bold uppercase tracking-widest text-slate-400 mb-3">Address &amp; Location</p>
               <div className="space-y-3">
                 <div>
                   <label className={labelCls}>Street / City</label>
@@ -541,15 +720,27 @@ export function PatientsClient() {
                     className={inputCls}
                   />
                 </div>
-                <div>
-                  <label className={labelCls}>State</label>
-                  <input
-                    type="text"
-                    value={form.state}
-                    onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
-                    placeholder="e.g. West Bengal"
-                    className={inputCls}
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelCls}>State</label>
+                    <input
+                      type="text"
+                      value={form.state}
+                      onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))}
+                      placeholder="West Bengal"
+                      className={inputCls}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelCls}>Pincode / Zip Code</label>
+                    <input
+                      type="text"
+                      value={form.pincode}
+                      onChange={(e) => setForm((f) => ({ ...f, pincode: e.target.value }))}
+                      placeholder="e.g. 700001"
+                      className={inputCls}
+                    />
+                  </div>
                 </div>
               </div>
             </div>

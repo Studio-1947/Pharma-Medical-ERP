@@ -30,6 +30,7 @@ export class AuthRepository {
     lastName: string;
     role?: string;
     branchId?: string;
+    doctorProfile?: Record<string, any>;
   }) {
     const [user] = await this.db
       .insert(schema.users)
@@ -40,6 +41,7 @@ export class AuthRepository {
         lastName: data.lastName,
         role: (data.role as any) ?? "cashier",
         branchId: data.branchId,
+        doctorProfile: data.doctorProfile,
       })
       .returning({
         id: schema.users.id,

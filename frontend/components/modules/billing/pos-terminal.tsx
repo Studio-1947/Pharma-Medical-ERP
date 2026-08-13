@@ -17,6 +17,7 @@ import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
 import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
 import { useActiveBranchId } from "@/hooks/use-branch";
 import { sendViaWhatsApp } from "@/lib/patient-messaging";
+import { isValidPhoneNumber } from "@/lib/phone-validation";
 
 const CONTROLLED_CLASSES = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"];
 
@@ -109,6 +110,10 @@ export function PosTerminal() {
     setPatientFormError("");
     if (!patientForm.name.trim() || !patientForm.phone.trim()) {
       setPatientFormError("Name and Phone are required.");
+      return;
+    }
+    if (!isValidPhoneNumber(patientForm.phone)) {
+      setPatientFormError("Please enter a valid 10-digit mobile number (e.g. 9876543210 or +91 9876543210).");
       return;
     }
     const payload: Record<string, any> = {
@@ -517,41 +522,46 @@ export function PosTerminal() {
   const medicines: any[] = Array.isArray(searchRaw?.data?.data) ? searchRaw.data.data : Array.isArray(searchRaw?.data) ? searchRaw.data : [];
 
   return (
-    <div className="flex flex-col gap-4 lg:h-[calc(100vh-8rem)]">
-      {/* Top bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 bg-muted/40 p-3 sm:p-4 rounded-xl border">
-        {/* Keyboard hotkeys are meaningless on touch devices */}
-        <div className="hidden md:flex flex-wrap items-center gap-2">
-          {(["[F2] Search", "[F4] Pay", "[F6] Clear", "[Ctrl+P] Print"] as const).map((k) => (
-            <span key={k} className="text-xs bg-muted border font-semibold px-2 py-1 rounded-md">{k}</span>
-          ))}
-        </div>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <div className="flex items-center gap-1.5 bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg border border-emerald-100 text-xs font-semibold shadow-sm">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Scanner Hook Active
-          </div>
+    <div className="flex flex-col gap-3 lg:h-[calc(100vh-7.5rem)]">
+      {/* Top bar & quick hotkeys */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 bg-slate-900 text-white p-3 rounded-2xl shadow-md border border-slate-800">
+        <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
-            <span className={`w-3 h-3 rounded-full ${isOnline ? "bg-green-500" : "bg-amber-500"}`} />
-            <span className="text-xs font-semibold text-gray-700">{isOnline ? "Online Terminal" : "Offline Storage Mode"}</span>
+            <ShoppingCart className="w-5 h-5 text-emerald-400" />
+            <h1 className="font-extrabold text-base tracking-tight text-white">Point of Sale</h1>
+          </div>
+          <div className="hidden md:flex items-center gap-1.5 ml-2 border-l border-slate-700 pl-3">
+            {(["[F2] Search", "[F4] Pay", "[F6] Clear", "[Ctrl+P] Print"] as const).map((k) => (
+              <span key={k} className="text-[11px] bg-slate-800 text-slate-300 border border-slate-700 font-mono font-semibold px-2 py-0.5 rounded-md">{k}</span>
+            ))}
+          </div>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 bg-emerald-500/10 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/20 text-xs font-semibold">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            Scanner Active
+          </div>
+          <div className="flex items-center gap-2 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
+            <span className={`w-2.5 h-2.5 rounded-full ${isOnline ? "bg-emerald-400" : "bg-amber-400 animate-pulse"}`} />
+            <span className="text-xs font-bold text-slate-200">{isOnline ? "Online" : "Offline Mode"}</span>
           </div>
         </div>
       </div>
 
       {/* F6 Clear cart confirm banner */}
       {clearConfirm && (
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between bg-red-50 border border-red-200 rounded-xl px-4 py-3">
-          <span className="text-sm font-semibold text-red-700">Clear the entire cart? This cannot be undone.</span>
-          <div className="flex items-center gap-3 shrink-0">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between bg-red-50 border border-red-200 rounded-xl px-4 py-2.5 shadow-sm">
+          <span className="text-xs font-bold text-red-700">Clear the entire cart? This cannot be undone.</span>
+          <div className="flex items-center gap-2 shrink-0">
             <button
               onClick={() => { clear(); setClearConfirm(false); }}
-              className="px-3 py-1.5 bg-red-600 text-white text-xs font-semibold rounded-lg hover:bg-red-700 transition-colors"
+              className="px-3 py-1 bg-red-600 text-white text-xs font-bold rounded-lg hover:bg-red-700 transition-colors shadow-sm"
             >
               Yes, clear cart
             </button>
             <button
               onClick={() => setClearConfirm(false)}
-              className="px-3 py-1.5 border text-xs font-medium rounded-lg hover:bg-muted transition-colors"
+              className="px-3 py-1 bg-white border text-xs font-semibold rounded-lg hover:bg-slate-50 transition-colors"
             >
               Cancel
             </button>
@@ -559,72 +569,60 @@ export function PosTerminal() {
         </div>
       )}
 
-      {/* Schedule H warning banner */}
+      {/* Compact Schedule H warning banner */}
       {needsRx && (
-        <div className={`flex flex-col gap-2.5 rounded-2xl p-4 border transition-all ${prescriptionId?.trim() ? "bg-emerald-50/90 border-emerald-200" : "bg-amber-50/90 border-amber-200"}`}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm font-bold">
-              <AlertTriangle size={17} className={prescriptionId?.trim() ? "text-emerald-600" : "text-amber-600"} />
-              <span className={prescriptionId?.trim() ? "text-emerald-900" : "text-amber-900"}>
-                Cart contains Schedule H / controlled medicines — prescription required
-              </span>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                type="button"
-                onClick={() => setRxPickerOpen(true)}
-                className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl shadow-sm transition-all shrink-0 flex items-center gap-1.5"
-              >
-                <FileText size={14} />
-                <span>{prescriptionId?.trim() ? "Change Rx" : "Select / Upload Rx"}</span>
-              </button>
-            </div>
+        <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 rounded-xl px-3.5 py-2 border transition-all text-xs ${prescriptionId?.trim() ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-300"}`}>
+          <div className="flex items-center gap-2 font-bold">
+            <AlertTriangle size={15} className={prescriptionId?.trim() ? "text-emerald-600 shrink-0" : "text-amber-600 shrink-0"} />
+            <span className={prescriptionId?.trim() ? "text-emerald-900" : "text-amber-900"}>
+              Schedule H / Controlled Meds in cart — Verified Prescription required
+            </span>
           </div>
 
-          <div className="flex items-center gap-2">
-            <FileText size={14} className={prescriptionId?.trim() ? "text-emerald-600 shrink-0" : "text-amber-600 shrink-0"} />
+          <div className="flex items-center gap-2 w-full sm:w-auto">
             <input
               value={prescriptionId ?? ""}
               onChange={(e) => setPrescriptionId(e.target.value || null)}
-              placeholder="Or paste verified Prescription ID (UUID)..."
-              className="flex-1 border border-slate-200/80 rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500/40 bg-white font-mono shadow-2xs"
+              placeholder="Paste Rx ID (UUID)..."
+              className="flex-1 sm:w-56 border border-slate-300 rounded-lg px-2.5 py-1 text-[11px] focus:outline-none focus:ring-2 focus:ring-emerald-500/40 bg-white font-mono"
             />
+            <button
+              type="button"
+              onClick={() => setRxPickerOpen(true)}
+              className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shadow-sm transition-all shrink-0 flex items-center gap-1"
+            >
+              <FileText size={13} />
+              <span>{prescriptionId?.trim() ? "Change Rx" : "Select Rx"}</span>
+            </button>
             {prescriptionId && (
               <button
                 type="button"
                 onClick={() => setPrescriptionId(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                className="p-1 text-slate-400 hover:text-slate-700"
                 title="Unlink Prescription"
               >
                 <X size={14} />
               </button>
             )}
           </div>
-
-          {prescriptionId?.trim() && (
-            <div className="flex items-center gap-1.5 text-xs text-emerald-700 font-bold bg-white/80 border border-emerald-200/60 px-2.5 py-1 rounded-lg w-fit">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Verified Rx Linked: #{prescriptionId}</span>
-            </div>
-          )}
         </div>
       )}
 
-      {/* Stacked on mobile (page scrolls), side-by-side panes on lg+ */}
-      <div className="flex flex-col lg:flex-row gap-4 flex-1 lg:overflow-hidden">
-        {/* Left: search + patient */}
+      {/* Main split panes: Left search & catalog + Right ultra-dense cart */}
+      <div className="flex flex-col lg:flex-row gap-3.5 flex-1 lg:overflow-hidden">
+        {/* Left pane: Patient selector & Medicine Search */}
         <div className="flex-1 flex flex-col gap-3 lg:h-full lg:overflow-hidden">
           {/* Patient selector */}
-          <div className="relative">
+          <div className="relative shrink-0">
             {selectedPatient ? (
-              <div className="flex items-center justify-between border rounded-xl px-4 py-2.5 bg-emerald-50 border-emerald-200">
+              <div className="flex items-center justify-between border rounded-xl px-3.5 py-2 bg-emerald-50/90 border-emerald-200 shadow-2xs">
                 <div>
-                  <p className="text-sm font-semibold text-slate-900">{selectedPatient.name}</p>
-                  <p className="text-xs text-emerald-600">
+                  <p className="text-xs font-extrabold text-slate-900">{selectedPatient.name}</p>
+                  <p className="text-[11px] text-emerald-700 font-medium">
                     {selectedPatient.phone}
                     {selectedPatient.loyaltyPoints != null && (
-                      <span className="ml-2 bg-yellow-100 text-yellow-700 px-1.5 py-0.5 rounded font-bold">
-                        <Star size={10} className="inline mr-0.5" />{selectedPatient.loyaltyPoints} pts
+                      <span className="ml-2 bg-yellow-100 text-yellow-800 px-1.5 py-0.2 rounded font-bold border border-yellow-200">
+                        <Star size={9} className="inline mr-0.5" />{selectedPatient.loyaltyPoints} pts
                       </span>
                     )}
                   </p>
@@ -632,11 +630,11 @@ export function PosTerminal() {
                 <div className="flex items-center gap-2">
                   {(selectedPatient.loyaltyPoints ?? 0) >= 100 && (
                     <div className="flex items-center gap-1 text-xs">
-                      <span className="text-yellow-700 font-medium">Redeem:</span>
+                      <span className="text-yellow-800 font-semibold">Redeem:</span>
                       <select
                         value={loyaltyPointsToRedeem}
                         onChange={(e) => setLoyaltyPointsToRedeem(Number(e.target.value))}
-                        className="border border-yellow-300 rounded px-1.5 py-1 text-xs bg-white"
+                        className="border border-yellow-300 rounded px-1.5 py-0.5 text-xs bg-white font-bold"
                       >
                         <option value={0}>0 pts</option>
                         {Array.from({ length: Math.floor((selectedPatient.loyaltyPoints ?? 0) / 100) }, (_, i) => (i + 1) * 100)
@@ -649,7 +647,7 @@ export function PosTerminal() {
                   )}
                   <button
                     onClick={() => { setPatient(null); setLoyaltyPointsToRedeem(0); setPatientSearch(""); }}
-                    className="text-emerald-400 hover:text-emerald-700"
+                    className="text-slate-400 hover:text-rose-600 transition-colors p-1"
                   >
                     <X size={14} />
                   </button>
@@ -658,36 +656,36 @@ export function PosTerminal() {
             ) : (
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                   <input
                     value={patientSearch}
                     onChange={(e) => setPatientSearch(e.target.value)}
                     placeholder="Search patient by name or phone (optional)..."
-                    className="w-full border border-slate-200 rounded-xl pl-8 pr-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 bg-white shadow-sm transition-all duration-200"
+                    className="w-full border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-xs focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 bg-white shadow-2xs font-medium"
                   />
                   {patientSearch.length >= 3 && (
-                    <div className="absolute top-full left-0 right-0 z-20 mt-1 bg-white border rounded-xl shadow-lg max-h-56 overflow-y-auto divide-y divide-slate-100">
+                    <div className="absolute top-full left-0 right-0 z-30 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-56 overflow-y-auto divide-y divide-slate-100">
                       {patientResults_.length > 0 ? (
                         patientResults_.map((p: any) => (
                           <button
                             key={p.id}
                             type="button"
                             onClick={() => { setPatient(p.id); setPatientSearch(""); }}
-                            className="w-full text-left px-4 py-2.5 hover:bg-muted/50 text-sm flex items-center justify-between"
+                            className="w-full text-left px-3.5 py-2 hover:bg-emerald-50/50 text-xs flex items-center justify-between transition-colors"
                           >
                             <div>
-                              <span className="font-medium">{p.name}</span>
-                              <span className="text-muted-foreground ml-2 text-xs">{p.phone}</span>
+                              <span className="font-bold text-slate-900">{p.name}</span>
+                              <span className="text-slate-500 ml-2 text-[11px]">{p.phone}</span>
                             </div>
                             {p.loyaltyPoints > 0 && (
-                              <span className="text-xs text-yellow-600 font-medium bg-yellow-50 px-1.5 py-0.5 rounded border border-yellow-100">
-                                <Star size={10} className="inline mr-0.5 align-middle" />{p.loyaltyPoints} pts
+                              <span className="text-[10px] text-amber-700 font-bold bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200">
+                                <Star size={9} className="inline mr-0.5 align-middle" />{p.loyaltyPoints} pts
                               </span>
                             )}
                           </button>
                         ))
                       ) : (
-                        <div className="px-4 py-2.5 text-xs text-muted-foreground">No matching patients found.</div>
+                        <div className="px-3.5 py-2 text-xs text-slate-400">No matching patients found.</div>
                       )}
                       <button
                         type="button"
@@ -706,9 +704,9 @@ export function PosTerminal() {
                           setPatientFormError("");
                           setIsPatientModalOpen(true);
                         }}
-                        className="w-full text-left px-4 py-3 hover:bg-emerald-50 text-sm text-emerald-600 font-medium flex items-center gap-2 bg-slate-50/50"
+                        className="w-full text-left px-3.5 py-2.5 hover:bg-emerald-50 text-xs text-emerald-700 font-bold flex items-center gap-2 bg-slate-50/80"
                       >
-                        <Plus size={14} />
+                        <Plus size={13} />
                         <span>Register &quot;{patientSearch}&quot; as a new patient</span>
                       </button>
                     </div>
@@ -730,44 +728,45 @@ export function PosTerminal() {
                     setPatientFormError("");
                     setIsPatientModalOpen(true);
                   }}
-                  className="px-4 bg-primary hover:bg-primary/95 active:scale-95 text-primary-foreground rounded-xl text-sm font-semibold transition-all duration-150 inline-flex items-center gap-1.5 shrink-0 shadow-sm border border-transparent"
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-all inline-flex items-center gap-1.5 shrink-0 shadow-xs"
                   title="Quick Register Patient"
                 >
-                  <UserPlus size={15} />
+                  <UserPlus size={14} />
                   <span className="hidden sm:inline">Add Patient</span>
                 </button>
               </div>
             )}
           </div>
 
-          {/* Medicine search */}
-          <div className="flex items-center gap-2">
+          {/* Medicine search input */}
+          <div className="flex items-center gap-2 shrink-0">
             <div className="relative flex-1">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input
                 ref={searchRef}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Scan barcode or type name/SKU… (F2)"
+                placeholder="Scan barcode or type medicine name / SKU… (F2)"
                 data-barcode-capture="true"
-                className="w-full border border-slate-200 rounded-xl pl-9 pr-3 py-3 text-sm focus:outline-none focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/20 bg-white shadow-sm transition-all duration-200"
+                className="w-full border border-slate-300 rounded-xl pl-9 pr-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 bg-white shadow-2xs font-medium"
               />
             </div>
             <button
               type="button"
               onClick={() => setCameraOpen(true)}
-              className="p-3 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-slate-600 hover:text-slate-900 transition flex items-center justify-center shadow-sm"
+              className="p-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-slate-700 transition flex items-center justify-center shadow-xs"
               title="Open Camera Scanner"
             >
               <Camera size={16} />
             </button>
           </div>
 
-          <div className="flex-1 min-h-[200px] max-h-[45dvh] lg:max-h-none overflow-y-auto rounded-xl border bg-card">
+          {/* Medicine Catalog Search Results */}
+          <div className="flex-1 min-h-[200px] max-h-[45dvh] lg:max-h-none overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-2xs">
             {search.length >= 2 ? (
-              <div className="divide-y">
+              <div className="divide-y divide-slate-100">
                 {isFetching && (
-                  <div className="p-6 text-sm text-muted-foreground text-center animate-pulse">Searching items…</div>
+                  <div className="p-4 text-xs text-slate-500 text-center animate-pulse font-medium">Searching medicine database…</div>
                 )}
                 {medicines.map((m: any) => (
                   <div
@@ -817,23 +816,23 @@ export function PosTerminal() {
                         setSearch("");
                       } catch { toastError("Failed to load stock", "Could not fetch batch details. Check your connection and try again."); }
                     }}
-                    className="flex items-center justify-between px-5 py-3.5 hover:bg-muted/40 text-sm text-left transition duration-150 cursor-pointer"
+                    className="flex items-center justify-between px-4 py-2.5 hover:bg-emerald-50/60 text-xs text-left transition-colors cursor-pointer group"
                   >
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-semibold text-gray-900">{m.name}</span>
+                    <div className="space-y-0.5">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-bold text-slate-900 group-hover:text-emerald-800">{m.name}</span>
                         {m.scheduleClass && CONTROLLED_CLASSES.includes(m.scheduleClass) && (
-                          <span className="text-[10px] bg-red-50 text-red-700 border border-red-100 font-bold px-1.5 py-0.5 rounded uppercase">
-                            {m.scheduleClass} — Rx Required
+                          <span className="text-[9px] bg-red-100 text-red-700 border border-red-200 font-extrabold px-1.5 py-0.2 rounded uppercase">
+                            {m.scheduleClass} Rx
                           </span>
                         )}
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <span className="font-mono">{m.sku}</span>
+                      <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
+                        <span className="font-mono text-slate-600">{m.sku}</span>
                         {m.hsnCode && <span>· HSN: {m.hsnCode}</span>}
                         {m.totalStock !== undefined && (
                           <span
-                            className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-md border transition-all ${
+                            className={`inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.2 rounded border ${
                               Number(m.totalStock) <= 0
                                 ? "bg-red-50 text-red-700 border-red-200"
                                 : Number(m.totalStock) <= Number(m.reorderLevel || 10)
@@ -852,81 +851,106 @@ export function PosTerminal() {
                             />
                             {Number(m.totalStock) <= 0
                               ? "Out of stock"
-                              : Number(m.totalStock) <= Number(m.reorderLevel || 10)
-                              ? `Low Stock: ${formatStockUnit(Number(m.totalStock), m)} left`
                               : formatStockUnit(Number(m.totalStock), m)}
                           </span>
                         )}
                       </div>
                     </div>
-                    <span className="font-bold text-base text-primary shrink-0 ml-3">₹{parseFloat(m.priceMrp).toFixed(2)}</span>
+                    <span className="font-extrabold text-sm text-emerald-700 shrink-0 ml-3">₹{parseFloat(m.priceMrp).toFixed(2)}</span>
                   </div>
                 ))}
                 {!isFetching && medicines.length === 0 && (
-                  <div className="p-6 text-sm text-muted-foreground text-center">No matching medicines.</div>
+                  <div className="p-6 text-xs text-slate-400 text-center">No matching medicines found in catalog.</div>
                 )}
               </div>
             ) : (
-              <div className="p-12 text-center text-muted-foreground text-sm flex flex-col items-center justify-center h-full">
-                <ShoppingCart className="w-12 h-12 mb-3 opacity-25" />
-                <p>Search or use a barcode scanner to build checkout.</p>
+              <div className="p-8 text-center text-slate-400 text-xs flex flex-col items-center justify-center h-full">
+                <ShoppingCart className="w-10 h-10 mb-2 opacity-20 text-slate-600" />
+                <p className="font-semibold text-slate-600">Search or use barcode scanner to add medicines to bill.</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">Press <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded font-mono font-bold text-slate-700">F2</kbd> anytime to jump to search input.</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Right: cart */}
-        <div className="w-full lg:w-96 shrink-0 flex flex-col border rounded-xl bg-card shadow-sm">
-          <div className="flex items-center gap-2 px-4 py-3.5 border-b bg-muted/20">
-            <ShoppingCart size={16} />
-            <span className="font-semibold text-sm">Cart</span>
-            <span className="ml-auto text-xs text-muted-foreground bg-muted border px-2 py-0.5 rounded-full">
-              {items.length} items
-            </span>
+        {/* Right Pane: Wider, High-Density Cart Display (lg:w-[440px] xl:w-[480px]) */}
+        <div className="w-full lg:w-[440px] xl:w-[480px] shrink-0 flex flex-col border border-slate-200 rounded-2xl bg-white shadow-md overflow-hidden">
+          {/* Cart Pane Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 bg-slate-50">
+            <div className="flex items-center gap-2">
+              <ShoppingCart size={16} className="text-emerald-600" />
+              <span className="font-extrabold text-sm text-slate-900">Current Cart</span>
+              <span className="text-xs font-bold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2 py-0.5 rounded-full">
+                {items.length} {items.length === 1 ? "item" : "items"}
+              </span>
+            </div>
+            {items.length > 0 && (
+              <button
+                onClick={() => setClearConfirm(true)}
+                className="text-[11px] font-bold text-rose-600 hover:text-rose-800 hover:underline flex items-center gap-1"
+              >
+                <Trash2 size={12} /> Clear (F6)
+              </button>
+            )}
           </div>
 
-          <div className="flex-1 max-h-[40dvh] lg:max-h-none overflow-y-auto divide-y bg-white/50">
+          {/* High-Density Cart Item List (All items visible at once) */}
+          <div className="flex-1 overflow-y-auto divide-y divide-slate-100 bg-white">
             {items.length === 0 && (
-              <div className="text-center py-16 text-xs text-muted-foreground flex flex-col items-center gap-1">
-                <ShoppingCart className="w-8 h-8 mb-1 opacity-25" />
-                <span>Cart is empty</span>
+              <div className="text-center py-16 text-xs text-slate-400 flex flex-col items-center gap-1.5">
+                <ShoppingCart className="w-8 h-8 mb-1 opacity-20 text-slate-400" />
+                <span className="font-semibold text-slate-500">Cart is currently empty</span>
+                <span className="text-[11px] text-slate-400">Scan barcode or search medicines on left to start checkout.</span>
               </div>
             )}
             {items.map((item) => (
-              <div key={item.batchId} className="px-4 py-3 bg-white/30 backdrop-blur-sm">
-                <div className="flex items-start justify-between mb-1">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate text-gray-900">{item.name}</p>
-                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground mt-0.5">
-                      <span>{item.batchNo}</span>
-                      <span>·</span>
-                      <span>₹{(item.saleUnit === "loose" ? item.unitPrice / (item.stripSize || 1) : item.unitPrice).toFixed(2)} / {item.saleUnit === "loose" ? "Tab" : getUnitLabel(1, { unit: item.unit, stripSize: item.stripSize })}</span>
-                      {item.batchStock !== undefined && (
-                        <>
-                          <span>·</span>
-                          <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded border ${
-                            item.quantity >= (item.saleUnit === "loose" ? (item.batchStock * item.stripSize) : item.batchStock)
-                              ? "bg-amber-50 text-amber-800 border-amber-200"
-                              : "bg-slate-100 text-slate-700 border-slate-200"
-                          }`}>
-                            Max: {item.saleUnit === "loose" ? (item.batchStock * item.stripSize) : item.batchStock} {item.saleUnit === "loose" ? "Loose" : getUnitLabel(item.batchStock, { unit: item.unit, stripSize: item.stripSize })}
-                          </span>
-                        </>
-                      )}
-                      {item.scheduleClass && CONTROLLED_CLASSES.includes(item.scheduleClass) && (
-                        <span className="bg-red-50 text-red-600 text-[10px] font-bold px-1 rounded">{item.scheduleClass}</span>
-                      )}
-                    </div>
+              <div key={item.batchId} className="px-3.5 py-2.5 hover:bg-slate-50/80 transition-colors space-y-1.5">
+                {/* Row 1: Name, Badges, Total Price */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <span className="text-xs font-bold text-slate-900 truncate" title={item.name}>
+                      {item.name}
+                    </span>
+                    {item.scheduleClass && CONTROLLED_CLASSES.includes(item.scheduleClass) && (
+                      <span className="bg-red-100 text-red-700 text-[9px] font-extrabold px-1 rounded uppercase shrink-0">
+                        {item.scheduleClass}
+                      </span>
+                    )}
                   </div>
-                  <button onClick={() => removeItem(item.medicineId, item.batchId)} className="text-muted-foreground hover:text-red-500 ml-2 p-1.5 -m-1.5 transition">
-                    <Trash2 size={14} />
-                  </button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-black text-slate-900">₹{item.lineTotal.toFixed(2)}</span>
+                    <button
+                      onClick={() => removeItem(item.medicineId, item.batchId)}
+                      className="text-slate-400 hover:text-red-600 p-1 transition-colors"
+                      title="Remove item"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between mt-2 pt-2 border-t border-muted/30">
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-1 bg-muted/40 p-0.5 rounded-md">
-                      <button onClick={() => handleCartQtyChange(item, item.quantity - 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
-                        <Minus size={10} />
+
+                {/* Row 2: Batch Info, Rates & Compact Quantity Counter */}
+                <div className="flex items-center justify-between gap-2 text-[11px]">
+                  <div className="flex items-center gap-1.5 text-slate-500 font-medium truncate">
+                    <span className="font-mono bg-slate-100 text-slate-700 px-1 py-0.2 rounded text-[10px]">
+                      {item.batchNo}
+                    </span>
+                    <span>₹{(item.saleUnit === "loose" ? item.unitPrice / (item.stripSize || 1) : item.unitPrice).toFixed(2)} / {item.saleUnit === "loose" ? "Tab" : getUnitLabel(1, { unit: item.unit, stripSize: item.stripSize })}</span>
+                    {item.batchStock !== undefined && (
+                      <span className="text-[10px] text-slate-400">
+                        (Max {item.saleUnit === "loose" ? (item.batchStock * item.stripSize) : item.batchStock})
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Ultra-compact inline counter */}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="flex items-center border border-slate-300 rounded-lg bg-slate-50 overflow-hidden">
+                      <button
+                        onClick={() => handleCartQtyChange(item, item.quantity - 1)}
+                        className="w-5 h-5 flex items-center justify-center hover:bg-slate-200 text-slate-700 transition"
+                      >
+                        <Minus size={9} />
                       </button>
                       <input
                         type="number"
@@ -936,63 +960,71 @@ export function PosTerminal() {
                           const val = parseInt(e.target.value) || 1;
                           handleCartQtyChange(item, Math.max(1, val));
                         }}
-                        className="w-12 text-center text-xs font-bold bg-white border rounded py-0.5 focus:outline-none focus:ring-1 focus:ring-primary font-mono"
+                        className="w-9 text-center text-xs font-bold bg-white border-x border-slate-200 py-0.5 focus:outline-none font-mono text-slate-900"
                       />
-                      <button onClick={() => handleCartQtyChange(item, item.quantity + 1)} className="w-6 h-6 rounded border bg-white flex items-center justify-center hover:bg-muted text-gray-600 transition">
-                        <Plus size={10} />
+                      <button
+                        onClick={() => handleCartQtyChange(item, item.quantity + 1)}
+                        className="w-5 h-5 flex items-center justify-center hover:bg-slate-200 text-slate-700 transition"
+                      >
+                        <Plus size={9} />
                       </button>
                     </div>
+
                     {item.stripSize > 1 && (
                       <button
                         onClick={() => toggleUnit(item.medicineId, item.batchId)}
-                        className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+                        className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100 transition cursor-pointer"
+                        title="Toggle unit between Strips and Loose Pills"
                       >
                         {item.saleUnit === "pack" ? "Strips" : "Loose"}
                       </button>
                     )}
                   </div>
-                  <span className="text-sm font-bold text-gray-900">₹{item.lineTotal.toFixed(2)}</span>
                 </div>
               </div>
             ))}
           </div>
 
-          {/* Totals */}
-          <div className="border-t p-4 space-y-1.5 text-sm bg-muted/10">
-            <div className="flex justify-between text-muted-foreground">
-              <span>Subtotal</span><span>₹{subtotal.toFixed(2)}</span>
+          {/* Cart Summary & Checkout Totals Footer */}
+          <div className="border-t border-slate-200 p-3.5 space-y-1.5 bg-slate-50/90 text-xs">
+            <div className="flex justify-between text-slate-600 font-medium">
+              <span>Subtotal</span>
+              <span>₹{subtotal.toFixed(2)}</span>
             </div>
-            <div className="flex justify-between text-muted-foreground">
-              <span>Tax (GST)</span><span>₹{tax.toFixed(2)}</span>
+            <div className="flex justify-between text-slate-600 font-medium">
+              <span>Tax (GST)</span>
+              <span>₹{tax.toFixed(2)}</span>
             </div>
             {loyaltyDiscount > 0 && (
-              <div className="flex justify-between text-yellow-700 text-xs font-medium">
-                <span><Star size={10} className="inline mr-1" />Loyalty discount ({loyaltyPointsToRedeem} pts)</span>
+              <div className="flex justify-between text-amber-700 font-bold bg-amber-50 px-2 py-1 rounded border border-amber-200">
+                <span className="flex items-center gap-1"><Star size={11} /> Loyalty Discount ({loyaltyPointsToRedeem} pts)</span>
                 <span>−₹{loyaltyDiscount.toFixed(2)}</span>
               </div>
             )}
-            <div className="flex justify-between font-bold text-base pt-1.5 border-t">
-              <span>Total</span>
-              <span className="text-primary text-lg">₹{finalTotal.toFixed(2)}</span>
+            <div className="flex justify-between font-black text-slate-900 text-base pt-2 border-t border-slate-200">
+              <span>TOTAL</span>
+              <span className="text-emerald-700 text-lg">₹{finalTotal.toFixed(2)}</span>
             </div>
           </div>
 
-          <div className="px-4 pb-4 flex gap-2">
+          {/* Checkout Action Buttons */}
+          <div className="p-3 bg-white border-t border-slate-200 flex gap-2">
             <button
               onClick={() => {
                 if (items.length > 0) setClearConfirm(true);
               }}
               disabled={items.length === 0}
-              className="flex-1 py-2.5 border rounded-lg text-sm hover:bg-muted transition duration-200 disabled:opacity-40"
+              className="px-3 py-2.5 border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition duration-150 disabled:opacity-40"
             >
               Clear (F6)
             </button>
             <button
               onClick={() => setPayOpen(true)}
               disabled={items.length === 0}
-              className="flex-1 py-2.5 bg-primary text-primary-foreground rounded-lg text-sm font-bold disabled:opacity-50 hover:bg-primary/90 transition shadow-sm"
+              className="flex-1 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl text-xs font-black tracking-wide disabled:opacity-40 transition-all shadow-md flex items-center justify-center gap-2"
             >
-              Pay (F4)
+              <span>PAY &amp; CHECKOUT</span>
+              <span className="bg-white/20 text-white text-[10px] px-1.5 py-0.5 rounded font-mono">[F4]</span>
             </button>
           </div>
         </div>

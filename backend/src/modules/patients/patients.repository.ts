@@ -9,8 +9,17 @@ export class PatientsRepository {
   constructor(private readonly drizzle: DrizzleService) {}
   private get db() { return this.drizzle.db; }
 
-  async findPaginated(params: QueryPatientDto) {
+  async findPaginated(params: QueryPatientDto, doctorId?: string) {
     const conditions = [isNull(schema.patients.deletedAt)];
+    if (doctorId) {
+      conditions.push(
+        sql`${schema.patients.id} IN (
+          SELECT patient_id FROM clinic_tokens WHERE doctor_id = ${doctorId}::uuid
+          UNION
+          SELECT patient_id FROM prescriptions WHERE verified_by = ${doctorId}::uuid
+        )`
+      );
+    }
     if (params.search) {
       const rawSearch = params.search.trim();
       const normalizedSearch = rawSearch.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
@@ -69,6 +78,43 @@ export class PatientsRepository {
       data: items,
       meta: { page: params.page, limit: params.limit, total: countRow?.count ?? 0, totalPages: Math.ceil((countRow?.count ?? 0) / params.limit) },
     };
+  }
+
+  async isPatientServedByDoctor(patientId: string, doctorId: string): Promise<boolean> {
+    const [tokenRow] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.clinicTokens)
+      .where(and(eq(schema.clinicTokens.patientId, patientId), eq(schema.clinicTokens.doctorId, doctorId)));
+    if ((tokenRow?.count ?? 0) > 0) return true;
+
+    const [rxRow] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(schema.prescriptions)
+      .where(and(eq(schema.prescriptions.patientId, patientId), eq(schema.prescriptions.verifiedBy, doctorId)));
+    return (rxRow?.count ?? 0) > 0;
+  }
+
+  async createDoctorTokenForPatient(patientId: string, doctorId: string, branchId?: string) {
+    if (!branchId) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const [maxRes] = await this.db
+      .select({ maxToken: sql<number>`coalesce(max(${schema.clinicTokens.tokenNo}), 0)::int` })
+      .from(schema.clinicTokens)
+      .where(and(eq(schema.clinicTokens.doctorId, doctorId), eq(schema.clinicTokens.date, today)));
+    const tokenNo = (maxRes?.maxToken ?? 0) + 1;
+
+    try {
+      await this.db.insert(schema.clinicTokens).values({
+        tokenNo,
+        patientId,
+        doctorId,
+        branchId,
+        date: today,
+        status: "pending",
+      } as any);
+    } catch {
+      // Ignore if token already exists
+    }
   }
 
   async findById(id: string) {

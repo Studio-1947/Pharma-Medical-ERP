@@ -98,8 +98,29 @@ export class BillingRepository {
         .offset((params.page - 1) * params.limit),
       this.db.select({ count: sql<number>`count(*)::int` }).from(schema.salesInvoices).where(where),
     ]);
+
+    const invoiceIds = items.map((i) => i.id);
+    const itemsMap: Record<string, any[]> = {};
+    if (invoiceIds.length > 0) {
+      const lineItems = await this.db.query.salesInvoiceItems.findMany({
+        where: inArray(schema.salesInvoiceItems.invoiceId, invoiceIds),
+        with: { medicine: true },
+      });
+      lineItems.forEach((it) => {
+        if (it.invoiceId) {
+          if (!itemsMap[it.invoiceId]) itemsMap[it.invoiceId] = [];
+          itemsMap[it.invoiceId]!.push(it);
+        }
+      });
+    }
+
+    const dataWithItems = items.map((i) => ({
+      ...i,
+      items: itemsMap[i.id] ?? [],
+    }));
+
     return {
-      data: items,
+      data: dataWithItems,
       meta: {
         page: params.page,
         limit: params.limit,

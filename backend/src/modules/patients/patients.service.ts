@@ -1,34 +1,51 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { PatientsRepository } from "./patients.repository";
 import type { CreatePatientDto, UpdatePatientDto, QueryPatientDto } from "@pharmerp/types";
+import type { JwtPayload } from "../../common/decorators/current-user.decorator";
 
 @Injectable()
 export class PatientsService {
   constructor(private readonly repo: PatientsRepository) {}
 
-  findAll(query: QueryPatientDto) { return this.repo.findPaginated(query); }
+  async findAll(query: QueryPatientDto, user?: JwtPayload) {
+    const doctorId = user?.role === "doctor" ? user.sub : undefined;
+    return this.repo.findPaginated(query, doctorId);
+  }
 
-  async findOne(id: string) {
+  async findOne(id: string, user?: JwtPayload) {
     const p = await this.repo.findById(id);
     if (!p) throw new NotFoundException(`Patient ${id} not found`);
+
+    if (user?.role === "doctor") {
+      const isServed = await this.repo.isPatientServedByDoctor(id, user.sub);
+      if (!isServed) {
+        throw new ForbiddenException("Access denied: You can only access records of patients assigned to or served by you.");
+      }
+    }
     return { data: p };
   }
 
-  async create(dto: CreatePatientDto) {
+  async create(dto: CreatePatientDto, user?: JwtPayload) {
     const existing = await this.repo.findByPhone(dto.phone);
     if (existing) throw new ConflictException("Phone number already registered");
     const p = await this.repo.create(dto);
+
+    if (user?.role === "doctor") {
+      await this.repo.createDoctorTokenForPatient(p.id, user.sub, user.branchId);
+    }
+
     return { data: p, message: "Patient registered" };
   }
 
-  async update(id: string, dto: UpdatePatientDto) {
-    await this.findOne(id);
+  async update(id: string, dto: UpdatePatientDto, user?: JwtPayload) {
+    await this.findOne(id, user);
     const p = await this.repo.update(id, dto);
     return { data: p, message: "Patient updated" };
   }
 
   async remove(id: string) {
-    await this.findOne(id);
+    const p = await this.repo.findById(id);
+    if (!p) throw new NotFoundException(`Patient ${id} not found`);
     await this.repo.softDelete(id);
     return { message: "Patient deleted" };
   }

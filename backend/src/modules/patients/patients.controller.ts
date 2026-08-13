@@ -4,6 +4,7 @@ import { PatientsService } from "./patients.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
+import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
 import { createPatientSchema, updatePatientSchema, queryPatientSchema } from "@pharmerp/types";
 
 @ApiTags("patients")
@@ -15,22 +16,32 @@ export class PatientsController {
 
   @Get()
   @Roles("admin", "pharmacist", "cashier", "doctor")
-  findAll(@Query() q: unknown) { return this.service.findAll(queryPatientSchema.parse(q)); }
+  findAll(@Query() q: unknown, @CurrentUser() user: JwtPayload) {
+    return this.service.findAll(queryPatientSchema.parse(q), user);
+  }
 
   @Get(":id")
   @Roles("admin", "pharmacist", "cashier", "doctor")
-  findOne(@Param("id") id: string) { return this.service.findOne(id); }
+  findOne(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
+    return this.service.findOne(id, user);
+  }
 
   @Post()
   @Roles("admin", "pharmacist", "cashier", "doctor")
   @ApiOperation({ summary: "Register a new patient" })
-  create(@Body() body: unknown) { return this.service.create(createPatientSchema.parse(body)); }
+  create(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
+    return this.service.create(createPatientSchema.parse(body), user);
+  }
 
   @Patch(":id")
   @Roles("admin", "pharmacist", "cashier", "doctor")
-  update(@Param("id") id: string, @Body() body: unknown) { return this.service.update(id, updatePatientSchema.parse(body)); }
+  update(@Param("id") id: string, @Body() body: unknown, @CurrentUser() user: JwtPayload) {
+    return this.service.update(id, updatePatientSchema.parse(body), user);
+  }
 
   @Delete(":id")
   @Roles("admin")
-  remove(@Param("id") id: string) { return this.service.remove(id); }
+  remove(@Param("id") id: string) {
+    return this.service.remove(id);
+  }
 }

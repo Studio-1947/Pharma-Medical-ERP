@@ -1,8 +1,12 @@
 import { z } from "zod";
 
 export const createPatientSchema = z.object({
-  name: z.string().min(1).max(255),
-  phone: z.string().min(7).max(20),
+  name: z.string().min(1, "Patient name is required").max(255),
+  phone: z
+    .string()
+    .min(10, "Phone number must be at least 10 digits")
+    .max(20, "Phone number is too long")
+    .regex(/^[+]?[0-9\s\-()]{10,20}$/, "Invalid phone number format. Please enter a valid 10-digit mobile number."),
   email: z.string().email().optional(),
   dateOfBirth: z.coerce.date().optional(),
   gender: z.enum(["male", "female", "other"]).optional(),

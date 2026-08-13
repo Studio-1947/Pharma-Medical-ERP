@@ -20,6 +20,7 @@ export const registerSchema = z.object({
   lastName: z.string().min(2, "Required"),
   role: z.string().transform(v => v.toLowerCase()).pipe(z.enum(userRoleValues)).optional(),
   branchId: z.string().uuid().optional(),
+  doctorProfile: z.record(z.any()).optional(),
 });
 
 export const refreshTokenSchema = z.object({

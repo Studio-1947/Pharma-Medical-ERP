@@ -15,9 +15,11 @@ import {
   EyeOff,
 } from "lucide-react";
 import { apiClient, queryKeys } from "@/lib/api-client";
-import { Modal } from "@/components/ui/modal";
 import { usePermissions } from "@/hooks/use-permissions";
 import { UserRole } from "@pharmerp/types";
+import { useToast } from "@/components/ui/toast";
+import { Modal } from "@/components/ui/modal";
+import { isValidPhoneNumber } from "@/lib/phone-validation";
 
 interface User {
   id: string;
@@ -37,6 +39,7 @@ interface ApiListResponse {
 // super_admin cannot be created via UI — seed script only
 const ROLE_OPTIONS = [
   "ADMIN",
+  "DOCTOR",
   "PHARMACIST",
   "CASHIER",
   "INVENTORY_MANAGER",
@@ -48,6 +51,7 @@ const ROLE_OPTIONS = [
 const ROLE_COLORS: Record<string, string> = {
   SUPER_ADMIN: "bg-teal-100 text-teal-700",
   ADMIN: "bg-emerald-100 text-emerald-700",
+  DOCTOR: "bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold",
   PHARMACIST: "bg-green-100 text-green-700",
   CASHIER: "bg-amber-100 text-amber-700",
   INVENTORY_MANAGER: "bg-teal-100 text-teal-700",
@@ -72,6 +76,15 @@ interface InviteForm {
   role: string;
   password: string;
   branchId?: string;
+  specialty?: string;
+  consultationFee?: string;
+  opdRoom?: string;
+  regNo?: string;
+  phone?: string;
+  slot1Days?: string;
+  slot1Hours?: string;
+  slot2Days?: string;
+  slot2Hours?: string;
 }
 
 function InviteUserModal({
@@ -90,6 +103,15 @@ function InviteUserModal({
     role: "CASHIER",
     password: "",
     branchId: "",
+    specialty: "General Medicine & Primary Care",
+    consultationFee: "400",
+    opdRoom: "OPD Cabin 101 (Ground Floor)",
+    regNo: "",
+    phone: "",
+    slot1Days: "Mon - Fri",
+    slot1Hours: "09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM",
+    slot2Days: "Saturday",
+    slot2Hours: "09:00 AM - 02:00 PM",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -105,16 +127,44 @@ function InviteUserModal({
       ? branchesRaw.data
       : [];
 
+  const isDoctorRole = form.role.toUpperCase() === "DOCTOR";
+
   const mutation = useMutation({
     mutationFn: (data: InviteForm) => {
-      const submitData = {
-        ...data,
+      const submitData: any = {
+        email: data.email,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        role: data.role,
+        password: data.password,
         branchId: data.branchId || undefined,
       };
+
+      if (data.role.toUpperCase() === "DOCTOR") {
+        submitData.doctorProfile = {
+          specialty: data.specialty || "General Medicine & Primary Care",
+          consultationFee: parseFloat(data.consultationFee || "400") || 400,
+          opdRoom: data.opdRoom || "OPD Cabin 101 (Ground Floor)",
+          regNo: data.regNo || undefined,
+          phone: data.phone || undefined,
+          availabilityStatus: "available",
+          weeklySchedule: [
+            {
+              days: data.slot1Days || "Mon - Fri",
+              slots: data.slot1Hours || "09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM",
+            },
+            ...(data.slot2Days
+              ? [{ days: data.slot2Days, slots: data.slot2Hours || "09:00 AM - 02:00 PM" }]
+              : []),
+          ],
+        };
+      }
+
       return apiClient.post("/auth/register", submitData);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.users.all() });
+      qc.invalidateQueries({ queryKey: queryKeys.clinicTokens.doctors() });
       onClose();
     },
     onError: (err: any) =>
@@ -124,23 +174,48 @@ function InviteUserModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (form.phone?.trim() && !isValidPhoneNumber(form.phone)) {
+      setError("Please enter a valid 10-digit phone number (e.g. 9876543210 or +91 9876543210).");
+      return;
+    }
     mutation.mutate(form);
   };
 
   const field = (key: keyof InviteForm) => ({
-    value: form[key],
+    value: form[key] ?? "",
     onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
       setForm((f) => ({ ...f, [key]: e.target.value })),
   });
 
+  const DAY_PRESETS = [
+    "Mon - Fri",
+    "Mon - Sat",
+    "Mon, Wed, Fri",
+    "Tue, Thu, Sat",
+    "Saturday",
+    "Sunday",
+    "Weekend (Sat, Sun)",
+    "Mon - Sun (Everyday)",
+  ];
+
+  const TIME_PRESETS = [
+    "09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM",
+    "09:00 AM - 01:00 PM",
+    "10:00 AM - 02:00 PM & 05:00 PM - 08:00 PM",
+    "09:00 AM - 02:00 PM",
+    "04:00 PM - 08:00 PM",
+    "10:00 AM - 04:00 PM",
+    "On Call Emergency Only",
+  ];
+
   return (
     <Modal
-      title="Invite User"
-      subtitle="Create a new user account and assign a role"
+      title="Invite User / Create Account"
+      subtitle="Create a new user account and configure profile role settings"
       icon={<UserPlus size={16} />}
       open={open}
       onClose={onClose}
-      size="md"
+      size={isDoctorRole ? "lg" : "md"}
     >
       <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
         <div className="grid grid-cols-2 gap-3">
@@ -221,6 +296,94 @@ function InviteUserModal({
             </button>
           </div>
         </div>
+
+        {/* Doctor OPD Profile Configuration Section */}
+        {isDoctorRole && (
+          <div className="space-y-3 pt-3 border-t border-slate-200 bg-emerald-50/40 -mx-6 px-6 py-4">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-black text-emerald-900 uppercase tracking-wider block">
+                Doctor OPD Clinical Profile & Schedule Setup
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 border border-emerald-300">
+                Doctor Role Fields
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Specialization</label>
+                <select className={inputCls()} {...field("specialty")}>
+                  <option value="General Medicine & Primary Care">General Medicine & Primary Care</option>
+                  <option value="Cardiology & Heart Care">Cardiology & Heart Care</option>
+                  <option value="Pediatrics & Child Health">Pediatrics & Child Health</option>
+                  <option value="Orthopedics & Joint Care">Orthopedics & Joint Care</option>
+                  <option value="Dermatology & Skin Care">Dermatology & Skin Care</option>
+                  <option value="Gynecology & Women's Health">Gynecology & Women&apos;s Health</option>
+                  <option value="ENT & Head/Neck">ENT & Head/Neck</option>
+                  <option value="Neurology & Brain Health">Neurology & Brain Health</option>
+                  <option value="Psychiatry & Behavioral Health">Psychiatry & Behavioral Health</option>
+                  <option value="Dentistry & Dental Care">Dentistry & Dental Care</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Consultation Fee (₹)</label>
+                <input type="number" min="0" className={inputCls()} {...field("consultationFee")} />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">OPD Cabin Location</label>
+                <input placeholder="e.g. OPD Cabin 101" className={inputCls()} {...field("opdRoom")} />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">Medical Reg No.</label>
+                <input placeholder="e.g. MCI-2024-88910" className={inputCls()} {...field("regNo")} />
+              </div>
+            </div>
+
+            <div className="space-y-2 pt-2 border-t border-emerald-200/60">
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider">
+                Weekly OPD Timings Schedule
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-[10px] text-slate-500 font-semibold block mb-0.5">Primary Days</span>
+                  <select className={inputCls()} {...field("slot1Days")}>
+                    {DAY_PRESETS.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 font-semibold block mb-0.5">Primary Hours</span>
+                  <select className={inputCls()} {...field("slot1Hours")}>
+                    {TIME_PRESETS.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 font-semibold block mb-0.5">Secondary Days (Optional)</span>
+                  <select className={inputCls()} {...field("slot2Days")}>
+                    <option value="">None / Off</option>
+                    {DAY_PRESETS.map((d) => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <span className="text-[10px] text-slate-500 font-semibold block mb-0.5">Secondary Hours</span>
+                  <select className={inputCls()} {...field("slot2Hours")}>
+                    {TIME_PRESETS.map((t) => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="flex items-center gap-2 text-red-600 text-sm">

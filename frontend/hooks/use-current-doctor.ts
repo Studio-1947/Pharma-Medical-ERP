@@ -39,11 +39,20 @@ export function useCurrentDoctor(): {
 
   const me = doctors.find((d) => d.id === user?.id);
 
-  // Same fallback order the backend uses in findUserDisplayName, so the
-  // prefilled value matches what it would have written anyway.
-  const name = me
-    ? [me.firstName, me.lastName].filter(Boolean).join(" ") || me.email
-    : (user?.email ?? null);
+  const rawName = me
+    ? [me.firstName, me.lastName].filter(Boolean).join(" ").trim()
+    : "";
+  let formattedName = rawName;
+  if (formattedName) {
+    if (!formattedName.startsWith("Dr.")) formattedName = `Dr. ${formattedName}`;
+  } else if (me?.email || user?.email) {
+    const targetEmail = me?.email || user?.email || "";
+    const prefix = (targetEmail.split("@")[0] ?? "doctor").replace(/[^a-zA-Z0-9]/g, " ").trim();
+    const cap = prefix ? prefix.charAt(0).toUpperCase() + prefix.slice(1) : "Doctor";
+    formattedName = `Dr. ${cap}`;
+  } else {
+    formattedName = "Dr. Doctor";
+  }
 
-  return { isDoctor: true, name: name ?? null, isLoading };
+  return { isDoctor: true, name: formattedName, isLoading };
 }

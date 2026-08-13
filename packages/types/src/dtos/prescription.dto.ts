@@ -65,6 +65,7 @@ export const queryPrescriptionSchema = z.object({
   patientId: z.string().uuid().optional(),
   branchId: z.string().uuid().optional(),
   status: z.string().optional(),
+  search: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });

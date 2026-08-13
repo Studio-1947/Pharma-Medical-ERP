@@ -127,16 +127,36 @@ function CreatePrescriptionModal({
   const [showPatientDropdown, setShowPatientDropdown] = useState(false);
   /** Inline patient registration, shown in place of the search box. */
   const [registering, setRegistering] = useState(false);
+  function calcDefaultExpiry(baseDateStr?: string, days = 30) {
+    const base = baseDateStr ? new Date(baseDateStr) : new Date();
+    if (isNaN(base.getTime())) return "";
+    base.setDate(base.getDate() + days);
+    return base.toISOString().split("T")[0];
+  }
+
   const [doctorName, setDoctorName] = useState("");
   const [doctorRegNo, setDoctorRegNo] = useState("");
   const [hospitalName, setHospitalName] = useState("");
   const [issuedDate, setIssuedDate] = useState(new Date().toISOString().split("T")[0]);
-  const [expiryDate, setExpiryDate] = useState("");
+  const [expiryDate, setExpiryDate] = useState(() => calcDefaultExpiry());
   const [notes, setNotes] = useState("");
   const [isControlled, setIsControlled] = useState(false);
   const [items, setItems] = useState<RxItem[]>([blankItem()]);
   const [scanKey, setScanKey] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+
+  function handleIssueDateChange(newIssue: string) {
+    setIssuedDate(newIssue);
+    if (newIssue) {
+      setExpiryDate(calcDefaultExpiry(newIssue, 30));
+    }
+  }
+
+  function setValidityPreset(days: number) {
+    if (issuedDate) {
+      setExpiryDate(calcDefaultExpiry(issuedDate, days));
+    }
+  }
 
   // A doctor prescribes as themselves; the server enforces this regardless, so
   // the field is filled in and locked rather than left to be typed over.
@@ -164,6 +184,7 @@ function CreatePrescriptionModal({
   });
 
   function handleClose() {
+    const todayStr = new Date().toISOString().split("T")[0];
     setPatientSearch("");
     setSelectedPatient(null);
     setRegistering(false);
@@ -171,8 +192,8 @@ function CreatePrescriptionModal({
     setDoctorName(isDoctor && currentDoctorName ? currentDoctorName : "");
     setDoctorRegNo("");
     setHospitalName("");
-    setIssuedDate(new Date().toISOString().split("T")[0]);
-    setExpiryDate("");
+    setIssuedDate(todayStr);
+    setExpiryDate(calcDefaultExpiry(todayStr, 30));
     setNotes("");
     setIsControlled(false);
     setItems([blankItem()]);
@@ -405,18 +426,40 @@ function CreatePrescriptionModal({
             <input
               type="date"
               value={issuedDate}
-              onChange={(e) => setIssuedDate(e.target.value)}
+              onChange={(e) => handleIssueDateChange(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
           </div>
           <div className="space-y-1">
-            <label className="text-sm font-medium">Expiry Date <span className="text-red-500">*</span></label>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium">Expiry / Validity Date <span className="text-red-500">*</span></label>
+              <div className="flex items-center gap-1">
+                {[
+                  { label: "+30D", days: 30 },
+                  { label: "+60D", days: 60 },
+                  { label: "+90D", days: 90 },
+                  { label: "+180D", days: 180 },
+                ].map((p) => (
+                  <button
+                    key={p.days}
+                    type="button"
+                    onClick={() => setValidityPreset(p.days)}
+                    className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 border text-[10px] font-bold transition-all"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
             <input
               type="date"
               value={expiryDate}
               onChange={(e) => setExpiryDate(e.target.value)}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
+            <p className="text-[11px] text-muted-foreground">
+              Legal validity period for dispensing at pharmacy (auto-set to 30 days from issue date).
+            </p>
           </div>
         </div>
 
