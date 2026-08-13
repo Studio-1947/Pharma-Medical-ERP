@@ -76,10 +76,10 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           <button
             onClick={() => setSearchOpen(true)}
             className="flex items-center gap-1.5 px-2 py-1.5 sm:px-3 rounded-xl border border-slate-200/80 bg-slate-50/70 hover:bg-slate-100 text-slate-500 hover:text-slate-700 transition-all text-xs font-medium"
-            title="Quick search inventory (Ctrl+K)"
+            title="Quick search pages, medicines & patients (Ctrl+K)"
           >
             <Search size={15} className="text-slate-400 shrink-0" />
-            <span className="hidden md:inline">Quick search inventory...</span>
+            <span className="hidden md:inline">Search pages, medicines, patients...</span>
             <kbd className="hidden lg:inline-block px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 bg-white border border-slate-200 rounded-md shadow-2xs">
               Ctrl+K
             </kbd>

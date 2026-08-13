@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, desc, eq, getTableColumns, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, getTableColumns, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 import type { CreatePrescriptionDto, UpdatePrescriptionDto, QueryPrescriptionDto, VerifyPrescriptionDto } from "@pharmerp/types";
@@ -25,13 +25,19 @@ export class PrescriptionsRepository {
       conditions.push(eq(schema.prescriptions.status, params.status as any));
     }
 
+    if (params.search) {
+      const searchOr = or(
+        ilike(schema.prescriptions.doctorName, `%${params.search}%`),
+        ilike(schema.patients.name, `%${params.search}%`),
+        ilike(schema.prescriptions.notes, `%${params.search}%`),
+      );
+      if (searchOr) conditions.push(searchOr);
+    }
+
     const where = and(...conditions);
 
     const [items, [countRow]] = await Promise.all([
       this.db
-        // The patient is joined in rather than left to the caller: this list is
-        // rendered as a table keyed by patient name, and without the join every
-        // row showed "--" because only patientId came back.
         .select({
           ...getTableColumns(schema.prescriptions),
           patient: {
@@ -55,8 +61,28 @@ export class PrescriptionsRepository {
         .where(where),
     ]);
 
+    const prescriptionIds = items.map((i) => i.id);
+    const itemsMap: Record<string, any[]> = {};
+    if (prescriptionIds.length > 0) {
+      const rxItems = await this.db.query.prescriptionItems.findMany({
+        where: inArray(schema.prescriptionItems.prescriptionId, prescriptionIds),
+        with: { medicine: true },
+      });
+      rxItems.forEach((it) => {
+        if (it.prescriptionId) {
+          if (!itemsMap[it.prescriptionId]) itemsMap[it.prescriptionId] = [];
+          itemsMap[it.prescriptionId]!.push(it);
+        }
+      });
+    }
+
+    const dataWithItems = items.map((i) => ({
+      ...i,
+      items: itemsMap[i.id] ?? [],
+    }));
+
     return {
-      data: items,
+      data: dataWithItems,
       meta: {
         page: params.page,
         limit: params.limit,
