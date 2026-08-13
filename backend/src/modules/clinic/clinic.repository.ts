@@ -113,6 +113,7 @@ export class ClinicRepository {
           branchId: data.branchId,
           date: data.date,
           timeSlot: data.timeSlot,
+          visitType: data.visitType ?? "new",
           notes: data.notes,
           status: "pending",
         })

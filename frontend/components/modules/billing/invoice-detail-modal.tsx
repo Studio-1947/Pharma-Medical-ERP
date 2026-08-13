@@ -104,10 +104,10 @@ export function InvoiceDetailModal({
                     {items.map((it, i) => (
                       <tr key={it.id ?? i}>
                         <td className="px-3 py-2 font-medium">
-                          {it.medicine?.name ?? it.medicineName ?? "--"}
+                          {it.itemName ?? it.medicine?.name ?? it.medicineName ?? "--"}
                         </td>
                         <td className="px-3 py-2 text-muted-foreground text-xs">
-                          {it.batch?.batchNo ?? "--"}
+                          {it.batch?.batchNo ?? (it.itemType === "consultation" ? "Service" : "--")}
                           {it.batch?.expiryDate && (
                             <span className="block text-[10px]">
                               exp {fmtDate(it.batch.expiryDate).split(" · ")[0]}

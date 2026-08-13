@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { Modal } from "@/components/ui/modal";
@@ -10,7 +11,12 @@ import {
   Loader2,
   ExternalLink,
   Image as ImageIcon,
+  Printer,
 } from "lucide-react";
+import {
+  PrescriptionPrintModal,
+  toPrescriptionTemplateData,
+} from "@/components/modules/prescriptions/prescription-template";
 
 /**
  * Read-only view of a past prescription — what was prescribed, by whom, and
@@ -63,10 +69,13 @@ export function PrescriptionDetailModal({
     enabled: !!prescriptionId,
   });
 
+  const [printOpen, setPrintOpen] = useState(false);
+
   const raw = data as any;
   const rx = raw?.data?.data ?? raw?.data ?? raw;
   const items: any[] = Array.isArray(rx?.items) ? rx.items : [];
   const scanUrl: string | undefined = rx?.displayUrl;
+  const scanIsPdf = !!scanUrl && scanUrl.toLowerCase().endsWith(".pdf");
 
   return (
     <Modal
@@ -89,6 +98,18 @@ export function PrescriptionDetailModal({
         </div>
       ) : (
         <div className="space-y-5">
+          {/* Generate / print official prescription */}
+          <div className="flex justify-end">
+            <button
+              type="button"
+              onClick={() => setPrintOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-all"
+            >
+              <Printer size={14} />
+              Print / Generate Prescription
+            </button>
+          </div>
+
           {/* Header facts */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
             <div>
@@ -183,16 +204,32 @@ export function PrescriptionDetailModal({
                 </a>
               </div>
               <div className="rounded-lg border bg-slate-50 overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={scanUrl}
-                  alt="Handwritten prescription scan"
-                  className="w-full max-h-[50vh] object-contain bg-white"
-                />
+                {scanIsPdf ? (
+                  <iframe
+                    src={scanUrl}
+                    title="Prescription scan PDF"
+                    className="w-full h-[50vh] bg-white"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={scanUrl}
+                    alt="Handwritten prescription scan"
+                    className="w-full max-h-[50vh] object-contain bg-white"
+                  />
+                )}
               </div>
             </div>
           )}
         </div>
+      )}
+
+      {rx && (
+        <PrescriptionPrintModal
+          rx={toPrescriptionTemplateData(raw)}
+          open={printOpen}
+          onClose={() => setPrintOpen(false)}
+        />
       )}
     </Modal>
   );

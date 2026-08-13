@@ -2,6 +2,13 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+// Doctor consultation fee attached to a prescription dispense. Billed as a
+// GST-exempt service line — no stock, no batch, shown as its own cart row.
+export interface ConsultationFee {
+  doctorName: string;
+  amount: number;
+}
+
 export interface CartItem {
   medicineId: string;
   batchId: string;
@@ -27,6 +34,7 @@ interface CartState {
   patientId: string | null;
   branchId: string;
   prescriptionId: string | null;
+  consultationFee: ConsultationFee | null;
   loyaltyPointsToRedeem: number;
   addItem: (item: Omit<CartItem, "lineTotal" | "saleUnit" | "stripSize"> & { stripSize?: number; saleUnit?: "pack" | "loose" }) => void;
   updateQty: (medicineId: string, batchId: string, qty: number) => void;
@@ -36,6 +44,7 @@ interface CartState {
   setPatient: (id: string | null) => void;
   setBranchId: (id: string) => void;
   setPrescriptionId: (id: string | null) => void;
+  setConsultationFee: (fee: ConsultationFee | null) => void;
   setLoyaltyPointsToRedeem: (points: number) => void;
   clear: () => void;
   totals: () => { subtotal: number; tax: number; discount: number; total: number };
@@ -57,6 +66,7 @@ export const useCartStore = create<CartState>()(
       patientId: null,
       branchId: "",
       prescriptionId: null,
+      consultationFee: null,
       loyaltyPointsToRedeem: 0,
       addItem: (item) => {
         const stripSize = item.stripSize ?? 1;
@@ -128,8 +138,9 @@ export const useCartStore = create<CartState>()(
       setPatient: (id) => set({ patientId: id }),
       setBranchId: (id) => set({ branchId: id }),
       setPrescriptionId: (id) => set({ prescriptionId: id }),
+      setConsultationFee: (fee) => set({ consultationFee: fee }),
       setLoyaltyPointsToRedeem: (points) => set({ loyaltyPointsToRedeem: points }),
-      clear: () => set({ items: [], patientId: null, prescriptionId: null, loyaltyPointsToRedeem: 0 }),
+      clear: () => set({ items: [], patientId: null, prescriptionId: null, consultationFee: null, loyaltyPointsToRedeem: 0 }),
       totals: () => {
         const items = get().items;
         let subtotal = 0;
@@ -144,7 +155,9 @@ export const useCartStore = create<CartState>()(
           discount += disc;
           tax += (taxable * i.taxPct) / 100;
         });
-        return { subtotal, tax, discount, total: subtotal - discount + tax };
+        // Consultation fee is a GST-exempt service line — no tax, not discounted.
+        const fee = get().consultationFee?.amount ?? 0;
+        return { subtotal: subtotal + fee, tax, discount, total: subtotal - discount + tax + fee };
       },
       hasControlledItems: () => {
         const controlled = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"];
@@ -156,7 +169,7 @@ export const useCartStore = create<CartState>()(
     {
       name: "pharmerp-cart",
       skipHydration: true,
-      partialize: (s) => ({ items: s.items, patientId: s.patientId, prescriptionId: s.prescriptionId, branchId: s.branchId }),
+      partialize: (s) => ({ items: s.items, patientId: s.patientId, prescriptionId: s.prescriptionId, consultationFee: s.consultationFee, branchId: s.branchId }),
     },
   ),
 );

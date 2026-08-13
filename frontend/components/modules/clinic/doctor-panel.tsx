@@ -17,6 +17,10 @@ import {
 import { PrescriptionScanUpload } from "@/components/modules/prescriptions/prescription-scan-upload";
 import { MedicineAutocomplete, type MedicineOption } from "@/components/modules/prescriptions/medicine-autocomplete";
 import { PrescriptionDetailModal } from "@/components/modules/prescriptions/prescription-detail-modal";
+import {
+  PrescriptionTemplate,
+  toPrescriptionTemplateData,
+} from "@/components/modules/prescriptions/prescription-template";
 import { InvoiceDetailModal } from "@/components/modules/billing/invoice-detail-modal";
 import {
   Stethoscope, Clock, PhoneCall, CheckCircle2, User, AlertTriangle,
@@ -264,10 +268,27 @@ function ConsultationClock({ token }: { token: any }) {
 
 // ─── Consultation workspace for the selected token ────────────────────────────
 
-function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { tokenId: string; onCompleted: () => void; doctorBranchId?: string | null }) {
+function ConsultationWorkspace({
+  tokenId,
+  onCompleted,
+  doctorBranchId,
+  doctorRegNo,
+  doctorHospitalName,
+}: {
+  tokenId: string;
+  onCompleted: () => void;
+  doctorBranchId?: string | null;
+  doctorRegNo?: string | null;
+  doctorHospitalName?: string | null;
+}) {
   const qc = useQueryClient();
   const { success: toastSuccess, error: toastError } = useToast();
-  const { data: tokenRes, isLoading } = useClinicToken(tokenId);
+  const {
+    data: tokenRes,
+    isLoading,
+    isError: tokenError,
+    refetch: refetchToken,
+  } = useClinicToken(tokenId);
   const token = (tokenRes as any)?.data;
   const updateMutation = useUpdateClinicToken(tokenId);
 
@@ -380,6 +401,51 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
     historyPage * historyPageSize
   );
 
+  // Only this patient's past prescriptions written by the same doctor appear in
+  // the split-screen preview (names normalize across the "Dr." prefix).
+  const sameDoctorRx = (() => {
+    const cur = token?.doctor ? doctorName(token.doctor) : null;
+    if (!cur) return [];
+    const norm = (s: string) => s.replace(/^dr\.?\s*/i, "").toLowerCase().trim();
+    const curNorm = norm(cur);
+    return rxHistory.filter((rx: any) => {
+      const stored = rx?.doctorName;
+      return typeof stored === "string" && stored.trim() && norm(stored) === curNorm;
+    });
+  })();
+
+  // Live prescription preview, rebuilt from the form on every change so the
+  // letterhead updates as the doctor types.
+  const todayStr = localDateString(new Date());
+  const doctorSpecialty =
+    token?.doctor?.doctorProfile?.specialty ?? token?.doctor?.specialty ?? "";
+  const liveRx = toPrescriptionTemplateData({
+    id: "live-preview",
+    prescriptionNumber: "Draft",
+    issuedDate: todayStr,
+    expiryDate: (() => {
+      const d = new Date(todayStr);
+      d.setDate(d.getDate() + 30);
+      return d.toISOString().split("T")[0];
+    })(),
+    doctorName: token?.doctor ? doctorName(token.doctor) : undefined,
+    doctorDesignation: doctorSpecialty || undefined,
+    regNo: token?.doctor?.doctorProfile?.regNo || undefined,
+    hospitalName: token?.doctor?.branchName || undefined,
+    specialty: doctorSpecialty || undefined,
+    patientName: token?.patient?.name,
+    notes,
+    items: items
+      .filter((it) => it.medicineName.trim())
+      .map((it) => ({
+        medicineName: it.medicineName,
+        dosage: it.dosage,
+        frequency: it.frequency,
+        duration: it.duration,
+        quantityPrescribed: it.quantityPrescribed === "" ? null : Number(it.quantityPrescribed),
+      })),
+  });
+
   function updateItem(idx: number, patch: Partial<RxItem>) {
     setItems((prev) => prev.map((it, i) => (i === idx ? { ...it, ...patch } : it)));
   }
@@ -405,6 +471,35 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
 
   async function completeConsultation() {
     if (!token) return;
+    const isFollowUp = token.visitType === "follow_up";
+
+    // Follow-up visits carry no prescription: no medicines and no scan — the
+    // doctor's note is appended to the token and the visit is signed off.
+    if (isFollowUp) {
+      setFormError(null);
+      setSubmitting(true);
+      try {
+        const doctorNote = notes.trim();
+        await updateMutation.mutateAsync({
+          status: "completed",
+          notes: doctorNote
+            ? token.notes
+              ? `${token.notes}\n\nDoctor follow-up: ${doctorNote}`
+              : doctorNote
+            : token.notes,
+        });
+        qc.invalidateQueries({ queryKey: queryKeys.clinicTokens.all() });
+        toastSuccess("Follow-up completed", "Visit signed off — no prescription was created.");
+        onCompleted();
+      } catch (err: any) {
+        const message = err?.response?.data?.message ?? "Failed to complete the follow-up.";
+        setFormError(message);
+        toastError("Could not complete follow-up", message);
+        setSubmitting(false);
+      }
+      return;
+    }
+
     const rxItems = items
       .filter((i) => i.medicineName.trim())
       .map((i) => ({
@@ -435,6 +530,11 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
         patientId: token.patient.id,
         branchId: doctorBranchId ?? token.doctor?.branchId ?? undefined,
         doctorName: doctorNameStr,
+        // Required by the create schema whenever isControlled is set (Schedule H
+        // / H1 / X compliance) — without it the request 400s and the
+        // consultation can never be completed for a controlled prescription.
+        doctorRegNo: doctorRegNo || undefined,
+        hospitalName: doctorHospitalName || undefined,
         issuedDate: localDateString(today),
         expiryDate: localDateString(expiry),
         notes: notes.trim() || undefined,
@@ -457,12 +557,42 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
     }
   }
 
-  if (isLoading || !token) {
-    return <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Loading token...</div>;
+  if (isLoading && !token) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+        Loading consultation...
+      </div>
+    );
+  }
+
+  if (!token) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 p-8 text-center">
+        <AlertTriangle size={28} className="text-amber-500" />
+        <div>
+          <p className="font-semibold text-slate-800">Could not load this consultation</p>
+          <p className="text-xs text-slate-500 mt-1 max-w-sm">
+            {tokenError
+              ? "The consultation could not be fetched. Check your connection and try again."
+              : "This consultation may have been removed or is no longer available."}
+          </p>
+        </div>
+        {tokenError && (
+          <button
+            type="button"
+            onClick={() => refetchToken()}
+            className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            Retry
+          </button>
+        )}
+      </div>
+    );
   }
 
   const patient = token.patient;
   const isTerminal = token.status === "completed" || token.status === "cancelled";
+  const isFollowUp = token.visitType === "follow_up";
 
   return (
     <div className="flex-1 flex flex-col min-w-0">
@@ -482,10 +612,31 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
                 <AlertTriangle size={12} /> Allergies: {patient.allergies.join(", ")}
               </div>
             )}
+            {/* Chief complaint entered by reception at token booking */}
+            {token.notes && (
+              <div className="flex items-start gap-2 mt-2 text-xs bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 max-w-xl">
+                <AlertTriangle size={13} className="text-amber-600 mt-0.5 shrink-0" />
+                <div className="min-w-0">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 block">
+                    Chief Complaint / Visit Notes
+                  </span>
+                  <span className="text-slate-700 whitespace-pre-wrap">{token.notes}</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <div className="flex flex-col items-end gap-1.5">
           <div className="flex items-center gap-2">
+            <span
+              className={`px-2 py-1 rounded-full text-xs font-bold border ${
+                isFollowUp
+                  ? "bg-amber-100 text-amber-800 border-amber-200"
+                  : "bg-teal-50 text-teal-700 border-teal-200"
+              }`}
+            >
+              {isFollowUp ? "Follow-up Visit" : "New Consultation"}
+            </span>
             {token.timeSlot && (
               <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-600 font-medium">
                 <Clock size={11} /> {token.timeSlot}
@@ -506,8 +657,9 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
       <div className="flex gap-1 border-b px-6">
         {[
           { key: "history", label: "History", icon: History },
-          { key: "prescribe", label: "Write Prescription", icon: FileText },
-          { key: "scan", label: "Upload Scan", icon: Upload },
+          { key: "prescribe", label: isFollowUp ? "Follow-up Notes" : "Write Prescription", icon: FileText },
+          // A follow-up carries no prescription, so there is nothing to scan.
+          ...(!isFollowUp ? [{ key: "scan", label: "Upload Scan", icon: Upload }] : []),
         ].map((tab) => (
           <button
             key={tab.key}
@@ -701,8 +853,12 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
                               {items.map((it: any, idx: number) => (
                                 <span key={idx} className="text-xs font-semibold text-slate-800 bg-indigo-50/80 border border-indigo-200/60 px-2 py-0.5 rounded-md flex items-center gap-1">
                                   <Pill size={11} className="text-indigo-600" />
-                                  {it.medicine?.name || it.medicineName || "Item"}
-                                  <span className="text-[10px] text-indigo-800 font-mono font-bold">× {it.quantity}</span>
+                                  {it.itemName || it.medicine?.name || it.medicineName || "Item"}
+                                  {it.itemType === "consultation" ? (
+                                    <span className="text-[10px] text-indigo-800 font-mono font-bold">· Fee</span>
+                                  ) : (
+                                    <span className="text-[10px] text-indigo-800 font-mono font-bold">× {it.quantity}</span>
+                                  )}
                                 </span>
                               ))}
                             </div>
@@ -748,8 +904,10 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
         )}
 
         {activeTab === "prescribe" && (
-          <div className="space-y-4">
-            <datalist id="dp-frequency-list">
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+            {/* Left: prescription form */}
+            <div className="space-y-4 min-w-0">
+              <datalist id="dp-frequency-list">
               <option value="1-0-1 (BD)" />
               <option value="1-1-1 (TDS)" />
               <option value="1-0-0 (OD)" />
@@ -766,6 +924,20 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
               <option value="30 days" />
             </datalist>
 
+            {isFollowUp && (
+              <div className="flex items-start gap-2 text-amber-800 text-xs bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5">
+                <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Follow-up visit — medicines cannot be prescribed</p>
+                  <p className="text-amber-700 mt-0.5">
+                    Only notes are recorded for this visit. The consultation completes without a prescription.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {!isFollowUp && (
+            <>
             <div className="rounded-xl border border-slate-200 overflow-x-auto shadow-2xs bg-white">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 text-slate-700 text-xs uppercase tracking-wider font-bold border-b border-slate-200">
@@ -811,9 +983,17 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
                 <span className="block text-xs text-muted-foreground font-normal">Schedule H / H1 / X</span>
               </label>
             </div>
+            </>)}
 
             <div className="space-y-1">
-              <label className="text-sm font-medium">Consultation Notes</label>
+              <label className="text-sm font-medium">
+                {isFollowUp ? "Follow-up Notes" : "Consultation Notes"}
+              </label>
+              {isFollowUp && (
+                <p className="text-xs text-muted-foreground -mt-1">
+                  Recorded on the token — no prescription is created for a follow-up.
+                </p>
+              )}
               <textarea
                 rows={3}
                 value={notes}
@@ -821,6 +1001,97 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
                 placeholder="Diagnosis, advice, follow-up..."
                 className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
               />
+            </div>
+            </div>
+
+            {/* Right: live letterhead preview + the patient's past prescriptions */}
+            <div className="space-y-4 min-w-0">
+              {/* Live preview */}
+              <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                    <FileText size={12} className="text-emerald-600" /> Live Prescription Preview
+                  </h4>
+                  <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2 py-0.5">
+                    Updates as you type
+                  </span>
+                </div>
+                <div className="flex justify-center overflow-hidden rounded-lg border border-slate-200 bg-white">
+                  <div
+                    style={{
+                      width: Math.round(595 * 0.55),
+                      height: Math.round(842 * 0.55),
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div style={{ transform: "scale(0.55)", transformOrigin: "top left" }}>
+                      <PrescriptionTemplate rx={liveRx} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Previous prescriptions for this patient */}
+              <div className="rounded-xl border border-slate-200 bg-white">
+                <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100">
+                  <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                    <History size={12} className="text-emerald-600" /> Previous Prescriptions
+                  </h4>
+                  <span className="text-[10px] font-semibold text-slate-500">
+                    {sameDoctorRx.length}
+                  </span>
+                </div>
+                <div className="max-h-[440px] overflow-y-auto divide-y divide-slate-100">
+                  {sameDoctorRx.length === 0 ? (
+                    <p className="px-3 py-6 text-center text-xs text-slate-400">
+                      No previous prescriptions from you for this patient.
+                    </p>
+                  ) : (
+                    sameDoctorRx.slice(0, 5).map((rx: any) => (
+                      <button
+                        key={rx.id}
+                        type="button"
+                        onClick={() => setOpenPrescriptionId(rx.id)}
+                        className="w-full text-left px-3 py-2.5 hover:bg-slate-50 transition-colors block"
+                        title="Open prescription"
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <span className="text-xs font-bold text-slate-800 truncate">
+                            {rx.doctorName || "OPD Consultant"}
+                          </span>
+                          <span className="text-[10px] text-slate-400 shrink-0">
+                            {rx.issuedDate || rx.createdAt
+                              ? format(new Date(rx.issuedDate || rx.createdAt), "dd MMM yyyy")
+                              : ""}
+                          </span>
+                        </div>
+                        <div className="flex justify-center overflow-hidden rounded-md border border-slate-100 bg-slate-50">
+                          <div
+                            style={{
+                              width: Math.round(595 * 0.38),
+                              height: Math.round(842 * 0.38),
+                              overflow: "hidden",
+                            }}
+                          >
+                            <div style={{ transform: "scale(0.38)", transformOrigin: "top left" }}>
+                              <PrescriptionTemplate rx={toPrescriptionTemplateData(rx)} />
+                            </div>
+                          </div>
+                        </div>
+                      </button>
+                    ))
+                  )}
+                </div>
+                {sameDoctorRx.length > 5 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("history")}
+                    className="w-full text-center text-[11px] font-semibold text-emerald-700 hover:bg-emerald-50 py-2 border-t border-slate-100"
+                  >
+                    View all in History →
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -858,7 +1129,7 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
           ) : isTerminal ? (
             <><CheckCircle2 size={14} /> Consultation Completed</>
           ) : (
-            <><CheckCircle2 size={14} /> Complete Consultation</>
+            <><CheckCircle2 size={14} /> {isFollowUp ? "Complete Follow-up" : "Complete Consultation"}</>
           )}
         </button>
       </div>
@@ -912,7 +1183,10 @@ export function DoctorPanel() {
   // undefined asks for every doctor's queue; the API now pins it to the caller
   // anyway, but there is no reason to fire a request that can only be wrong.
   const params = { date, doctorId: user?.id, limit: 100 };
-  const { data: tokensRes, isLoading } = useClinicTokens(params, { enabled: !!user?.id });
+  const { data: tokensRes, isLoading, isError: tokensError, refetch: refetchTokens } = useClinicTokens(
+    params,
+    { enabled: !!user?.id },
+  );
   const tokensRaw = (tokensRes as any)?.data;
   const tokens: any[] = Array.isArray(tokensRaw) ? tokensRaw : Array.isArray(tokensRaw?.data) ? tokensRaw.data : [];
 
@@ -998,6 +1272,18 @@ export function DoctorPanel() {
               <div className="animate-pulse space-y-2">
                 {[1, 2, 3].map((i) => <div key={i} className="h-14 bg-muted rounded-lg" />)}
               </div>
+            ) : tokensError ? (
+              <div className="flex flex-col items-center gap-2 py-6 text-center px-3">
+                <AlertTriangle size={20} className="text-amber-500" />
+                <p className="text-xs text-slate-600 font-medium">Could not load today&apos;s queue</p>
+                <button
+                  type="button"
+                  onClick={() => refetchTokens()}
+                  className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Retry
+                </button>
+              </div>
             ) : tokens.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">No tokens for today.</p>
             ) : (
@@ -1028,7 +1314,14 @@ export function DoctorPanel() {
                             {queueStatusIcon(t.status)}
                           </div>
                         </div>
-                        <div className="text-xs text-muted-foreground truncate">{t.patient?.name ?? "--"}</div>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-xs text-muted-foreground truncate">{t.patient?.name ?? "--"}</span>
+                          {t.visitType === "follow_up" && (
+                            <span className="px-1 py-px rounded bg-amber-100 text-amber-800 text-[9px] font-bold uppercase border border-amber-200 shrink-0">
+                              FU
+                            </span>
+                          )}
+                        </div>
                         {t.status === "completed" && t.calledAt && t.completedAt && (
                           <div className="text-[10px] text-muted-foreground/80 tabular-nums mt-0.5">
                             {formatDuration(durationMinutes(t.calledAt, t.completedAt))}
@@ -1045,7 +1338,14 @@ export function DoctorPanel() {
 
         {/* Workspace */}
         {selectedTokenId ? (
-          <ConsultationWorkspace tokenId={selectedTokenId} onCompleted={() => setSelectedTokenId(null)} doctorBranchId={me.branchId} />
+          <ConsultationWorkspace
+            key={selectedTokenId}
+            tokenId={selectedTokenId}
+            onCompleted={() => setSelectedTokenId(null)}
+            doctorBranchId={me.branchId}
+            doctorRegNo={dp?.regNo}
+            doctorHospitalName={me.branchName}
+          />
         ) : (
           <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm p-8 text-center">
             Select a token from the queue to begin the consultation.

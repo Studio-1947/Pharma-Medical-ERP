@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -71,6 +72,8 @@ interface ClinicToken {
   tokenNo: number;
   status: "pending" | "called" | "completed" | "cancelled";
   timeSlot?: string;
+  /** "new" = fresh consultation (doctor may prescribe); "follow_up" = repeat visit (no medicines). */
+  visitType?: "new" | "follow_up";
   notes?: string;
   patient?: Patient;
   doctor?: Doctor;
@@ -669,6 +672,7 @@ function NewTokenModal({
   const [doctorId, setDoctorId] = useState(defaultDoctorId ?? "");
   const [date, setDate] = useState(localDateString());
   const [timeSlot, setTimeSlot] = useState("");
+  const [visitType, setVisitType] = useState<"new" | "follow_up">("new");
   const [notes, setNotes] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -713,6 +717,7 @@ function NewTokenModal({
     setDoctorId(defaultDoctorId ?? "");
     setDate(localDateString());
     setTimeSlot("");
+    setVisitType("new");
     setNotes("");
     setFormError(null);
   }
@@ -751,6 +756,7 @@ function NewTokenModal({
         doctorId,
         date,
         timeSlot: timeSlot.trim() || undefined,
+        visitType,
         notes: notes.trim() || undefined,
         branchId,
       },
@@ -892,6 +898,50 @@ function NewTokenModal({
           </select>
         </div>
 
+        {/* Visit type: a follow-up cannot be prescribed new medicines by the doctor */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Visit Type</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setVisitType("new")}
+              className={`flex flex-col items-start gap-0.5 px-3.5 py-2.5 rounded-xl border text-left transition-all ${
+                visitType === "new"
+                  ? "border-emerald-500 bg-emerald-50 shadow-xs"
+                  : "border-slate-200 bg-white hover:border-emerald-300"
+              }`}
+            >
+              <span className={`text-xs font-bold ${visitType === "new" ? "text-emerald-800" : "text-slate-700"}`}>
+                New Consultation
+              </span>
+              <span className="text-[10px] text-slate-500 leading-snug">
+                Fresh visit — doctor can prescribe medicines
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisitType("follow_up")}
+              className={`flex flex-col items-start gap-0.5 px-3.5 py-2.5 rounded-xl border text-left transition-all ${
+                visitType === "follow_up"
+                  ? "border-amber-500 bg-amber-50 shadow-xs"
+                  : "border-slate-200 bg-white hover:border-amber-300"
+              }`}
+            >
+              <span className={`text-xs font-bold ${visitType === "follow_up" ? "text-amber-800" : "text-slate-700"}`}>
+                Follow-up
+              </span>
+              <span className="text-[10px] text-slate-500 leading-snug">
+                Repeat visit — prescribing disabled, notes only
+              </span>
+            </button>
+          </div>
+          {visitType === "follow_up" && (
+            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+              The doctor will not be able to add medicines for this visit — only notes.
+            </p>
+          )}
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">
@@ -997,6 +1047,7 @@ const TIME_SLOT_OPTIONS = [
 ];
 
 export function ClinicQueue() {
+  const router = useRouter();
   const qc = useQueryClient();
   const { error: toastError, success: toastSuccess } = useToast();
   const [date, setDate] = useState(localDateString());
@@ -1011,7 +1062,7 @@ export function ClinicQueue() {
   const doctors: Doctor[] = (doctorsRes as any)?.data ?? [];
 
   const params = { date, doctorId: doctorFilter || undefined, limit: 100 };
-  const { data: tokensRes, isLoading } = useClinicTokens(params);
+  const { data: tokensRes, isLoading, isError: tokensError, refetch: refetchTokens } = useClinicTokens(params);
   const tokensRaw = (tokensRes as any)?.data;
   const tokens: ClinicToken[] = Array.isArray(tokensRaw)
     ? tokensRaw
@@ -1383,6 +1434,21 @@ export function ClinicQueue() {
                 <div key={i} className="h-16 bg-slate-200/60 rounded-2xl" />
               ))}
             </div>
+          ) : tokensError ? (
+            <div className="bg-white rounded-2xl border border-amber-200 bg-amber-50/60 p-10 text-center shadow-2xs">
+              <AlertTriangle size={28} className="text-amber-500 mx-auto mb-3" />
+              <h3 className="text-sm font-extrabold text-slate-800">Could not load today&apos;s queue</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                The queue could not be fetched. Check your connection and try again.
+              </p>
+              <button
+                type="button"
+                onClick={() => refetchTokens()}
+                className="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors"
+              >
+                Retry
+              </button>
+            </div>
           ) : tokens.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-2xs">
               <div className="w-16 h-16 rounded-3xl bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto mb-4 border border-emerald-100 shadow-sm">
@@ -1434,8 +1500,15 @@ export function ClinicQueue() {
                             </span>
                           </td>
                           <td className="px-5 py-4">
-                            <div className="font-bold text-slate-900">
-                              {t.patient?.name ?? "--"}
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900">
+                                {t.patient?.name ?? "--"}
+                              </span>
+                              {t.visitType === "follow_up" && (
+                                <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wide border border-amber-200">
+                                  Follow-up
+                                </span>
+                              )}
                             </div>
                             <div className="text-xs text-slate-500 font-mono mt-0.5">
                               {t.patient?.phone ?? ""}
@@ -1484,7 +1557,7 @@ export function ClinicQueue() {
                             </div>
                           </td>
                           <td className="px-5 py-4 text-right">
-                            <div className="flex items-center justify-end gap-2">
+                            <div className="flex items-center justify-end gap-2 flex-wrap">
                               {t.status === "pending" && (
                                 <button
                                   onClick={() => callPatient(t.id)}
@@ -1499,6 +1572,29 @@ export function ClinicQueue() {
                                   className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-2xs flex items-center gap-1"
                                 >
                                   <CheckCircle2 size={12} /> Complete
+                                </button>
+                              )}
+                              {t.status === "completed" && t.prescriptionId && (
+                                <button
+                                  onClick={() => {
+                                    // Carry the doctor's consultation fee along so
+                                    // the POS can bill it as a service line on the
+                                    // same invoice as the dispense.
+                                    const fee = (t.doctor as any)?.doctorProfile?.consultationFee;
+                                    const feeParams =
+                                      fee != null && fee !== ""
+                                        ? `&doctorName=${encodeURIComponent(doctorName(t.doctor))}&fee=${encodeURIComponent(String(fee))}`
+                                        : "";
+                                    const url = `/billing/pos?rxId=${t.prescriptionId}${
+                                      t.patient?.id ? `&patientId=${t.patient.id}` : ""
+                                    }${feeParams}`;
+                                    router.push(url);
+                                  }}
+                                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition-all shadow-2xs flex items-center gap-1.5"
+                                  title="Open prescription in POS and auto-fill cart"
+                                >
+                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                                  Open in POS ↗
                                 </button>
                               )}
                               {(t.status === "pending" || t.status === "called") && (

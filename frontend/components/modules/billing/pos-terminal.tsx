@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera, ShieldAlert, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, LayoutGrid, Table, Percent, Edit3, SlidersHorizontal } from "lucide-react";
 import { useCartStore, CartItem } from "@/stores/cart.store";
@@ -43,9 +44,13 @@ export function PosTerminal() {
   const [lastReceiptItems, setLastReceiptItems] = useState<any[]>([]);
   const [lastReceiptPatient, setLastReceiptPatient] = useState<any>(null);
   const [lastReceiptPayments, setLastReceiptPayments] = useState<any[]>([]);
+  const [lastReceiptFee, setLastReceiptFee] = useState<{ doctorName: string; amount: number } | null>(null);
   const [clearConfirm, setClearConfirm] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
+  // Out-of-stock / unlinked medicines skipped when a prescription is auto-loaded
+  // from the clinic queue ("Open in POS"). Shown as a dismissible amber banner.
+  const [rxLoadWarnings, setRxLoadWarnings] = useState<string[]>([]);
 
   const [allowOversell, setAllowOversell] = useState(false);
   const [stockLimitDialog, setStockLimitDialog] = useState<{
@@ -157,6 +162,7 @@ export function PosTerminal() {
     items, addItem, updateQty, updateDiscountPct, toggleUnit, removeItem, clear, totals,
     patientId,
     prescriptionId, setPrescriptionId,
+    consultationFee, setConsultationFee,
     loyaltyPointsToRedeem, setLoyaltyPointsToRedeem,
     setPatient, hasControlledItems,
   } = useCartStore();
@@ -214,6 +220,21 @@ export function PosTerminal() {
           <td class="text-right"><b>₹${item.lineTotal.toFixed(2)}</b></td>
         </tr>`;
     }).join("");
+
+    const feeRow = lastReceiptFee
+      ? `
+        <tr>
+          <td>
+            <div class="medicine-name">${lastReceiptItems.length + 1}. Doctor Consultation</div>
+            <div class="batch-label">${lastReceiptFee.doctorName} · GST-exempt service</div>
+          </td>
+          <td class="text-center">1</td>
+          <td class="text-right">₹${lastReceiptFee.amount.toFixed(2)}</td>
+          <td class="text-right">—</td>
+          <td class="text-right">—</td>
+          <td class="text-right"><b>₹${lastReceiptFee.amount.toFixed(2)}</b></td>
+        </tr>`
+      : "";
 
     const payRows = lastReceiptPayments.map(p => `
       <tr>
@@ -298,7 +319,7 @@ export function PosTerminal() {
         <th class="text-right" style="width:10%">Amount</th>
       </tr>
     </thead>
-    <tbody>${itemRows}</tbody>
+    <tbody>${itemRows}${feeRow}</tbody>
   </table>
 
   <hr class="divider"/>
@@ -478,6 +499,7 @@ export function PosTerminal() {
       setLastInvoice(invoice);
       setLastReceiptItems([...items]);
       setLastReceiptPatient(selectedPatient ?? null);
+      setLastReceiptFee(useCartStore.getState().consultationFee);
       clear();
       setPayOpen(false);
       setPrintOpen(true);
@@ -509,6 +531,9 @@ export function PosTerminal() {
     const payload = {
       patientId: patientId || undefined,
       prescriptionId: prescriptionId?.trim() || undefined,
+      consultationFee: consultationFee
+        ? { doctorName: consultationFee.doctorName, amount: String(consultationFee.amount.toFixed(2)) }
+        : undefined,
       // Honoured for super_admin only; every other role is pinned server-side.
       // An invoice must name a branch, so without this a super_admin checkout
       // is rejected outright.
@@ -581,6 +606,122 @@ export function PosTerminal() {
       toastError("Failed to load stock", "Could not fetch batch details. Check your connection and try again.");
     }
   };
+
+  // ── Rx auto-load from URL (clinic queue "Open in POS") ─────────────────────
+  const searchParams = useSearchParams();
+  const urlRxId = searchParams.get("rxId");
+  const urlPatientId = searchParams.get("patientId");
+  // Doctor consultation fee carried from the clinic queue — billed as a
+  // GST-exempt service line on the same invoice as the dispense.
+  const urlDoctorName = searchParams.get("doctorName");
+  const urlFee = searchParams.get("fee");
+  // Re-run only when the URL rxId actually changes; identical navigation
+  // (e.g. the user returning to the same link) must not re-fill the cart.
+  const handledRxRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!urlRxId) return;
+    if (handledRxRef.current === urlRxId) return;
+    handledRxRef.current = urlRxId;
+    loadRxIntoCart(urlRxId, urlPatientId ?? undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlRxId, urlPatientId]);
+
+  async function loadRxIntoCart(rxId: string, patientIdFromUrl?: string) {
+    setRxLoadWarnings([]);
+    try {
+      const res: any = await apiClient.get(`/prescriptions/${rxId}`);
+      const rx = res?.data?.data ?? res?.data ?? null;
+      const rxItems: any[] = Array.isArray(rx?.items) ? rx.items : [];
+
+      // Start a fresh prescription session: drop any persisted cart first, then
+      // link patient + Rx so checkout carries them automatically.
+      clear();
+      if (patientIdFromUrl) setPatient(patientIdFromUrl);
+      setPrescriptionId(rxId);
+      // Doctor consultation fee from the clinic queue (if the doctor has one).
+      if (urlDoctorName && urlFee) {
+        const amt = parseFloat(urlFee);
+        if (!isNaN(amt) && amt > 0) {
+          setConsultationFee({ doctorName: urlDoctorName, amount: amt });
+          toastInfo("Consultation fee added", `Doctor consultation fee of ₹${amt.toFixed(2)} added to the bill.`);
+        }
+      }
+
+      if (rxItems.length === 0) {
+        toastInfo("Prescription loaded", "This prescription has no medicine items to add to the cart.");
+        return;
+      }
+
+      const warnings: string[] = [];
+      for (const item of rxItems) {
+        const med = item?.medicine ?? null;
+        const medId = item.medicineId ?? med?.id;
+        const label = med?.name ?? item.medicineName ?? "Medicine";
+        if (!medId) {
+          // Free-text line the doctor did not link to a catalogue medicine.
+          warnings.push(label);
+          continue;
+        }
+        try {
+          const batchesRes: any = await apiClient.get(`/inventory/medicines/${medId}/batches`, {
+            params: { branchId: activeBranchId },
+          });
+          const batchList: any[] = Array.isArray(batchesRes) ? batchesRes
+            : Array.isArray(batchesRes?.data?.data) ? batchesRes.data.data
+            : Array.isArray(batchesRes?.data) ? batchesRes.data
+            : [];
+          const first = batchList[0];
+          const availableQty = first?.quantity ?? 0;
+          if (!first || availableQty <= 0) {
+            warnings.push(label);
+            continue;
+          }
+
+          const requestedQty = item.quantityPrescribed || 1;
+          const addPayload: any = {
+            medicineId: medId,
+            batchId: first.id,
+            name: label,
+            sku: med?.sku ?? item.medicineName ?? "",
+            batchNo: first.batchNo,
+            unitPrice: parseFloat(med?.priceMrp ?? "0") || 0,
+            stripSize: med?.stripSize ? Number(med.stripSize) : 1,
+            taxPct: parseFloat(med?.taxPercent ?? "0") || 0,
+            discountPct: 0,
+            quantity: requestedQty,
+            scheduleClass: med?.scheduleClass,
+            requiresPrescription: med?.requiresPrescription,
+            unit: med?.unit,
+            batchStock: availableQty,
+            totalStock: availableQty,
+          };
+
+          if (requestedQty > availableQty && !allowOversell) {
+            // Existing stock-cap behaviour: add what is available and surface
+            // the "Stock Limit Exceeded" dialog so the counter staff notice.
+            setStockLimitDialog({
+              open: true,
+              itemName: label,
+              requestedQty,
+              maxAvailable: availableQty,
+              unit: getUnitLabel(availableQty, med ?? {}),
+            });
+            addItem({ ...addPayload, quantity: availableQty });
+          } else {
+            addItem(addPayload);
+          }
+        } catch {
+          toastError("Could not load stock", `Failed to check stock for "${label}". Add it manually if needed.`);
+        }
+      }
+      if (warnings.length > 0) {
+        setRxLoadWarnings(warnings);
+      }
+    } catch {
+      toastError("Prescription load failed", "Could not load the prescription. Check the link and try again.");
+    }
+  }
 
   const searchRaw = searchResults as any;
   const medicines: any[] = Array.isArray(searchRaw?.data?.data) ? searchRaw.data.data : Array.isArray(searchRaw?.data) ? searchRaw.data : [];
@@ -672,6 +813,39 @@ export function PosTerminal() {
               Cancel
             </button>
           </div>
+        </div>
+      )}
+
+      {/* Rx auto-load out-of-stock warning banner */}
+      {rxLoadWarnings.length > 0 && (
+        <div className="flex flex-col gap-1.5 bg-amber-50 border border-amber-300 rounded-xl px-4 py-3 shadow-sm text-xs">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-2 font-bold text-amber-900">
+              <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+              These items from the prescription are out of stock and were NOT added to cart:
+            </div>
+            <button
+              type="button"
+              onClick={() => setRxLoadWarnings([])}
+              className="text-amber-500 hover:text-amber-800 p-0.5 shrink-0"
+              title="Dismiss"
+            >
+              <X size={14} />
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5 pl-6">
+            {rxLoadWarnings.map((w, i) => (
+              <span
+                key={`${w}-${i}`}
+                className="bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md font-semibold"
+              >
+                {w}
+              </span>
+            ))}
+          </div>
+          <p className="pl-6 text-[11px] text-amber-800 font-medium">
+            Please source from another branch or inform the patient.
+          </p>
         </div>
       )}
 
@@ -949,6 +1123,33 @@ export function PosTerminal() {
                       </tr>
                     );
                   })}
+                  {consultationFee && (
+                    <tr className="bg-teal-50/80 border-t-2 border-teal-200">
+                      <td className="py-2.5 px-3 text-center font-mono font-bold text-teal-400 text-[11px]">•</td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-extrabold text-teal-900">Doctor Consultation</span>
+                          <span className="bg-teal-100 text-teal-700 text-[9px] font-extrabold px-1 rounded uppercase shrink-0">Fee</span>
+                        </div>
+                        <div className="text-[10px] text-teal-700 font-medium">{consultationFee.doctorName}</div>
+                      </td>
+                      <td className="py-2.5 px-3 text-[10px] text-teal-600 font-medium" colSpan={6}>
+                        GST-exempt service line · no stock deducted
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-black text-sm text-teal-800 font-mono">
+                        ₹{consultationFee.amount.toFixed(2)}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <button
+                          onClick={() => setConsultationFee(null)}
+                          className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
+                          title="Remove consultation fee"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             )}
@@ -1334,6 +1535,29 @@ export function PosTerminal() {
                 </div>
               </div>
             ))}
+            {consultationFee && (
+              <div className="px-3.5 py-2.5 bg-teal-50/80 border-t border-teal-100 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <span className="text-xs font-bold text-teal-900 truncate">Doctor Consultation</span>
+                    <span className="bg-teal-100 text-teal-700 text-[9px] font-extrabold px-1 rounded uppercase shrink-0">Fee</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-black text-teal-900">₹{consultationFee.amount.toFixed(2)}</span>
+                    <button
+                      onClick={() => setConsultationFee(null)}
+                      className="text-slate-400 hover:text-red-600 p-1 transition-colors"
+                      title="Remove consultation fee"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+                <div className="text-[11px] text-teal-700 font-medium">
+                  {consultationFee.doctorName} · GST-exempt service
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Cart Summary & Checkout Totals Footer */}

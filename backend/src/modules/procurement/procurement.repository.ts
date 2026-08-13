@@ -654,8 +654,9 @@ export class ProcurementRepository {
     ]);
 
     const net = new Map<string, number>();
-    for (const row of soldRows) net.set(row.batchId, (net.get(row.batchId) ?? 0) + (row.qty ?? 0));
-    for (const row of returnedRows) net.set(row.batchId, (net.get(row.batchId) ?? 0) - (row.qty ?? 0));
+    // Consultation fee lines have no batch — only medicine lines move stock.
+    for (const row of soldRows) if (row.batchId) net.set(row.batchId, (net.get(row.batchId) ?? 0) + (row.qty ?? 0));
+    for (const row of returnedRows) if (row.batchId) net.set(row.batchId, (net.get(row.batchId) ?? 0) - (row.qty ?? 0));
     return net;
   }
 

@@ -505,8 +505,10 @@ export class ReportsService {
         ),
       );
 
-    // Fetch batch numbers to enrich data
-    const batchIds = [...new Set(results.map(r => r.batchId))];
+    // Fetch batch numbers to enrich data. Fee lines carry no batch; the
+    // innerJoin on medicines already excludes them, this just keeps the type
+    // honest.
+    const batchIds = [...new Set(results.map(r => r.batchId).filter((id): id is string => !!id))];
     let batchMap: Record<string, string> = {};
     if (batchIds.length > 0) {
       const batches = await this.db

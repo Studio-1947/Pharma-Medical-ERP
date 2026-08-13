@@ -15,6 +15,14 @@ export const paymentEntrySchema = z.object({
   referenceNo: z.string().max(100).optional(),
 });
 
+// Doctor consultation fee collected at the counter alongside a prescription
+// dispense. Billed as a GST-exempt service line (health care services, Heading
+// 9993) — it adds to subtotal and total but carries zero tax and no stock.
+export const consultationFeeSchema = z.object({
+  doctorName: z.string().min(1).max(255),
+  amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
+});
+
 export const createInvoiceSchema = z.object({
   patientId: z.string().uuid().optional(),
   prescriptionId: z.string().uuid().optional(),
@@ -25,6 +33,7 @@ export const createInvoiceSchema = z.object({
   loyaltyPointsToRedeem: z.number().int().min(0).default(0),
   notes: z.string().optional(),
   isOfflineSync: z.boolean().default(false),
+  consultationFee: consultationFeeSchema.optional(),
   items: z.array(invoiceItemSchema).min(1),
   payments: z.array(paymentEntrySchema).min(1),
   overrideReason: z.string().min(1).optional(),
@@ -59,6 +68,7 @@ export const voidInvoiceSchema = z.object({
 
 export type InvoiceItemDto = z.infer<typeof invoiceItemSchema>;
 export type PaymentEntryDto = z.infer<typeof paymentEntrySchema>;
+export type ConsultationFeeDto = z.infer<typeof consultationFeeSchema>;
 export type CreateInvoiceDto = z.infer<typeof createInvoiceSchema>;
 export type ReturnItemDto = z.infer<typeof returnItemSchema>;
 export type ReturnInvoiceDto = z.infer<typeof returnInvoiceSchema>;

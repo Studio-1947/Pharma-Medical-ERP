@@ -407,6 +407,71 @@ describe("CHECKOUT-09 — PDF is not pre-generated during checkout", () => {
   });
 });
 
+// ─── CHECKOUT-11: Doctor consultation fee line ───────────────────────────────
+
+describe("CHECKOUT-11 — Doctor consultation fee billed as GST-exempt line", () => {
+  it("adds the fee to subtotal/total and writes a consultation line with no stock", async () => {
+    const { service, mockRepo, mockBatchRepo, mockMovementRepo, buildTx } = buildService();
+
+    const dto = {
+      consultationFee: { doctorName: "Dr. Anjali Chettri", amount: "400.00" },
+      items: [{ medicineId: "med-otc", quantity: 2, discountPct: "0" }],
+      // 112 (medicines) + 400 (fee) = 512
+      payments: [{ mode: "cash", amount: "512.00" }],
+    };
+
+    const tx = buildTx([
+      [{ id: "med-otc", name: "Paracetamol", scheduleClass: "OTC", requiresPrescription: false, taxPercent: "12", stripSize: 10, isActive: true }], // medicines query
+      [{ id: "batch-1" }], // UPDATE batch returning (stock deducted)
+    ]);
+    (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" }],
+    ]);
+
+    await service.create(dto as any, "staff-1", "branch-1");
+
+    const [invoiceArg, itemsArg] = mockRepo.createInvoiceWithItems.mock.calls[0]!;
+    expect(parseFloat(invoiceArg.subtotal)).toBe(500); // 100 + 400
+    expect(parseFloat(invoiceArg.taxAmount)).toBe(12);  // fee carries no tax
+    expect(parseFloat(invoiceArg.totalAmount)).toBe(512);
+
+    const feeLine = itemsArg.find((i: any) => i.itemType === "consultation");
+    expect(feeLine).toBeDefined();
+    expect(feeLine.itemName).toContain("Dr. Anjali Chettri");
+    expect(feeLine.medicineId).toBeNull();
+    expect(feeLine.batchId).toBeNull();
+    expect(feeLine.unitPrice).toBe("400.00");
+    expect(feeLine.taxPct).toBe("0");
+
+    // Fee is a service line: FEFO allocates only for the medicine and the
+    // stock movement ledger records only the medicine deduction.
+    expect(mockBatchRepo.selectBatchesForDispenseMulti).toHaveBeenCalledTimes(1);
+    expect(mockMovementRepo.logMany.mock.calls[0]![0]).toHaveLength(1);
+    expect(mockMovementRepo.logMany.mock.calls[0]![0][0].batchId).toBe("batch-1");
+  });
+
+  it("rejects a payment that omits the consultation fee", async () => {
+    const { service, mockBatchRepo, buildTx } = buildService();
+
+    const dto = {
+      consultationFee: { doctorName: "Dr. X", amount: "400.00" },
+      items: [{ medicineId: "med-otc", quantity: 2, discountPct: "0" }],
+      payments: [{ mode: "cash", amount: "112.00" }], // fee not included
+    };
+
+    const tx = buildTx([
+      [{ id: "med-otc", name: "Paracetamol", scheduleClass: "OTC", requiresPrescription: false, taxPercent: "12", stripSize: 10, isActive: true }],
+    ]);
+    (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" }],
+    ]);
+
+    await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(/does not match/i);
+  });
+});
+
 // ─── CHECKOUT-10: ClickHouse events emitted ──────────────────────────────────
 
 describe("CHECKOUT-10 — ClickHouse sale events emitted after checkout", () => {

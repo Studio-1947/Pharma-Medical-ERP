@@ -36,6 +36,10 @@ export const clinicTokens = pgTable(
       .references(() => branches.id, { onDelete: "restrict" }),
     date: date("date").notNull(),
     timeSlot: varchar("time_slot", { length: 50 }),
+    // "new" = fresh consultation where the doctor may prescribe medicines;
+    // "follow_up" = repeat visit where prescribing is disabled and the doctor
+    // only signs off with notes.
+    visitType: varchar("visit_type", { length: 20 }).notNull().default("new"),
     status: tokenStatusEnum("status").notNull().default("pending"),
     // Consultation clock. calledAt is stamped when the doctor calls the patient
     // in, completedAt when the consultation is signed off; the difference is the

@@ -235,6 +235,13 @@ export class BillingService {
 
       const { subtotal, taxAmount, totalAmount } = this.taxService.aggregateInvoiceTotals(lines);
 
+      // Doctor consultation fee — a service line, not a stock line. Health care
+      // services are GST-exempt, so it adds to subtotal and total but carries
+      // zero tax and never touches inventory or FEFO allocation.
+      const feeAmount = dto.consultationFee ? new Decimal(dto.consultationFee.amount) : new Decimal(0);
+      const subtotalWithFee = new Decimal(subtotal).plus(feeAmount).toNumber();
+      const totalWithFee = new Decimal(totalAmount).plus(feeAmount).toNumber();
+
       // Loyalty point redemption: 100 points = ₹10 discount
       const pointsToRedeem = dto.loyaltyPointsToRedeem ?? 0;
       let loyaltyDiscount = new Decimal(0);
@@ -251,7 +258,7 @@ export class BillingService {
       }
 
       const discountAmount = new Decimal(dto.discountAmount ?? "0").plus(loyaltyDiscount);
-      const finalTotal = new Decimal(totalAmount).minus(discountAmount).toNumber();
+      const finalTotal = new Decimal(totalWithFee).minus(discountAmount).toNumber();
 
       if (finalTotal < 0) {
         throw new UnprocessableEntityException("Discount exceeds invoice total");
@@ -350,7 +357,7 @@ export class BillingService {
         staffId,
         branchId,
         prescriptionId: dto.prescriptionId,
-        subtotal: subtotal.toFixed(2),
+        subtotal: subtotalWithFee.toFixed(2),
         discountAmount: discountAmount.toFixed(2),
         taxAmount: taxAmount.toFixed(2),
         totalAmount: finalTotal.toFixed(2),
@@ -365,7 +372,9 @@ export class BillingService {
         overriddenBy: dto.overriddenBy,
       };
 
-      const itemsData = lines.map(line => ({
+      const itemsData: Omit<typeof schema.salesInvoiceItems.$inferInsert, "invoiceId">[] = lines.map(line => ({
+        itemType: "medicine",
+        itemName: line.med.name,
         medicineId: line.item.medicineId,
         batchId: line.batchId,
         quantity: line.allocate,
@@ -377,6 +386,23 @@ export class BillingService {
         sgstAmt: line.breakdown.sgst.toFixed(2),
         igstAmt: line.breakdown.igst.toFixed(2),
       }));
+
+      if (feeAmount.gt(0) && dto.consultationFee) {
+        itemsData.push({
+          itemType: "consultation",
+          itemName: `Doctor Consultation — ${dto.consultationFee.doctorName}`,
+          medicineId: null,
+          batchId: null,
+          quantity: 1,
+          unitPrice: feeAmount.toFixed(2),
+          discountPct: "0",
+          taxPct: "0",
+          lineTotal: feeAmount.toFixed(2),
+          cgstAmt: "0.00",
+          sgstAmt: "0.00",
+          igstAmt: "0.00",
+        });
+      }
 
       const { invoice, items: insertedItems } = await this.repo.createInvoiceWithItems(invoiceData, itemsData, tx);
 
@@ -462,6 +488,9 @@ export class BillingService {
       }
 
       for (const item of existing.data.items) {
+        // Consultation fee lines hold no stock — nothing to restock.
+        if (!item.batchId || !item.medicineId) continue;
+
         await tx
           .update(schema.inventoryBatches)
           .set({
@@ -551,8 +580,11 @@ export class BillingService {
     const refundMode = original.payments?.[0]?.mode ?? "cash";
 
     return this.drizzle.db.transaction(async (tx) => {
-      // Restock batches + log movements
+      // Restock batches + log movements. Consultation fee lines hold no stock,
+      // so their refund is reflected in the credit note total only.
       for (const line of returnLineData) {
+        if (!line.originalItem.batchId || !line.originalItem.medicineId) continue;
+
         await tx
           .update(schema.inventoryBatches)
           .set({
