@@ -8,8 +8,12 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { useToast } from "@/components/ui/toast";
 import {
   FileText, CheckCircle2, XCircle, Clock, AlertTriangle, Plus, Trash2, Search, Edit2,
-  UserPlus, Image as ImageIcon,
+  UserPlus, Image as ImageIcon, Printer,
 } from "lucide-react";
+import {
+  PrescriptionPrintModal,
+  toPrescriptionTemplateData,
+} from "./prescription-template";
 import { QuickPatientForm } from "@/components/modules/patients/quick-patient-form";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
@@ -792,6 +796,7 @@ export function PrescriptionsClient() {
   const [verifyingPrescription, setVerifyingPrescription] = useState<Prescription | null>(null);
   const [editingPrescription, setEditingPrescription] = useState<Prescription | null>(null);
   const [viewingScan, setViewingScan] = useState<Prescription | null>(null);
+  const [printingRx, setPrintingRx] = useState<Prescription | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [rejectionReason, setRejectionReason] = useState("");
   const [verifyError, setVerifyError] = useState("");
@@ -961,6 +966,13 @@ export function PrescriptionsClient() {
                     <td className="px-6 py-4">{statusBadge(rx.status)}</td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => setPrintingRx(rx)}
+                          className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-primary"
+                          title="Generate / print official prescription"
+                        >
+                          <Printer className="w-4 h-4" />
+                        </button>
                         {rx.status === "pending_verification" && canVerify && (
                           <button
                             onClick={() => handleOpenVerify(rx)}
@@ -1053,6 +1065,15 @@ export function PrescriptionsClient() {
         <EditPrescriptionModal
           prescription={editingPrescription}
           onClose={() => setEditingPrescription(null)}
+        />
+      )}
+
+      {/* Generate / print official prescription */}
+      {printingRx && (
+        <PrescriptionPrintModal
+          rx={toPrescriptionTemplateData(printingRx)}
+          open
+          onClose={() => setPrintingRx(null)}
         />
       )}
 
