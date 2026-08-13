@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Pill, User, FileText, ArrowRight, Loader2, Compass } from "lucide-react";
 import { apiClient } from "@/lib/api-client";
@@ -33,10 +34,15 @@ const ROUTE_KEYWORDS: Record<string, string[]> = {
 };
 
 export function GlobalSearchModal({ open, onClose }: Props) {
+  const [mounted, setMounted] = useState(false);
   const [query, setQuery] = useState("");
   const debouncedQuery = useDebounce(query, 250);
   const { navigate } = useNavigation();
   const { can } = usePermissions();
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const canSearchInvoices = can("billing.create") || can("reports.view");
   const canSearchMedicines = can("inventory.adjust") || can("billing.create") || can("prescriptions.view") || can("procurement.write");
@@ -98,7 +104,7 @@ export function GlobalSearchModal({ open, onClose }: Props) {
     enabled: open && debouncedQuery.trim().length >= 2 && canSearchInvoices,
   });
 
-  if (!open) return null;
+  if (!open || !mounted) return null;
 
   const medicines: any[] = (medicinesRes as any)?.data ?? [];
   const patients: any[] = (patientsRes as any)?.data ?? (patientsRes as any)?.data?.data ?? [];
@@ -107,8 +113,8 @@ export function GlobalSearchModal({ open, onClose }: Props) {
   const isLoading = loadingMeds || loadingPatients || loadingInvoices;
   const hasResults = navMatches.length > 0 || medicines.length > 0 || patients.length > 0 || invoices.length > 0;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 px-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-20 px-4 bg-slate-950/60 backdrop-blur-sm animate-fade-in">
       <div
         className="fixed inset-0"
         onClick={onClose}
@@ -311,7 +317,8 @@ export function GlobalSearchModal({ open, onClose }: Props) {
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 

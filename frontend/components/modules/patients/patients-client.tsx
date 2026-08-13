@@ -73,32 +73,72 @@ function PatientHistoryModal({ patient, onClose }: { patient: Patient | null; on
 
   const invoices: any[] = (invoicesRes as any)?.data ?? [];
 
+  // Calculate age if dateOfBirth is present
+  let ageDisplay = "N/A";
+  if (patient.dateOfBirth) {
+    const dob = new Date(patient.dateOfBirth);
+    const ageYears = Math.floor((Date.now() - dob.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+    if (!isNaN(ageYears) && ageYears >= 0) {
+      ageDisplay = `${ageYears} yrs (${format(dob, "dd MMM yyyy")})`;
+    }
+  }
+
   return (
     <Modal
       title={`Patient Profile — ${patient.name}`}
-      subtitle={`Phone: ${patient.phone} • Loyalty Points: ${patient.loyaltyPoints ?? 0}`}
+      subtitle={`Phone: ${patient.phone} • Member since ${patient.createdAt ? format(new Date(patient.createdAt), "MMM yyyy") : "N/A"}`}
       open={!!patient}
       onClose={onClose}
       size="lg"
     >
       <div className="p-6 space-y-6">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs">
-          <div>
-            <span className="text-slate-400 block font-semibold uppercase">Blood Group</span>
-            <span className="font-bold text-slate-800">{patient.bloodGroup ?? "N/A"}</span>
+        {/* Full Demographics Grid */}
+        <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-3">
+          <p className="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">Patient Demographics &amp; Contact</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 text-xs">
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Gender</span>
+              <span className="font-bold text-slate-900 capitalize">{patient.gender || "Not stated"}</span>
+            </div>
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Age / Date of Birth</span>
+              <span className="font-bold text-slate-900">{ageDisplay}</span>
+            </div>
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Blood Group</span>
+              <span className={`font-black ${patient.bloodGroup ? "text-rose-600" : "text-slate-700"}`}>{patient.bloodGroup || "N/A"}</span>
+            </div>
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Email</span>
+              <span className="font-semibold text-slate-800 truncate block" title={patient.email ?? ""}>{patient.email || "N/A"}</span>
+            </div>
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs sm:col-span-2">
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Address &amp; Location</span>
+              <span className="font-semibold text-slate-800 block truncate" title={patient.address ?? ""}>{patient.address || "N/A"}</span>
+            </div>
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">State</span>
+              <span className="font-semibold text-slate-800">{patient.state || "West Bengal"}</span>
+            </div>
+            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Loyalty Balance</span>
+              <span className="font-bold text-amber-700">{patient.loyaltyPoints ?? 0} pts</span>
+            </div>
           </div>
-          <div>
-            <span className="text-slate-400 block font-semibold uppercase">Gender</span>
-            <span className="font-bold text-slate-800 capitalize">{patient.gender ?? "N/A"}</span>
-          </div>
-          <div>
-            <span className="text-slate-400 block font-semibold uppercase">Loyalty Balance</span>
-            <span className="font-bold text-yellow-700">{patient.loyaltyPoints ?? 0} pts</span>
-          </div>
-          <div>
-            <span className="text-slate-400 block font-semibold uppercase">Outstanding</span>
-            <span className="font-bold text-slate-800">₹{parseFloat(patient.outstandingBalance ?? "0").toFixed(2)}</span>
-          </div>
+
+          {/* Allergies list */}
+          {patient.allergies && patient.allergies.length > 0 && (
+            <div className="pt-1 flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase text-rose-500">Known Allergies:</span>
+              <div className="flex flex-wrap gap-1">
+                {patient.allergies.map((alg, i) => (
+                  <span key={i} className="text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-md">
+                    {alg}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div>
