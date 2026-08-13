@@ -162,13 +162,19 @@ export class ClinicRepository {
       .orderBy(asc(schema.users.firstName));
   }
 
-  async updateDoctorProfile(id: string, payload: { branchId?: string | null; doctorProfile: Record<string, any> }) {
+  async updateDoctorProfile(id: string, payload: { branchId?: string | null; firstName?: string; lastName?: string; doctorProfile: Record<string, any> }) {
     const updateData: Record<string, any> = {
       doctorProfile: payload.doctorProfile,
       updatedAt: new Date(),
     };
     if (payload.branchId !== undefined) {
       updateData.branchId = payload.branchId;
+    }
+    if (payload.firstName !== undefined && payload.firstName !== null) {
+      updateData.firstName = payload.firstName;
+    }
+    if (payload.lastName !== undefined && payload.lastName !== null) {
+      updateData.lastName = payload.lastName;
     }
 
     const [user] = await this.db

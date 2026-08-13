@@ -6,7 +6,7 @@ import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
 import { useClinicTokens, useClinicToken, useUpdateClinicToken, useClinicDoctors } from "@/queries/clinic.queries";
-import { EditDoctorProfileModal } from "./clinic-queue";
+import { EditDoctorProfileModal, doctorName } from "./clinic-queue";
 import { localDateString } from "@/lib/date";
 import {
   formatClockTime,
@@ -352,12 +352,13 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
       expiry.setDate(expiry.getDate() + 30);
 
       const doc = token.doctor;
-      const doctorName = [doc?.firstName, doc?.lastName].filter(Boolean).join(" ") || doc?.email || "Doctor";
+      const formattedDocName = doctorName(doc);
+      const doctorNameStr = formattedDocName !== "--" ? formattedDocName : "Doctor";
 
       const rxRes: any = await apiClient.post("/prescriptions", {
         patientId: token.patient.id,
         branchId: doctorBranchId ?? token.doctor?.branchId ?? undefined,
-        doctorName,
+        doctorName: doctorNameStr,
         issuedDate: localDateString(today),
         expiryDate: localDateString(expiry),
         notes: notes.trim() || undefined,
@@ -371,7 +372,7 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
         sendViaWhatsApp({
           phone: patient.phone,
           patientName: patient.name,
-          doctorName,
+          doctorName: doctorNameStr,
           type: "prescription",
           id: prescriptionId,
         });
@@ -666,12 +667,13 @@ export function DoctorPanel() {
 
   const { data: doctorsRes } = useClinicDoctors();
   const doctors: any[] = (doctorsRes as any)?.data ?? [];
+  const uAny = user as any;
   const me = doctors.find((d) => d.id === user?.id || d.email === user?.email) ?? {
     id: user?.id ?? "",
-    firstName: (user as any)?.firstName,
-    lastName: (user as any)?.lastName,
+    firstName: uAny?.firstName,
+    lastName: uAny?.lastName,
     email: user?.email ?? "",
-    doctorProfile: (user as any)?.doctorProfile,
+    doctorProfile: uAny?.doctorProfile,
   };
 
   const dp = me.doctorProfile;
@@ -696,9 +698,7 @@ export function DoctorPanel() {
   const called = tokens.filter((t) => t.status === "called");
   const completed = tokens.filter((t) => t.status === "completed");
 
-  const uAny = user as any;
-  const docName = [uAny?.firstName, uAny?.lastName].filter(Boolean).join(" ");
-  const displayName = docName ? `Dr. ${docName}` : user?.email || "Doctor";
+  const displayName = doctorName({ ...me, firstName: me.firstName || uAny?.firstName, lastName: me.lastName || uAny?.lastName });
 
   return (
     <div className="flex flex-col h-full space-y-4">

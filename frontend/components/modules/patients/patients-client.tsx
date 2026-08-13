@@ -136,6 +136,7 @@ export function PatientsClient() {
   const { user } = useAuthStore();
   const { success: toastSuccess, error: toastError } = useToast();
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
+  const isDoctor = user?.role === "doctor";
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [historyTarget, setHistoryTarget] = useState<Patient | null>(null);
   const [search, setSearch] = useState("");
@@ -175,6 +176,7 @@ export function PatientsClient() {
     mutationFn: (data: object) => apiClient.post("/patients", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.patients.all() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.clinicTokens.all() });
       handleClose();
     },
     onError: (err: any) => {
@@ -269,8 +271,14 @@ export function PatientsClient() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-gray-900">Patients</h1>
-          <p className="text-muted-foreground mt-1">Manage registered patients and their records.</p>
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+            {isDoctor ? "My Served Patients" : "Patients"}
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {isDoctor
+              ? "Directory of patients assigned to your consultations and prescriptions."
+              : "Manage registered patients and their records."}
+          </p>
         </div>
         <button
           onClick={openCreate}
@@ -300,8 +308,14 @@ export function PatientsClient() {
       ) : patients.length === 0 ? (
         <div className="text-center py-16 text-muted-foreground">
           <UserPlus className="mx-auto mb-3 opacity-30" size={48} />
-          <p className="font-medium">No patients registered yet.</p>
-          <p className="text-sm mt-1">Click &quot;Register Patient&quot; to add the first patient.</p>
+          <p className="font-medium">
+            {isDoctor ? "No patients assigned to your consultations yet." : "No patients registered yet."}
+          </p>
+          <p className="text-sm mt-1">
+            {isDoctor
+              ? "Patients booked for your clinic queue or prescriptions will automatically appear here."
+              : "Click \"Register Patient\" to add the first patient."}
+          </p>
         </div>
       ) : (
         <div className="bg-card rounded-xl border shadow-sm overflow-hidden">

@@ -116,6 +116,23 @@ async function main() {
   const otherBranchRead = await req("GET", "/clinic/tokens/" + tokenId, { token: cash02.access });
   check("cross-branch token read blocked (403)", otherBranchRead.status === 403, otherBranchRead.status);
 
+  // ── Doctor Patient Directory Scoping ─────────────────────────────────────
+  console.log("\nDoctor Patient Directory Scoping");
+  const docAPatients = await req("GET", "/patients", { token: docA.access });
+  const docAPatientList = docAPatients.body?.data?.data ?? docAPatients.body?.data ?? [];
+  check("doctor A sees only assigned patient (p1)", Array.isArray(docAPatientList) && docAPatientList.length === 1 && docAPatientList[0].id === p1.id, docAPatientList.map((p) => p.id));
+
+  const docBPatients = await req("GET", "/patients", { token: docB.access });
+  const docBPatientList = docBPatients.body?.data?.data ?? docBPatients.body?.data ?? [];
+  check("doctor B sees no unassigned patients", Array.isArray(docBPatientList) && docBPatientList.length === 0, docBPatientList);
+
+  const docBForbiddenSingle = await req("GET", "/patients/" + p1.id, { token: docB.access });
+  check("doctor B blocked from reading unassigned patient (403)", docBForbiddenSingle.status === 403, docBForbiddenSingle.status);
+
+  const cashPatients = await req("GET", "/patients", { token: cash01.access });
+  const cashPatientList = cashPatients.body?.data?.data ?? cashPatients.body?.data ?? [];
+  check("cashier sees full patient directory (all patients)", Array.isArray(cashPatientList) && cashPatientList.length >= 2, cashPatientList.length);
+
   // ── C3: patient PII allowlist ────────────────────────────────────────────
   console.log("\nC3 - patient PII allowlist");
   const detail = await req("GET", "/clinic/tokens/" + tokenId, { token: docA.access });

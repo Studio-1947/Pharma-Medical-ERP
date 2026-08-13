@@ -10,6 +10,7 @@ import { Mail, Lock, User, Briefcase, AlertCircle, Loader2, Eye, EyeOff } from "
 
 const roles = [
   { label: "Admin", value: UserRole.ADMIN },
+  { label: "Doctor / OPD Consultant", value: UserRole.DOCTOR },
   { label: "Pharmacist", value: UserRole.PHARMACIST },
   { label: "Cashier", value: UserRole.CASHIER },
   { label: "Inventory Manager", value: UserRole.INVENTORY_MANAGER },

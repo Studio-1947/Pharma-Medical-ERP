@@ -178,7 +178,7 @@ export class ClinicService {
     if (user.role === "doctor" && user.sub !== id) {
       throw new ForbiddenException("You can only update your own doctor profile");
     }
-    const { branchId, doctorProfile, ...rest } = body;
+    const { branchId, firstName, lastName, doctorProfile, ...rest } = body;
     const profilePayload = doctorProfile ?? rest;
 
     // Doctors cannot change their own assigned branch; only Super Admins and Admins can assign doctors to branches.
@@ -189,6 +189,8 @@ export class ClinicService {
 
     const updated = await this.repo.updateDoctorProfile(id, {
       branchId: effectiveBranchId,
+      firstName: firstName?.trim() || undefined,
+      lastName: lastName?.trim() || undefined,
       doctorProfile: profilePayload,
     });
     if (!updated) throw new NotFoundException(`Doctor ${id} not found`);

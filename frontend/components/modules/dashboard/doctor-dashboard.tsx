@@ -5,7 +5,7 @@ import { useAuthStore } from "@/stores/auth.store";
 import { useClinicTokens, useClinicDoctors } from "@/queries/clinic.queries";
 import { useNavigation } from "@/lib/navigation-context";
 import { localDateString } from "@/lib/date";
-import { EditDoctorProfileModal } from "@/components/modules/clinic/clinic-queue";
+import { EditDoctorProfileModal, doctorName } from "@/components/modules/clinic/clinic-queue";
 import {
   Stethoscope, Clock, PhoneCall, CheckCircle2, Users, FileText, ArrowRight, Edit, MapPin, DollarSign,
 } from "lucide-react";
@@ -62,12 +62,13 @@ export function DoctorDashboard() {
 
   const { data: doctorsRes } = useClinicDoctors();
   const doctors: any[] = (doctorsRes as any)?.data ?? [];
+  const uAny = user as any;
   const me = doctors.find((d) => d.id === user?.id || d.email === user?.email) ?? {
     id: user?.id ?? "",
-    firstName: (user as any)?.firstName,
-    lastName: (user as any)?.lastName,
+    firstName: uAny?.firstName,
+    lastName: uAny?.lastName,
     email: user?.email ?? "",
-    doctorProfile: (user as any)?.doctorProfile,
+    doctorProfile: uAny?.doctorProfile,
   };
 
   const dp = me.doctorProfile;
@@ -80,9 +81,7 @@ export function DoctorDashboard() {
     { days: "Saturday", slots: "09:00 AM - 02:00 PM" },
   ];
 
-  const uAny = user as any;
-  const docName = [uAny?.firstName, uAny?.lastName].filter(Boolean).join(" ");
-  const displayName = docName ? `Dr. ${docName}` : user?.email || "Doctor";
+  const displayName = doctorName({ ...me, firstName: me.firstName || uAny?.firstName, lastName: me.lastName || uAny?.lastName });
 
   const { data: tokensRes, isLoading } = useClinicTokens(
     { date: today, doctorId: user?.id, limit: 100 },

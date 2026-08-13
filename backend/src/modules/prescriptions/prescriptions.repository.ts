@@ -86,9 +86,14 @@ export class PrescriptionsRepository {
       where: eq(schema.users.id, id),
     });
     if (!user) return null;
-    return (
-      [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email
-    );
+    const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
+    if (name) return name.startsWith("Dr.") ? name : `Dr. ${name}`;
+    if (user.email) {
+      const rawName = (user.email.split("@")[0] ?? "doctor").replace(/[^a-zA-Z0-9]/g, " ").trim();
+      const cap = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : "Doctor";
+      return `Dr. ${cap}`;
+    }
+    return "Dr. Doctor";
   }
 
   async create(

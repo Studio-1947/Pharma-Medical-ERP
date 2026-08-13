@@ -73,6 +73,7 @@ export class AuthService {
       lastName: dto.lastName,
       role: requestedRole,
       branchId: targetBranchId,
+      doctorProfile: (dto as any).doctorProfile,
     });
 
     this.logger.log(`User ${caller.email} created account for: ${user!.email} (${requestedRole})`);
