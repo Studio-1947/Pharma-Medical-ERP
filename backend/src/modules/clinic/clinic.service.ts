@@ -2,11 +2,13 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  Optional,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { ClinicRepository } from "./clinic.repository";
 import type { CreateClinicTokenDto, QueryClinicTokenDto, UpdateClinicTokenDto } from "@pharmerp/types";
 import type { JwtPayload } from "../../common/decorators/current-user.decorator";
+import { NotificationsService } from "../notifications/notifications.service";
 
 const TERMINAL_STATUSES = new Set(["completed", "cancelled"]);
 
@@ -31,7 +33,10 @@ function resolveDoctorScope(user: JwtPayload, requestedDoctorId?: string): strin
 
 @Injectable()
 export class ClinicService {
-  constructor(private readonly repo: ClinicRepository) {}
+  constructor(
+    private readonly repo: ClinicRepository,
+    @Optional() private readonly notificationsService?: NotificationsService,
+  ) {}
 
   /**
    * Rejects a token that belongs to another branch.
@@ -116,6 +121,28 @@ export class ClinicService {
     }
 
     const token = await this.repo.create({ ...dto, branchId });
+
+    if (this.notificationsService) {
+      // Notify assigned doctor
+      await this.notificationsService.create({
+        userId: dto.doctorId,
+        type: "system",
+        title: "New Patient OPD Token",
+        message: `Token #${token.tokenNo} assigned for patient ${patient.name}${dto.timeSlot ? ` at ${dto.timeSlot}` : ""}.`,
+        resourceType: "clinic_token",
+        resourceId: token.id,
+      });
+
+      // Broadcast for branch OPD handlers
+      await this.notificationsService.create({
+        type: "system",
+        title: "OPD Token Generated",
+        message: `Token #${token.tokenNo} issued for ${patient.name}.`,
+        resourceType: "clinic_token",
+        resourceId: token.id,
+      });
+    }
+
     return { data: token, message: "Token generated" };
   }
 
@@ -167,6 +194,27 @@ export class ClinicService {
     }
 
     const updated = await this.repo.update(id, { ...dto, ...timestamps });
+
+    if (this.notificationsService && dto.status && dto.status !== existing.status) {
+      const statusLabels: Record<string, string> = {
+        called: "Patient Called into Consultation",
+        in_consultation: "Consultation In Progress",
+        completed: "Consultation Completed",
+        cancelled: "OPD Token Cancelled",
+      };
+      const title = statusLabels[dto.status] ?? `OPD Status Updated: ${dto.status}`;
+
+      // Target doctor
+      await this.notificationsService.create({
+        userId: existing.doctorId,
+        type: "system",
+        title,
+        message: `Token #${existing.tokenNo} status updated to '${dto.status}'.`,
+        resourceType: "clinic_token",
+        resourceId: id,
+      });
+    }
+
     return { data: updated, message: "Token updated" };
   }
 

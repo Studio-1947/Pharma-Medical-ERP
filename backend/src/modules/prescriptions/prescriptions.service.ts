@@ -1,6 +1,7 @@
-import { Injectable, Logger, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import { Injectable, Logger, NotFoundException, Optional, UnprocessableEntityException } from "@nestjs/common";
 import { PrescriptionsRepository } from "./prescriptions.repository";
 import { S3Service } from "../../common/s3/s3.service";
+import { NotificationsService } from "../notifications/notifications.service";
 import type { CreatePrescriptionDto, UpdatePrescriptionDto, QueryPrescriptionDto, VerifyPrescriptionDto } from "@pharmerp/types";
 
 @Injectable()
@@ -10,6 +11,7 @@ export class PrescriptionsService {
   constructor(
     private readonly repo: PrescriptionsRepository,
     private readonly s3Service: S3Service,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
   findAll(query: QueryPrescriptionDto) {
@@ -63,6 +65,17 @@ export class PrescriptionsService {
       autoVerify,
       verifiedBy: autoVerify ? currentUser?.sub : undefined,
     });
+
+    if (this.notificationsService) {
+      await this.notificationsService.create({
+        type: "prescription",
+        title: autoVerify ? "Prescription Created & Auto-Verified" : "New Prescription Pending Verification",
+        message: `Prescription #${prescription.id.slice(0, 8)} created for patient.`,
+        resourceType: "prescription",
+        resourceId: prescription.id,
+      });
+    }
+
     return { data: prescription, message: "Prescription created" };
   }
 
@@ -97,6 +110,18 @@ export class PrescriptionsService {
     }
 
     const updated = await this.repo.verify(id, dto, userId);
+
+    if (this.notificationsService) {
+      const isVerified = dto.action === "verify";
+      await this.notificationsService.create({
+        type: "prescription",
+        title: isVerified ? "Prescription Verified" : "Prescription Rejected",
+        message: `Prescription #${id.slice(0, 8)} has been ${isVerified ? "verified by pharmacist" : "rejected"}.`,
+        resourceType: "prescription",
+        resourceId: id,
+      });
+    }
+
     return { data: updated, message: dto.action === "verify" ? "Prescription verified" : "Prescription rejected" };
   }
 
