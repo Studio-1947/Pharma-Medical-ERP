@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, UnprocessableEntityException } from "@nestjs/common";
+import { Injectable, NotFoundException, Optional, UnprocessableEntityException } from "@nestjs/common";
 import { and, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import Decimal from "decimal.js";
 import { DrizzleService } from "../../database/drizzle.service";
@@ -12,6 +12,7 @@ import { ClickHouseService } from "../../common/clickhouse/clickhouse.service";
 import { InvoicePdfService } from "./invoice-pdf.service";
 import { AuditService } from "../../common/audit/audit.service";
 import { AuditAction } from "../../common/audit/audit-actions";
+import { NotificationsService } from "../notifications/notifications.service";
 import * as schema from "../../database/schema";
 import type {
   CreateInvoiceDto,
@@ -68,6 +69,7 @@ export class BillingService {
     private readonly clickhouse: ClickHouseService,
     private readonly pdfService: InvoicePdfService,
     private readonly audit?: AuditService,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
   findAll(query: QueryInvoiceDto) { return this.repo.findPaginated(query); }
@@ -430,6 +432,16 @@ export class BillingService {
       createdAt: now,
     }));
     this.clickhouse.insertSaleEvents(saleEvents); // intentionally not awaited
+
+    if (this.notificationsService) {
+      await this.notificationsService.create({
+        type: "invoice",
+        title: `Sales Invoice Issued (${result.invoice.invoiceNo})`,
+        message: `Invoice #${result.invoice.invoiceNo} issued for ₹${result.invoice.totalAmount}.`,
+        resourceType: "invoice",
+        resourceId: result.invoice.id,
+      });
+    }
 
     return { invoice: result.invoice, items: result.items };
   }

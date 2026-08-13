@@ -1,9 +1,10 @@
 import { Process, Processor } from "@nestjs/bull";
-import { Logger } from "@nestjs/common";
+import { Logger, Optional } from "@nestjs/common";
 import { Job } from "bull";
 import { BatchRepository } from "../batch.repository";
 import { StockMovementRepository } from "../stock-movement.repository";
 import { AlertsRepository } from "../alerts.repository";
+import { NotificationsService } from "../../notifications/notifications.service";
 
 export const EXPIRY_SCAN_QUEUE = "expiry-scan";
 
@@ -15,6 +16,7 @@ export class ExpiryScanProcessor {
     private readonly batchRepo: BatchRepository,
     private readonly movementRepo: StockMovementRepository,
     private readonly alertsRepo: AlertsRepository,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
   /**
@@ -70,6 +72,32 @@ export class ExpiryScanProcessor {
           message: `Batch ${b.batchNo} expires on ${b.expiryDate} (${b.quantity} units) — within 90 days.`,
         })),
     ]);
+
+    // Create user notifications for expired batches
+    if (this.notificationsService) {
+      for (const b of expired) {
+        const full = await this.batchRepo.findBatchById(b.id);
+        if (full) {
+          await this.notificationsService.create({
+            type: "expired",
+            title: "Batch Expired & Written Off",
+            message: `Batch ${full.batchNo} has expired (${full.quantity} units auto written-off).`,
+            resourceType: "batch",
+            resourceId: full.id,
+          });
+        }
+      }
+
+      for (const b of critical) {
+        await this.notificationsService.create({
+          type: "near_expiry",
+          title: "Batch Expiry Warning (< 30 Days)",
+          message: `Batch ${b.batchNo} expires on ${b.expiryDate} (${b.quantity} units remaining).`,
+          resourceType: "batch",
+          resourceId: b.id,
+        });
+      }
+    }
 
     this.logger.log(
       `Expiry: ${critical.length} critical, ${warning.length - critical.length} warning, ${raised} new alerts raised`,

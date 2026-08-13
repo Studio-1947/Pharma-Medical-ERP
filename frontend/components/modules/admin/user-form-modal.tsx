@@ -12,6 +12,7 @@ import {
   extractError,
 } from "@/queries/admin.queries";
 import { ROLE_OPTIONS, roleLabel } from "./role-meta";
+import { OpdScheduleBuilder } from "./opd-schedule-builder";
 
 const inputCls = (hasError = false) =>
   [
@@ -394,30 +395,12 @@ export function UserFormModal({ open, onClose, user }: Props) {
               </div>
             </div>
 
-            <div className="space-y-2 pt-1 border-t border-emerald-200/60">
-              <label className="text-[11px] font-bold text-slate-700 uppercase tracking-wider">
-                Weekly OPD Timings & Schedule
-              </label>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                <div>
-                  <span className="text-[10px] text-slate-500 font-semibold">Slot 1 Days</span>
-                  <input type="text" placeholder="Mon - Fri" className={inputCls()} {...field("slot1Days")} />
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 font-semibold">Slot 1 Hours</span>
-                  <input type="text" placeholder="09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM" className={inputCls()} {...field("slot1Hours")} />
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 font-semibold">Slot 2 Days (Optional)</span>
-                  <input type="text" placeholder="Saturday" className={inputCls()} {...field("slot2Days")} />
-                </div>
-                <div>
-                  <span className="text-[10px] text-slate-500 font-semibold">Slot 2 Hours (Optional)</span>
-                  <input type="text" placeholder="09:00 AM - 02:00 PM" className={inputCls()} {...field("slot2Hours")} />
-                </div>
-              </div>
-            </div>
+            <OpdScheduleBuilder
+              slot1={{ days: form.slot1Days, hours: form.slot1Hours }}
+              slot2={{ days: form.slot2Days, hours: form.slot2Hours }}
+              onChangeSlot1={(s) => setForm((f) => ({ ...f, slot1Days: s.days, slot1Hours: s.hours }))}
+              onChangeSlot2={(s) => setForm((f) => ({ ...f, slot2Days: s.days, slot2Hours: s.hours }))}
+            />
           </div>
         )}
 

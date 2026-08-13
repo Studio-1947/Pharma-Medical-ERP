@@ -18,12 +18,12 @@ import { PrescriptionScanUpload } from "@/components/modules/prescriptions/presc
 import { MedicineAutocomplete, type MedicineOption } from "@/components/modules/prescriptions/medicine-autocomplete";
 import { PrescriptionDetailModal } from "@/components/modules/prescriptions/prescription-detail-modal";
 import { InvoiceDetailModal } from "@/components/modules/billing/invoice-detail-modal";
-import { sendViaWhatsApp } from "@/lib/patient-messaging";
 import {
   Stethoscope, Clock, PhoneCall, CheckCircle2, User, AlertTriangle,
   Plus, Trash2, Upload, FileText, History, ChevronRight, Edit, MapPin, DollarSign,
   Image as ImageIcon, Search, Filter, Receipt, ChevronLeft, Pill, X,
 } from "lucide-react";
+
 import { format } from "date-fns";
 
 interface RxItem {
@@ -444,19 +444,9 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
       });
       const prescriptionId = rxRes?.data?.id ?? rxRes?.data?.data?.id;
 
-      if (prescriptionId && patient?.phone) {
-        sendViaWhatsApp({
-          phone: patient.phone,
-          patientName: patient.name,
-          doctorName: doctorNameStr,
-          type: "prescription",
-          id: prescriptionId,
-        });
-      }
-
       await updateMutation.mutateAsync({ status: "completed", prescriptionId });
       qc.invalidateQueries({ queryKey: queryKeys.clinicTokens.all() });
-      toastSuccess("Consultation completed", "Prescription created & dispatched via WhatsApp.");
+      toastSuccess("Consultation completed", "Prescription saved — ready for collection at the pharmacy counter.");
       onCompleted();
     } catch (err: any) {
       const message = err?.response?.data?.message ?? "Failed to complete consultation.";
@@ -938,7 +928,7 @@ export function DoctorPanel() {
       <div className="bg-gradient-to-r from-slate-900 via-teal-950 to-slate-900 p-5 rounded-2xl text-white shadow-lg border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-start gap-3.5">
           <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center justify-center font-black text-lg shrink-0">
-            {displayName.replace("Dr. ", "").slice(0, 2).toUpperCase()}
+            {displayName.replace(/^Dr\.?\s*/i, "").slice(0, 2).toUpperCase()}
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">

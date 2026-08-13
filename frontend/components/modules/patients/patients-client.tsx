@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
-import { UserPlus, Search, Edit2, Trash2, Phone, Calendar, Star, Eye } from "lucide-react";
+import { UserPlus, Search, Edit2, Trash2, Phone, Calendar, Star, Eye, FileText, ClipboardList, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
@@ -62,16 +62,54 @@ const inputCls =
 
 const labelCls = "block text-xs font-semibold text-slate-600 mb-1";
 
+function PrescriptionStatusBadge({ status }: { status: string }) {
+  if (status === "verified")
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+        <CheckCircle2 size={10} /> Verified
+      </span>
+    );
+  if (status === "rejected")
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
+        <XCircle size={10} /> Rejected
+      </span>
+    );
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+      <AlertTriangle size={10} /> Pending
+    </span>
+  );
+}
+
 function PatientHistoryModal({ patient, onClose }: { patient: Patient | null; onClose: () => void }) {
+  const [activeTab, setActiveTab] = useState<"prescriptions" | "billing">("prescriptions");
+
+  // Reset to prescriptions tab whenever a new patient is selected
+  useEffect(() => { setActiveTab("prescriptions"); }, [patient?.id]);
+
   const { data: invoicesRes, isLoading: loadingInvoices } = useQuery({
     queryKey: ["patient-invoices", patient?.id],
-    queryFn: () => apiClient.get("/billing/invoices", { params: { patientId: patient!.id, limit: 10 } }),
+    queryFn: () => apiClient.get("/billing/invoices", { params: { patientId: patient!.id, limit: 20 } }),
+    enabled: !!patient,
+  });
+
+  const { data: rxRes, isLoading: loadingRx } = useQuery({
+    queryKey: queryKeys.prescriptions.list({ patientId: patient?.id ?? "", limit: 20 }),
+    queryFn: () => apiClient.get("/prescriptions", { params: { patientId: patient!.id, limit: 20 } }) as Promise<any>,
     enabled: !!patient,
   });
 
   if (!patient) return null;
 
   const invoices: any[] = (invoicesRes as any)?.data ?? [];
+  const prescriptions: any[] = (() => {
+    const d = rxRes as any;
+    if (Array.isArray(d)) return d;
+    if (Array.isArray(d?.data)) return d.data;
+    if (Array.isArray(d?.data?.data)) return d.data.data;
+    return [];
+  })();
 
   // Calculate age if dateOfBirth is present
   let ageDisplay = "N/A";
@@ -91,89 +129,374 @@ function PatientHistoryModal({ patient, onClose }: { patient: Patient | null; on
       onClose={onClose}
       size="lg"
     >
-      <div className="p-6 space-y-6">
-        {/* Full Demographics Grid */}
-        <div className="bg-slate-50/80 p-4 rounded-2xl border border-slate-200/80 space-y-3">
-          <p className="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">Patient Demographics &amp; Contact</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 text-xs">
+      {/* NOTE: Modal already provides overflow-y-auto flex-col — no wrapper div needed */}
+      <div className="-mx-5 sm:-mx-6 flex flex-col">
+        {/* Demographics */}
+        <div className="px-6 pt-5 pb-4 bg-slate-50/80 border-b border-slate-200">
+          <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2.5">Patient Demographics &amp; Contact</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 text-xs">
             <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
               <span className="text-slate-400 block font-semibold text-[10px] uppercase">Gender</span>
               <span className="font-bold text-slate-900 capitalize">{patient.gender || "Not stated"}</span>
             </div>
             <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
-              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Age / Date of Birth</span>
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Age / DOB</span>
               <span className="font-bold text-slate-900">{ageDisplay}</span>
             </div>
             <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
               <span className="text-slate-400 block font-semibold text-[10px] uppercase">Blood Group</span>
-              <span className={`font-black ${patient.bloodGroup ? "text-rose-600" : "text-slate-700"}`}>{patient.bloodGroup || "N/A"}</span>
+              <span className={`font-black text-sm ${patient.bloodGroup ? "text-rose-600" : "text-slate-400"}`}>{patient.bloodGroup || "—"}</span>
             </div>
             <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
-              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Email</span>
-              <span className="font-semibold text-slate-800 truncate block" title={patient.email ?? ""}>{patient.email || "N/A"}</span>
-            </div>
-            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs sm:col-span-2">
-              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Address &amp; Location</span>
-              <span className="font-semibold text-slate-800 block truncate" title={patient.address ?? ""}>{patient.address || "N/A"}</span>
-            </div>
-            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
-              <span className="text-slate-400 block font-semibold text-[10px] uppercase">State</span>
-              <span className="font-semibold text-slate-800">{patient.state || "West Bengal"}</span>
-            </div>
-            <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs">
-              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Loyalty Balance</span>
+              <span className="text-slate-400 block font-semibold text-[10px] uppercase">Loyalty</span>
               <span className="font-bold text-amber-700">{patient.loyaltyPoints ?? 0} pts</span>
             </div>
+            {patient.address && (
+              <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs col-span-2 sm:col-span-3 md:col-span-4">
+                <span className="text-slate-400 block font-semibold text-[10px] uppercase">Address</span>
+                <span className="font-semibold text-slate-800 truncate block">{patient.address}</span>
+              </div>
+            )}
           </div>
-
-          {/* Allergies list */}
           {patient.allergies && patient.allergies.length > 0 && (
-            <div className="pt-1 flex items-center gap-2">
+            <div className="mt-2 flex items-center gap-2">
               <span className="text-[10px] font-bold uppercase text-rose-500">Known Allergies:</span>
               <div className="flex flex-wrap gap-1">
                 {patient.allergies.map((alg, i) => (
-                  <span key={i} className="text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-md">
-                    {alg}
-                  </span>
+                  <span key={i} className="text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-md">{alg}</span>
                 ))}
               </div>
             </div>
           )}
         </div>
 
-        <div>
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Dispensing & Billing History</h4>
-          {loadingInvoices ? (
-            <p className="text-xs text-slate-400 py-4 text-center">Loading sales history...</p>
-          ) : invoices.length === 0 ? (
-            <p className="text-xs text-slate-400 py-4 text-center">No dispensing history for this patient.</p>
-          ) : (
-            <div className="border rounded-xl overflow-hidden max-h-48 overflow-y-auto">
-              <table className="w-full text-xs">
-                <thead className="bg-slate-50 text-slate-500 font-semibold border-b">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Invoice #</th>
-                    <th className="px-3 py-2 text-left">Date</th>
-                    <th className="px-3 py-2 text-right">Amount</th>
-                    <th className="px-3 py-2 text-center">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {invoices.map((inv: any) => (
-                    <tr key={inv.id} className="hover:bg-slate-50">
-                      <td className="px-3 py-2 font-mono font-semibold text-emerald-600">{inv.invoiceNo}</td>
-                      <td className="px-3 py-2 text-slate-600">{inv.createdAt ? format(new Date(inv.createdAt), "dd MMM yyyy") : "--"}</td>
-                      <td className="px-3 py-2 text-right font-bold text-slate-800">₹{parseFloat(inv.totalAmount).toFixed(2)}</td>
-                      <td className="px-3 py-2 text-center capitalize">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${inv.status === "paid" || inv.status === "confirmed" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
-                          {inv.status}
-                        </span>
-                      </td>
+        {/* Tab Bar */}
+        <div className="flex items-center gap-1 px-6 pt-3 border-b border-slate-200 bg-white">
+          <button
+            type="button"
+            onClick={() => setActiveTab("prescriptions")}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold border-b-2 transition-colors ${
+              activeTab === "prescriptions"
+                ? "border-emerald-600 text-emerald-700"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <FileText size={13} />
+            Prescriptions
+            {prescriptions.length > 0 && (
+              <span className="ml-1 bg-emerald-100 text-emerald-800 text-[10px] font-black px-1.5 py-0.5 rounded-full">
+                {prescriptions.length}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("billing")}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold border-b-2 transition-colors ${
+              activeTab === "billing"
+                ? "border-emerald-600 text-emerald-700"
+                : "border-transparent text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            <ClipboardList size={13} />
+            Dispensing History
+            {invoices.length > 0 && (
+              <span className="ml-1 bg-slate-100 text-slate-700 text-[10px] font-black px-1.5 py-0.5 rounded-full">
+                {invoices.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Tab Body */}
+        <div className="px-6 py-4">
+
+          {/* ── PRESCRIPTIONS TAB ── */}
+          {activeTab === "prescriptions" && (
+            loadingRx ? (
+              <div className="space-y-2 py-4">
+                {[1,2,3].map(i => <div key={i} className="h-14 rounded-xl bg-slate-100 animate-pulse" />)}
+              </div>
+            ) : prescriptions.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">
+                <FileText className="mx-auto mb-3 opacity-30" size={40} />
+                <p className="font-semibold text-sm">No prescriptions found for this patient.</p>
+                <p className="text-xs mt-1">Prescriptions written by doctors will appear here once created.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {prescriptions.map((rx: any) => {
+                  const items: any[] = rx.items ?? rx.medicines ?? [];
+                  // isControlled can come from the Rx header OR from any joined medicine
+                  const isControlled = rx.isControlled || items.some(
+                    (it: any) => it.isControlled || it.medicine?.isControlled ||
+                                 it.medicine?.scheduleClass || it.scheduleClass
+                  );
+                  return (
+                    <div
+                      key={rx.id}
+                      className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs"
+                    >
+                      {/* Rx Header */}
+                      <div className="flex items-start justify-between px-4 py-3 bg-slate-50 border-b border-slate-100">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-black font-mono text-slate-700">
+                              Rx #{rx.id?.slice(0, 8).toUpperCase()}
+                            </span>
+                            <PrescriptionStatusBadge status={rx.status} />
+                            {isControlled && (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-200">
+                                <AlertTriangle size={9} /> Controlled
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-slate-500">
+                            <span className="font-semibold text-slate-700">Dr. {rx.doctorName || "Unknown"}</span>
+                            {rx.hospitalName && <> &bull; {rx.hospitalName}</>}
+                          </p>
+                        </div>
+                        <div className="text-right text-[11px] text-slate-500 shrink-0 ml-3">
+                          <div>
+                            <span className="font-semibold text-slate-700">Issued:</span>{" "}
+                            {rx.issuedDate ? format(new Date(rx.issuedDate), "dd MMM yyyy") : rx.createdAt ? format(new Date(rx.createdAt), "dd MMM yyyy") : "—"}
+                          </div>
+                          {rx.expiryDate && (
+                            <div className="text-rose-600 font-semibold">
+                              Expires: {format(new Date(rx.expiryDate), "dd MMM yyyy")}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Rx Medicines List */}
+                      {items.length > 0 && (
+                        <div className="px-4 py-3 space-y-2.5">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            Prescribed Medicines ({items.length})
+                          </p>
+                          {items.map((it: any, idx: number) => {
+                            // The backend joins `medicine` object onto each item
+                            const med = it.medicine ?? {};
+                            const displayName = it.medicineName || med.name || `Medicine ${idx + 1}`;
+                            const brandName   = med.brandName || null;
+                            const generic     = med.genericName || med.composition || null;
+                            const strength    = med.strength || null;
+                            const dosageForm  = med.dosageForm || null;
+                            const packSize    = med.packSize || null;
+                            const sku         = med.sku || null;
+                            const hsnCode     = med.hsnCode || null;
+                            const manufacturer = med.manufacturer || null;
+                            const therapeuticClass = med.therapeuticClass || null;
+                            const scheduleClass = it.scheduleClass || med.scheduleClass || null;
+                            const isControlled = it.isControlled || med.isControlled || false;
+                            const requiresPrescription = med.requiresPrescription || false;
+                            const mrp         = med.priceMrp ? `₹${parseFloat(med.priceMrp).toFixed(2)}` : null;
+                            const taxPct      = med.taxPercent ? `${parseFloat(med.taxPercent)}%` : null;
+                            const qtyPrescribed  = it.quantityPrescribed ?? null;
+                            const qtyDispensed   = it.quantityDispensed ?? 0;
+                            const isFullyDispensed = it.isFullyDispensed ?? false;
+
+                            return (
+                              <div key={idx} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                                {/* Medicine Header */}
+                                <div className="flex items-start justify-between px-3.5 py-2.5 bg-emerald-50/60 border-b border-slate-200/80">
+                                  <div className="flex items-start gap-2.5 min-w-0">
+                                    <span className="w-6 h-6 rounded-full bg-emerald-600 text-white text-[11px] font-black flex items-center justify-center shrink-0 mt-0.5">
+                                      {idx + 1}
+                                    </span>
+                                    <div className="min-w-0">
+                                      <p className="font-black text-slate-900 text-sm leading-tight">
+                                        {displayName}
+                                      </p>
+                                      {brandName && brandName !== displayName && (
+                                        <p className="text-[11px] font-semibold text-emerald-700">
+                                          Brand: {brandName}
+                                        </p>
+                                      )}
+                                      {generic && (
+                                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                                          {generic}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {/* Badges */}
+                                  <div className="flex flex-wrap gap-1 justify-end shrink-0 ml-2">
+                                    {scheduleClass && (
+                                      <span className="text-[10px] font-black text-orange-700 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded">
+                                        {scheduleClass}
+                                      </span>
+                                    )}
+                                    {isControlled && (
+                                      <span className="text-[10px] font-black text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
+                                        Controlled
+                                      </span>
+                                    )}
+                                    {requiresPrescription && !isControlled && (
+                                      <span className="text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded">
+                                        Rx
+                                      </span>
+                                    )}
+                                    {isFullyDispensed && (
+                                      <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                        ✓ Dispensed
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Medicine Details Grid */}
+                                <div className="px-3.5 py-2.5 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 text-[11px]">
+                                  {/* Formulation */}
+                                  {(strength || dosageForm) && (
+                                    <div>
+                                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Strength / Form</span>
+                                      <span className="text-slate-800 font-semibold">
+                                        {[strength, dosageForm].filter(Boolean).join(" · ")}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {packSize && (
+                                    <div>
+                                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Pack Size</span>
+                                      <span className="text-slate-800 font-semibold">{packSize}</span>
+                                    </div>
+                                  )}
+                                  {hsnCode && (
+                                    <div>
+                                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">HSN Code</span>
+                                      <span className="text-slate-800 font-mono font-bold text-xs">{hsnCode}</span>
+                                    </div>
+                                  )}
+                                  {sku && (
+                                    <div>
+                                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">SKU</span>
+                                      <span className="text-slate-700 font-mono">{sku}</span>
+                                    </div>
+                                  )}
+                                  {manufacturer && (
+                                    <div className="col-span-2">
+                                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Manufacturer</span>
+                                      <span className="text-slate-800 font-semibold">{manufacturer}</span>
+                                    </div>
+                                  )}
+                                  {therapeuticClass && (
+                                    <div className="col-span-2">
+                                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Therapeutic Class</span>
+                                      <span className="text-slate-700">{therapeuticClass}</span>
+                                    </div>
+                                  )}
+                                  {(mrp || taxPct) && (
+                                    <div>
+                                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">MRP / GST</span>
+                                      <span className="text-slate-800 font-semibold">
+                                        {mrp ?? "—"}{taxPct ? ` (GST ${taxPct})` : ""}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Prescription Instructions Row — only render if at least one field is set */}
+                                {(it.dosage || it.frequency || it.duration || qtyPrescribed != null) && (
+                                  <div className="px-3.5 py-2.5 border-t border-dashed border-slate-200 bg-slate-50/60 flex flex-wrap gap-x-5 gap-y-1.5 text-[11px]">
+                                    {it.dosage && (
+                                      <div>
+                                        <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Dosage</span>
+                                        <span className="text-slate-800 font-semibold">{it.dosage}</span>
+                                      </div>
+                                    )}
+                                    {it.frequency && (
+                                      <div>
+                                        <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Frequency</span>
+                                        <span className="text-slate-800 font-semibold">{it.frequency}</span>
+                                      </div>
+                                    )}
+                                    {it.duration && (
+                                      <div>
+                                        <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Duration</span>
+                                        <span className="text-slate-800 font-semibold">{it.duration}</span>
+                                      </div>
+                                    )}
+                                    {qtyPrescribed != null && (
+                                      <div>
+                                        <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Qty Prescribed</span>
+                                        <span className="text-slate-800 font-semibold">
+                                          {qtyPrescribed}
+                                          {qtyDispensed > 0 && (
+                                            <span className={`ml-1 font-bold ${isFullyDispensed ? "text-emerald-600" : "text-amber-600"}`}>
+                                              ({qtyDispensed} dispensed)
+                                            </span>
+                                          )}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+
+                      {/* Notes if any */}
+                      {rx.notes && (
+                        <div className="px-4 pb-2.5">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-0.5">Doctor Notes</p>
+                          <p className="text-xs text-slate-600 italic">{rx.notes}</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )
+          )}
+
+          {/* ── BILLING / DISPENSING HISTORY TAB ── */}
+          {activeTab === "billing" && (
+            loadingInvoices ? (
+              <div className="space-y-2 py-4">
+                {[1,2,3].map(i => <div key={i} className="h-12 rounded-xl bg-slate-100 animate-pulse" />)}
+              </div>
+            ) : invoices.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">
+                <ClipboardList className="mx-auto mb-3 opacity-30" size={40} />
+                <p className="font-semibold text-sm">No dispensing history for this patient.</p>
+              </div>
+            ) : (
+              <div className="border rounded-xl overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead className="bg-slate-50 text-slate-500 font-semibold border-b">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Invoice #</th>
+                      <th className="px-3 py-2 text-left">Date</th>
+                      <th className="px-3 py-2 text-right">Amount</th>
+                      <th className="px-3 py-2 text-center">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody className="divide-y">
+                    {invoices.map((inv: any) => (
+                      <tr key={inv.id} className="hover:bg-slate-50">
+                        <td className="px-3 py-2 font-mono font-semibold text-emerald-600">{inv.invoiceNo}</td>
+                        <td className="px-3 py-2 text-slate-600">{inv.createdAt ? format(new Date(inv.createdAt), "dd MMM yyyy") : "--"}</td>
+                        <td className="px-3 py-2 text-right font-bold text-slate-800">₹{parseFloat(inv.totalAmount ?? 0).toFixed(2)}</td>
+                        <td className="px-3 py-2 text-center">
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                            inv.status === "paid" || inv.status === "confirmed"
+                              ? "bg-green-100 text-green-700"
+                              : "bg-amber-100 text-amber-700"
+                          }`}>
+                            {inv.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
           )}
         </div>
       </div>

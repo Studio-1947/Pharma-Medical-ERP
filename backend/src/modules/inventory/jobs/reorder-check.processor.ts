@@ -1,8 +1,9 @@
 import { Process, Processor } from "@nestjs/bull";
-import { Logger } from "@nestjs/common";
+import { Logger, Optional } from "@nestjs/common";
 import { Job } from "bull";
 import { InventoryRepository } from "../inventory.repository";
 import { AlertsRepository } from "../alerts.repository";
+import { NotificationsService } from "../../notifications/notifications.service";
 
 export const REORDER_CHECK_QUEUE = "reorder-check";
 
@@ -13,6 +14,7 @@ export class ReorderCheckProcessor {
   constructor(
     private readonly inventoryRepo: InventoryRepository,
     private readonly alertsRepo: AlertsRepository,
+    @Optional() private readonly notificationsService?: NotificationsService,
   ) {}
 
   /**
@@ -50,6 +52,18 @@ export class ReorderCheckProcessor {
             message: `${m.name} is at ${m.current_stock ?? 0} units, at or below its reorder level of ${m.reorder_level ?? 0}.`,
           })),
         );
+
+        if (this.notificationsService) {
+          for (const m of items) {
+            await this.notificationsService.create({
+              type: "low_stock",
+              title: `Low Stock Alert: ${m.name}`,
+              message: `${m.name} stock is at ${m.current_stock ?? 0} units (Reorder level: ${m.reorder_level ?? 0}).`,
+              resourceType: "medicine",
+              resourceId: m.id,
+            });
+          }
+        }
       }
 
       perBranch.push({ branchId: branch.id, branchName: branch.name, medicines: items });

@@ -30,6 +30,7 @@ interface CartState {
   loyaltyPointsToRedeem: number;
   addItem: (item: Omit<CartItem, "lineTotal" | "saleUnit" | "stripSize"> & { stripSize?: number; saleUnit?: "pack" | "loose" }) => void;
   updateQty: (medicineId: string, batchId: string, qty: number) => void;
+  updateDiscountPct: (medicineId: string, batchId: string, discPct: number) => void;
   toggleUnit: (medicineId: string, batchId: string) => void;
   removeItem: (medicineId: string, batchId: string) => void;
   setPatient: (id: string | null) => void;
@@ -91,6 +92,16 @@ export const useCartStore = create<CartState>()(
           items: s.items.map((i) =>
             i.batchId === batchId
               ? { ...i, quantity: qty, lineTotal: calcLine({ ...i, quantity: qty }) }
+              : i
+          ),
+        }));
+      },
+      updateDiscountPct: (medicineId, batchId, discPct) => {
+        const validPct = Math.max(0, Math.min(100, discPct));
+        set((s) => ({
+          items: s.items.map((i) =>
+            i.batchId === batchId
+              ? { ...i, discountPct: validPct, lineTotal: calcLine({ ...i, discountPct: validPct }) }
               : i
           ),
         }));

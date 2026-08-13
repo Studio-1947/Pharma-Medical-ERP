@@ -2,8 +2,9 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera, ShieldAlert } from "lucide-react";
+import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera, ShieldAlert, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, LayoutGrid, Table, Percent, Edit3, SlidersHorizontal } from "lucide-react";
 import { useCartStore, CartItem } from "@/stores/cart.store";
+import { useUIStore } from "@/stores/ui.store";
 import { formatStockUnit, getUnitLabel } from "@/lib/stock-unit-formatter";
 import { PaymentModal } from "./payment-modal";
 import { RxPickerModal } from "./rx-picker-modal";
@@ -148,7 +149,12 @@ export function PosTerminal() {
 
 
   const {
-    items, addItem, updateQty, toggleUnit, removeItem, clear, totals,
+    sidebarCollapsed, setSidebarCollapsed, toggleSidebar,
+    posViewMode, setPosViewMode, togglePosViewMode,
+  } = useUIStore();
+
+  const {
+    items, addItem, updateQty, updateDiscountPct, toggleUnit, removeItem, clear, totals,
     patientId,
     prescriptionId, setPrescriptionId,
     loyaltyPointsToRedeem, setLoyaltyPointsToRedeem,
@@ -433,6 +439,14 @@ export function PosTerminal() {
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
 
+  const handleToggleScaleMode = () => {
+    const nextMode = posViewMode === "split" ? "scale" : "split";
+    setPosViewMode(nextMode);
+    if (nextMode === "scale" && !sidebarCollapsed) {
+      setSidebarCollapsed(true);
+    }
+  };
+
   // ── Hotkeys ─────────────────────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -440,11 +454,13 @@ export function PosTerminal() {
       if (e.key === "F2") { e.preventDefault(); searchRef.current?.focus(); }
       if (e.key === "F4") { e.preventDefault(); if (items.length > 0) setPayOpen(true); }
       if (e.key === "F6") { e.preventDefault(); if (items.length > 0) setClearConfirm(true); }
+      if (e.key === "F8") { e.preventDefault(); handleToggleScaleMode(); }
+      if (e.altKey && (e.key === "s" || e.key === "S")) { e.preventDefault(); toggleSidebar(); }
       if (e.ctrlKey && (e.key === "p" || e.key === "P")) { e.preventDefault(); if (lastInvoice) printReceipt(); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [items, clear, lastInvoice]);
+  }, [items, clear, lastInvoice, posViewMode, sidebarCollapsed]);
 
   // ── Medicine search ──────────────────────────────────────────────────────────
   const debouncedSearch = useDebounce(search, 300);
@@ -518,32 +534,122 @@ export function PosTerminal() {
     createMutation.mutate(payload);
   };
 
+  const handleAddMedicine = async (m: any) => {
+    try {
+      const batchRes: any = await apiClient.get(`/inventory/medicines/${m.id}/batches`, { params: { branchId: activeBranchId } });
+      const batchArr: any[] = Array.isArray(batchRes) ? batchRes : Array.isArray(batchRes?.data?.data) ? batchRes.data.data : Array.isArray(batchRes?.data) ? batchRes.data : [];
+      const first = batchArr[0];
+      if (!first) {
+        toastWarning("Out of stock", `No active batch found for "${m.name}". Add stock via Inventory before billing.`, 7000);
+        return;
+      }
+      const availableQty = first.quantity ?? Number(m.totalStock ?? 99999);
+      const existing = items.find((i) => i.batchId === first.id);
+      const currentQty = existing ? existing.quantity : 0;
+
+      if (currentQty + 1 > availableQty && !allowOversell) {
+        setStockLimitDialog({
+          open: true,
+          itemName: m.name,
+          requestedQty: currentQty + 1,
+          maxAvailable: availableQty,
+          unit: getUnitLabel(availableQty, m),
+        });
+        if (!existing) {
+          addItem({
+            medicineId: m.id, batchId: first.id, name: m.name, sku: m.sku,
+            batchNo: first.batchNo, unitPrice: parseFloat(m.priceMrp),
+            stripSize: m.stripSize ? parseInt(m.stripSize) : 1,
+            taxPct: parseFloat(m.taxPercent ?? "0"), discountPct: 0, quantity: availableQty,
+            scheduleClass: m.scheduleClass, requiresPrescription: m.requiresPrescription,
+            unit: m.unit, batchStock: availableQty, totalStock: Number(m.totalStock ?? availableQty),
+          });
+        }
+        return;
+      }
+
+      addItem({
+        medicineId: m.id, batchId: first.id, name: m.name, sku: m.sku,
+        batchNo: first.batchNo, unitPrice: parseFloat(m.priceMrp),
+        stripSize: m.stripSize ? parseInt(m.stripSize) : 1,
+        taxPct: parseFloat(m.taxPercent ?? "0"), discountPct: 0, quantity: 1,
+        scheduleClass: m.scheduleClass, requiresPrescription: m.requiresPrescription,
+        unit: m.unit, batchStock: availableQty, totalStock: Number(m.totalStock ?? availableQty),
+      });
+      setSearch("");
+    } catch {
+      toastError("Failed to load stock", "Could not fetch batch details. Check your connection and try again.");
+    }
+  };
+
   const searchRaw = searchResults as any;
   const medicines: any[] = Array.isArray(searchRaw?.data?.data) ? searchRaw.data.data : Array.isArray(searchRaw?.data) ? searchRaw.data : [];
 
   return (
     <div className="flex flex-col gap-3 lg:h-[calc(100vh-7.5rem)]">
       {/* Top bar & quick hotkeys */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-2.5 bg-slate-900 text-white p-3 rounded-2xl shadow-md border border-slate-800">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 bg-slate-900 text-white p-3 rounded-2xl shadow-md border border-slate-800">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-emerald-400" />
             <h1 className="font-extrabold text-base tracking-tight text-white">Point of Sale</h1>
           </div>
-          <div className="hidden md:flex items-center gap-1.5 ml-2 border-l border-slate-700 pl-3">
-            {(["[F2] Search", "[F4] Pay", "[F6] Clear", "[Ctrl+P] Print"] as const).map((k) => (
+          <div className="hidden xl:flex items-center gap-1.5 ml-2 border-l border-slate-700 pl-3">
+            {(["[F2] Search", "[F4] Pay", "[F6] Clear", "[F8] Scale Mode", "[Ctrl+P] Print"] as const).map((k) => (
               <span key={k} className="text-[11px] bg-slate-800 text-slate-300 border border-slate-700 font-mono font-semibold px-2 py-0.5 rounded-md">{k}</span>
             ))}
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 bg-emerald-500/10 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/20 text-xs font-semibold">
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Sidebar Collapse Toggle */}
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            title={sidebarCollapsed ? "Expand Sidebar (Alt+S)" : "Collapse Sidebar (Alt+S)"}
+            className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-2.5 py-1 rounded-lg border border-slate-700 text-xs font-semibold transition"
+          >
+            {sidebarCollapsed ? <PanelLeftOpen size={14} className="text-emerald-400" /> : <PanelLeftClose size={14} className="text-slate-400" />}
+            <span className="hidden sm:inline">{sidebarCollapsed ? "Expand Menu" : "Focus Canvas"}</span>
+          </button>
+
+          {/* POS Layout Mode Switcher */}
+          <div className="flex items-center bg-slate-800/90 p-1 rounded-xl border border-slate-700 text-xs">
+            <button
+              type="button"
+              onClick={() => setPosViewMode("split")}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold transition-all ${
+                posViewMode === "split"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <LayoutGrid size={13} />
+              <span>Split View</span>
+            </button>
+            <button
+              type="button"
+              onClick={handleToggleScaleMode}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg font-bold transition-all ${
+                posViewMode === "scale"
+                  ? "bg-emerald-600 text-white shadow-xs"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Table size={13} />
+              <span>Scale Mode</span>
+              <span className="text-[10px] opacity-75 font-mono">[F8]</span>
+            </button>
+          </div>
+
+          <div className="hidden sm:flex items-center gap-1.5 bg-emerald-500/10 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/20 text-xs font-semibold">
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
             Scanner Active
           </div>
+
           <div className="flex items-center gap-2 bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700">
             <span className={`w-2.5 h-2.5 rounded-full ${isOnline ? "bg-emerald-400" : "bg-amber-400 animate-pulse"}`} />
-            <span className="text-xs font-bold text-slate-200">{isOnline ? "Online" : "Offline Mode"}</span>
+            <span className="text-xs font-bold text-slate-200">{isOnline ? "Online" : "Offline"}</span>
           </div>
         </div>
       </div>
@@ -608,8 +714,297 @@ export function PosTerminal() {
         </div>
       )}
 
-      {/* Main split panes: Left search & catalog + Right ultra-dense cart */}
-      <div className="flex flex-col lg:flex-row gap-3.5 flex-1 lg:overflow-hidden">
+      {/* Dynamic Layout Mode: Scale Mode (Full-width high-density table) vs Split View */}
+      {posViewMode === "scale" ? (
+        <div className="flex-1 flex flex-col gap-3 lg:h-full lg:overflow-hidden">
+          {/* Toolbar for Scale Mode: Patient search & Floating Medicine search */}
+          <div className="flex flex-col md:flex-row gap-3 bg-white p-3 rounded-2xl border border-slate-200 shadow-2xs shrink-0">
+            {/* Patient Search / Selected Badge */}
+            <div className="md:w-80 shrink-0">
+              {selectedPatient ? (
+                <div className="flex items-center justify-between border rounded-xl px-3 py-1.5 bg-emerald-50 border-emerald-200 text-xs">
+                  <div className="truncate">
+                    <p className="font-extrabold text-slate-900 truncate">{selectedPatient.name}</p>
+                    <p className="text-[11px] text-emerald-700 font-medium">{selectedPatient.phone}</p>
+                  </div>
+                  <button
+                    onClick={() => { setPatient(null); setLoyaltyPointsToRedeem(0); setPatientSearch(""); }}
+                    className="text-slate-400 hover:text-rose-600 p-1"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ) : (
+                <div className="relative">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={patientSearch}
+                    onChange={(e) => setPatientSearch(e.target.value)}
+                    placeholder="Search patient by name / phone..."
+                    className="w-full border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-xs focus:outline-none focus:border-emerald-500 bg-white"
+                  />
+                  {patientSearch.length >= 3 && (
+                    <div className="absolute top-full left-0 right-0 z-40 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-48 overflow-y-auto divide-y divide-slate-100">
+                      {patientResults_.map((p: any) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => { setPatient(p.id); setPatientSearch(""); }}
+                          className="w-full text-left px-3 py-2 hover:bg-emerald-50 text-xs flex justify-between"
+                        >
+                          <span className="font-bold text-slate-900">{p.name}</span>
+                          <span className="text-slate-500 text-[11px]">{p.phone}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Medicine Search with Barcode Support & Camera */}
+            <div className="relative flex-1">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    ref={searchRef}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    placeholder="Scan barcode or type medicine name / SKU to add to bill… (F2)"
+                    data-barcode-capture="true"
+                    className="w-full border border-slate-300 rounded-xl pl-9 pr-3 py-2 text-xs font-medium focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 bg-slate-50 focus:bg-white transition-all shadow-2xs"
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCameraOpen(true)}
+                  className="p-2 bg-slate-100 hover:bg-slate-200 border border-slate-200 rounded-xl text-slate-700 transition shadow-2xs"
+                  title="Open Camera Scanner"
+                >
+                  <Camera size={16} />
+                </button>
+              </div>
+
+              {/* Floating Medicine Search Popover Overlay */}
+              {search.length >= 2 && (
+                <div className="absolute top-full left-0 right-0 z-40 mt-1 bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden max-h-72 overflow-y-auto divide-y divide-slate-100">
+                  {isFetching && (
+                    <div className="p-3 text-xs text-slate-500 text-center animate-pulse">Searching catalog…</div>
+                  )}
+                  {medicines.map((m: any) => (
+                    <div
+                      key={m.id}
+                      onClick={() => handleAddMedicine(m)}
+                      className="flex items-center justify-between px-4 py-2.5 hover:bg-emerald-50 text-xs cursor-pointer transition-colors"
+                    >
+                      <div>
+                        <span className="font-bold text-slate-900">{m.name}</span>
+                        <span className="text-slate-400 ml-2 font-mono text-[11px]">{m.sku}</span>
+                        {m.scheduleClass && CONTROLLED_CLASSES.includes(m.scheduleClass) && (
+                          <span className="ml-1.5 text-[9px] bg-red-100 text-red-700 font-extrabold px-1 rounded uppercase">
+                            {m.scheduleClass} Rx
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-[11px] text-emerald-700 font-semibold">{formatStockUnit(Number(m.totalStock || 0), m)}</span>
+                        <span className="font-black text-slate-900">₹{parseFloat(m.priceMrp).toFixed(2)}</span>
+                      </div>
+                    </div>
+                  ))}
+                  {!isFetching && medicines.length === 0 && (
+                    <div className="p-4 text-xs text-slate-400 text-center">No medicines matched search query.</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Scalable High-Density Matrix Table */}
+          <div className="flex-1 overflow-x-auto overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-md min-h-[280px] touch-pan-x touch-pan-y">
+            {items.length === 0 ? (
+              <div className="text-center py-24 text-xs text-slate-400 flex flex-col items-center justify-center gap-2">
+                <ShoppingCart className="w-12 h-12 opacity-20 text-slate-500 mb-1" />
+                <p className="font-bold text-slate-600 text-sm">Scale Mode Table View Active</p>
+                <p className="text-slate-400 max-w-sm">
+                  Scan barcode or search medicines in top toolbar. Items will populate this wide high-density matrix table.
+                </p>
+              </div>
+            ) : (
+              <table className="w-full text-left border-collapse min-w-[900px]">
+                <thead>
+                  <tr className="bg-slate-900 text-slate-200 text-[11px] font-extrabold uppercase tracking-wider sticky top-0 z-10 border-b border-slate-800">
+                    <th className="py-3 px-3 w-10 text-center">#</th>
+                    <th className="py-3 px-3 min-w-[220px]">Medicine &amp; Description</th>
+                    <th className="py-3 px-3 w-28">Batch</th>
+                    <th className="py-3 px-3 w-28">Unit</th>
+                    <th className="py-3 px-3 w-28 text-right">MRP / Unit</th>
+                    <th className="py-3 px-3 w-36 text-center">Quantity</th>
+                    <th className="py-3 px-3 w-24 text-center">Disc %</th>
+                    <th className="py-3 px-3 w-28 text-right">GST Tax</th>
+                    <th className="py-3 px-3 w-32 text-right">Line Total</th>
+                    <th className="py-3 px-3 w-12 text-center"></th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-xs">
+                  {items.map((item, idx) => {
+                    const unitPrice = item.saleUnit === "loose" ? item.unitPrice / (item.stripSize || 1) : item.unitPrice;
+                    const gross = unitPrice * item.quantity;
+                    const discAmt = (gross * (item.discountPct || 0)) / 100;
+                    const taxable = gross - discAmt;
+                    const taxAmt = (taxable * (item.taxPct || 0)) / 100;
+
+                    return (
+                      <tr key={item.batchId} className="hover:bg-emerald-50/40 transition-colors group">
+                        <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-400 text-[11px]">
+                          {idx + 1}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-extrabold text-slate-900 group-hover:text-emerald-900">{item.name}</span>
+                            {item.scheduleClass && CONTROLLED_CLASSES.includes(item.scheduleClass) && (
+                              <span className="bg-red-100 text-red-700 text-[9px] font-extrabold px-1 rounded uppercase shrink-0">
+                                {item.scheduleClass}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-mono">{item.sku}</div>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="font-mono text-[11px] bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-medium border border-slate-200">
+                            {item.batchNo}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {item.stripSize > 1 ? (
+                            <button
+                              onClick={() => toggleUnit(item.medicineId, item.batchId)}
+                              className="text-[10px] font-bold px-2 py-0.5 rounded border bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100 transition cursor-pointer"
+                              title="Click to toggle Pack/Loose unit"
+                            >
+                              {item.saleUnit === "pack" ? "Strip" : "Loose Tab"}
+                            </button>
+                          ) : (
+                            <span className="text-[10px] font-medium text-slate-500 uppercase">Unit</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-medium text-slate-700">
+                          ₹{unitPrice.toFixed(2)}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <div className="flex items-center justify-center gap-1">
+                            <div className="flex items-center border border-slate-300 rounded-lg bg-slate-50 overflow-hidden">
+                              <button
+                                onClick={() => handleCartQtyChange(item, item.quantity - 1)}
+                                className="w-5 h-5 flex items-center justify-center hover:bg-slate-200 text-slate-700 transition"
+                              >
+                                <Minus size={9} />
+                              </button>
+                              <input
+                                type="number"
+                                min={1}
+                                value={item.quantity}
+                                onChange={(e) => {
+                                  const val = parseInt(e.target.value) || 1;
+                                  handleCartQtyChange(item, Math.max(1, val));
+                                }}
+                                className="w-10 text-center text-xs font-bold bg-white border-x border-slate-200 py-0.5 focus:outline-none font-mono text-slate-900"
+                              />
+                              <button
+                                onClick={() => handleCartQtyChange(item, item.quantity + 1)}
+                                className="w-5 h-5 flex items-center justify-center hover:bg-slate-200 text-slate-700 transition"
+                              >
+                                <Plus size={9} />
+                              </button>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={item.discountPct}
+                            onChange={(e) => updateDiscountPct(item.medicineId, item.batchId, parseFloat(e.target.value) || 0)}
+                            className="w-14 border border-slate-200 rounded px-1.5 py-0.5 text-xs text-center font-mono font-bold focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 bg-white"
+                          />
+                        </td>
+                        <td className="py-2.5 px-3 text-right text-slate-500">
+                          <span className="text-[11px] font-mono">{item.taxPct}%</span>
+                          <span className="block text-[10px] text-slate-400">+₹{taxAmt.toFixed(2)}</span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-black text-sm text-emerald-700 font-mono">
+                          ₹{item.lineTotal.toFixed(2)}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <button
+                            onClick={() => removeItem(item.medicineId, item.batchId)}
+                            className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
+                            title="Remove item"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          {/* Scale Mode Bottom Summary Footer Bar */}
+          <div className="bg-slate-900 text-white rounded-2xl p-4 shadow-xl border border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-4 shrink-0">
+            <div className="flex flex-wrap items-center gap-6">
+              <div>
+                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Line Items</p>
+                <p className="text-base font-extrabold text-white">{items.length} {items.length === 1 ? "Item" : "Items"}</p>
+              </div>
+              <div className="border-l border-slate-800 pl-6">
+                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Subtotal</p>
+                <p className="text-sm font-bold text-slate-200">₹{subtotal.toFixed(2)}</p>
+              </div>
+              <div className="border-l border-slate-800 pl-6">
+                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Tax (GST)</p>
+                <p className="text-sm font-bold text-slate-200">₹{tax.toFixed(2)}</p>
+              </div>
+              {loyaltyDiscount > 0 && (
+                <div className="border-l border-slate-800 pl-6">
+                  <p className="text-[10px] uppercase font-bold text-amber-400 tracking-wider">Loyalty Disc</p>
+                  <p className="text-sm font-bold text-amber-400">−₹{loyaltyDiscount.toFixed(2)}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center gap-4">
+              <div className="text-right">
+                <p className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">Net Amount Payable</p>
+                <p className="text-2xl font-black text-emerald-400 tracking-tight">₹{finalTotal.toFixed(2)}</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => { if (items.length > 0) setClearConfirm(true); }}
+                  disabled={items.length === 0}
+                  className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 rounded-xl text-xs font-bold transition disabled:opacity-40"
+                >
+                  Clear (F6)
+                </button>
+                <button
+                  onClick={() => setPayOpen(true)}
+                  disabled={items.length === 0}
+                  className="px-6 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white rounded-xl text-sm font-black tracking-wide shadow-lg disabled:opacity-40 transition-all flex items-center gap-2"
+                >
+                  <span>PAY &amp; CHECKOUT</span>
+                  <span className="bg-white/20 text-white text-[11px] px-1.5 py-0.5 rounded font-mono">[F4]</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        /* Main split panes: Left search & catalog + Right ultra-dense cart */
+        <div className="flex flex-col lg:flex-row gap-3.5 flex-1 lg:overflow-hidden">
         {/* Left pane: Patient selector & Medicine Search */}
         <div className="flex-1 flex flex-col gap-3 lg:h-full lg:overflow-hidden">
           {/* Patient selector */}
@@ -771,51 +1166,7 @@ export function PosTerminal() {
                 {medicines.map((m: any) => (
                   <div
                     key={m.id}
-                    onClick={async () => {
-                      try {
-                        const batchRes: any = await apiClient.get(`/inventory/medicines/${m.id}/batches`, { params: { branchId: activeBranchId } });
-                        const batchArr: any[] = Array.isArray(batchRes) ? batchRes : Array.isArray(batchRes?.data?.data) ? batchRes.data.data : Array.isArray(batchRes?.data) ? batchRes.data : [];
-                        const first = batchArr[0];
-                        if (!first) {
-                          toastWarning("Out of stock", `No active batch found for "${m.name}". Add stock via Inventory before billing.`, 7000);
-                          return;
-                        }
-                        const availableQty = first.quantity ?? Number(m.totalStock ?? 99999);
-                        const existing = items.find((i) => i.batchId === first.id);
-                        const currentQty = existing ? existing.quantity : 0;
-
-                        if (currentQty + 1 > availableQty && !allowOversell) {
-                          setStockLimitDialog({
-                            open: true,
-                            itemName: m.name,
-                            requestedQty: currentQty + 1,
-                            maxAvailable: availableQty,
-                            unit: getUnitLabel(availableQty, m),
-                          });
-                          if (!existing) {
-                            addItem({
-                              medicineId: m.id, batchId: first.id, name: m.name, sku: m.sku,
-                              batchNo: first.batchNo, unitPrice: parseFloat(m.priceMrp),
-                              stripSize: m.stripSize ? parseInt(m.stripSize) : 1,
-                              taxPct: parseFloat(m.taxPercent ?? "0"), discountPct: 0, quantity: availableQty,
-                              scheduleClass: m.scheduleClass, requiresPrescription: m.requiresPrescription,
-                              unit: m.unit, batchStock: availableQty, totalStock: Number(m.totalStock ?? availableQty),
-                            });
-                          }
-                          return;
-                        }
-
-                        addItem({
-                          medicineId: m.id, batchId: first.id, name: m.name, sku: m.sku,
-                          batchNo: first.batchNo, unitPrice: parseFloat(m.priceMrp),
-                          stripSize: m.stripSize ? parseInt(m.stripSize) : 1,
-                          taxPct: parseFloat(m.taxPercent ?? "0"), discountPct: 0, quantity: 1,
-                          scheduleClass: m.scheduleClass, requiresPrescription: m.requiresPrescription,
-                          unit: m.unit, batchStock: availableQty, totalStock: Number(m.totalStock ?? availableQty),
-                        });
-                        setSearch("");
-                      } catch { toastError("Failed to load stock", "Could not fetch batch details. Check your connection and try again."); }
-                    }}
+                    onClick={() => handleAddMedicine(m)}
                     className="flex items-center justify-between px-4 py-2.5 hover:bg-emerald-50/60 text-xs text-left transition-colors cursor-pointer group"
                   >
                     <div className="space-y-0.5">
@@ -1029,21 +1380,29 @@ export function PosTerminal() {
           </div>
         </div>
       </div>
+      )}
 
-      {/* Mobile sticky checkout bar — the cart panel can be scrolled past on
-          small screens, so keep the total and Pay always reachable */}
+      {/* Mobile sticky checkout bar — positioned above MobileBottomNav (bottom-[52px]) on small screens */}
       {items.length > 0 && (
-        <div className="lg:hidden sticky bottom-0 z-30 -mx-4 -mb-4 px-4 py-3 sm:-mx-6 sm:px-6 bg-white/95 backdrop-blur border-t shadow-[0_-4px_12px_rgba(0,0,0,0.06)] flex items-center justify-between gap-3">
+        <div className="lg:hidden fixed bottom-[52px] left-0 right-0 z-30 px-4 py-2.5 bg-slate-900/95 backdrop-blur text-white border-t border-slate-800 shadow-[0_-4px_16px_rgba(0,0,0,0.2)] flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <p className="text-xs text-muted-foreground">{items.length} {items.length === 1 ? "item" : "items"} in cart</p>
-            <p className="text-lg font-bold text-primary leading-tight">₹{finalTotal.toFixed(2)}</p>
+            <p className="text-[11px] text-slate-400 font-medium">{items.length} {items.length === 1 ? "item" : "items"} in cart</p>
+            <p className="text-base font-black text-emerald-400 leading-tight">₹{finalTotal.toFixed(2)}</p>
           </div>
-          <button
-            onClick={() => setPayOpen(true)}
-            className="shrink-0 px-8 py-3 bg-primary text-primary-foreground rounded-xl text-sm font-bold hover:bg-primary/90 transition shadow-sm"
-          >
-            Pay
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setClearConfirm(true)}
+              className="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold"
+            >
+              Clear
+            </button>
+            <button
+              onClick={() => setPayOpen(true)}
+              className="px-5 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-extrabold transition shadow-md"
+            >
+              Pay ₹{finalTotal.toFixed(2)}
+            </button>
+          </div>
         </div>
       )}
 
