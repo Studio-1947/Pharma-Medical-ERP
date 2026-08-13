@@ -52,7 +52,7 @@ export function Modal({ title, subtitle, open, onClose, children, size = "lg", i
 
       {/* Panel */}
       <div
-        className={`relative w-full ${sizeMap[size]} bg-white rounded-t-3xl sm:rounded-2xl shadow-glass-lg border border-slate-200/80 max-h-[94dvh] sm:max-h-[90dvh] flex flex-col animate-in fade-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200 z-10`}
+        className={`relative w-full ${sizeMap[size]} bg-white rounded-t-3xl sm:rounded-3xl shadow-glass-lg border border-slate-200/80 max-h-[94dvh] sm:max-h-[90dvh] flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-6 sm:slide-in-from-bottom-0 sm:zoom-in-95 duration-200 z-10`}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 sm:px-6 sm:py-5 border-b border-slate-100 shrink-0 bg-gradient-to-r from-slate-50/50 to-white">
