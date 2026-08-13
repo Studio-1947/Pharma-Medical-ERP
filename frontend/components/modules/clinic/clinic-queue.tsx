@@ -76,6 +76,7 @@ interface ClinicToken {
   doctor?: Doctor;
   calledAt?: string | null;
   completedAt?: string | null;
+  prescriptionId?: string | null;
   createdAt: string;
 }
 
@@ -172,12 +173,19 @@ function getDoctorSchedule(d?: Doctor, index = 0): DoctorSchedule {
   };
 }
 
+function stripDrPrefix(s: string) {
+  // Remove leading "Dr." or "Dr " (case-insensitive) so we never double-up the prefix
+  return s.replace(/^dr\.?\s*/i, "").trim();
+}
+
 function doctorName(d?: Doctor) {
   if (!d) return "--";
-  const name = [d.firstName, d.lastName].filter(Boolean).join(" ").trim();
-  if (name) {
-    return name.startsWith("Dr.") ? name : `Dr. ${name}`;
-  }
+  const raw = [d.firstName, d.lastName]
+    .filter(Boolean)
+    .map((p) => stripDrPrefix(p as string))
+    .join(" ")
+    .trim();
+  if (raw) return `Dr. ${raw}`;
   if (d.email) {
     const rawName = (d.email.split("@")[0] ?? "doctor").replace(/[^a-zA-Z0-9]/g, " ").trim();
     const capitalized = rawName.charAt(0).toUpperCase() + rawName.slice(1);
@@ -1464,7 +1472,17 @@ export function ClinicQueue() {
                               "--"
                             )}
                           </td>
-                          <td className="px-5 py-4">{statusBadge(t.status)}</td>
+                          <td className="px-5 py-4">
+                            <div className="flex flex-col gap-1.5 items-start">
+                              {statusBadge(t.status)}
+                              {t.status === "completed" && t.prescriptionId && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-200 text-[10px] font-bold">
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                                  Rx at Counter
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td className="px-5 py-4 text-right">
                             <div className="flex items-center justify-end gap-2">
                               {t.status === "pending" && (
