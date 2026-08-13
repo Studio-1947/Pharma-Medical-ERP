@@ -124,12 +124,17 @@ export const salesInvoiceItems = pgTable("sales_invoice_items", {
   invoiceId: uuid("invoice_id")
     .notNull()
     .references(() => salesInvoices.id, { onDelete: "cascade" }),
-  medicineId: uuid("medicine_id")
-    .notNull()
-    .references(() => medicines.id, { onDelete: "restrict" }),
-  batchId: uuid("batch_id")
-    .notNull()
-    .references(() => inventoryBatches.id, { onDelete: "restrict" }),
+  // Line kind: "medicine" (stock line, FKs set) or "consultation" (doctor
+  // consultation fee — a GST-exempt service line with no medicine/batch).
+  itemType: varchar("item_type", { length: 20 }).notNull().default("medicine"),
+  // Free-text description for non-medicine lines ("Doctor Consultation — Dr. X").
+  itemName: varchar("item_name", { length: 255 }),
+  medicineId: uuid("medicine_id").references(() => medicines.id, {
+    onDelete: "restrict",
+  }),
+  batchId: uuid("batch_id").references(() => inventoryBatches.id, {
+    onDelete: "restrict",
+  }),
   quantity: integer("quantity").notNull(),
   unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull(),
   discountPct: numeric("discount_pct", { precision: 5, scale: 2 })

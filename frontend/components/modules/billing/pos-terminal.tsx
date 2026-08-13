@@ -44,6 +44,7 @@ export function PosTerminal() {
   const [lastReceiptItems, setLastReceiptItems] = useState<any[]>([]);
   const [lastReceiptPatient, setLastReceiptPatient] = useState<any>(null);
   const [lastReceiptPayments, setLastReceiptPayments] = useState<any[]>([]);
+  const [lastReceiptFee, setLastReceiptFee] = useState<{ doctorName: string; amount: number } | null>(null);
   const [clearConfirm, setClearConfirm] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -161,6 +162,7 @@ export function PosTerminal() {
     items, addItem, updateQty, updateDiscountPct, toggleUnit, removeItem, clear, totals,
     patientId,
     prescriptionId, setPrescriptionId,
+    consultationFee, setConsultationFee,
     loyaltyPointsToRedeem, setLoyaltyPointsToRedeem,
     setPatient, hasControlledItems,
   } = useCartStore();
@@ -218,6 +220,21 @@ export function PosTerminal() {
           <td class="text-right"><b>₹${item.lineTotal.toFixed(2)}</b></td>
         </tr>`;
     }).join("");
+
+    const feeRow = lastReceiptFee
+      ? `
+        <tr>
+          <td>
+            <div class="medicine-name">${lastReceiptItems.length + 1}. Doctor Consultation</div>
+            <div class="batch-label">${lastReceiptFee.doctorName} · GST-exempt service</div>
+          </td>
+          <td class="text-center">1</td>
+          <td class="text-right">₹${lastReceiptFee.amount.toFixed(2)}</td>
+          <td class="text-right">—</td>
+          <td class="text-right">—</td>
+          <td class="text-right"><b>₹${lastReceiptFee.amount.toFixed(2)}</b></td>
+        </tr>`
+      : "";
 
     const payRows = lastReceiptPayments.map(p => `
       <tr>
@@ -302,7 +319,7 @@ export function PosTerminal() {
         <th class="text-right" style="width:10%">Amount</th>
       </tr>
     </thead>
-    <tbody>${itemRows}</tbody>
+    <tbody>${itemRows}${feeRow}</tbody>
   </table>
 
   <hr class="divider"/>
@@ -482,6 +499,7 @@ export function PosTerminal() {
       setLastInvoice(invoice);
       setLastReceiptItems([...items]);
       setLastReceiptPatient(selectedPatient ?? null);
+      setLastReceiptFee(useCartStore.getState().consultationFee);
       clear();
       setPayOpen(false);
       setPrintOpen(true);
@@ -513,6 +531,9 @@ export function PosTerminal() {
     const payload = {
       patientId: patientId || undefined,
       prescriptionId: prescriptionId?.trim() || undefined,
+      consultationFee: consultationFee
+        ? { doctorName: consultationFee.doctorName, amount: String(consultationFee.amount.toFixed(2)) }
+        : undefined,
       // Honoured for super_admin only; every other role is pinned server-side.
       // An invoice must name a branch, so without this a super_admin checkout
       // is rejected outright.
@@ -590,6 +611,10 @@ export function PosTerminal() {
   const searchParams = useSearchParams();
   const urlRxId = searchParams.get("rxId");
   const urlPatientId = searchParams.get("patientId");
+  // Doctor consultation fee carried from the clinic queue — billed as a
+  // GST-exempt service line on the same invoice as the dispense.
+  const urlDoctorName = searchParams.get("doctorName");
+  const urlFee = searchParams.get("fee");
   // Re-run only when the URL rxId actually changes; identical navigation
   // (e.g. the user returning to the same link) must not re-fill the cart.
   const handledRxRef = useRef<string | null>(null);
@@ -614,6 +639,14 @@ export function PosTerminal() {
       clear();
       if (patientIdFromUrl) setPatient(patientIdFromUrl);
       setPrescriptionId(rxId);
+      // Doctor consultation fee from the clinic queue (if the doctor has one).
+      if (urlDoctorName && urlFee) {
+        const amt = parseFloat(urlFee);
+        if (!isNaN(amt) && amt > 0) {
+          setConsultationFee({ doctorName: urlDoctorName, amount: amt });
+          toastInfo("Consultation fee added", `Doctor consultation fee of ₹${amt.toFixed(2)} added to the bill.`);
+        }
+      }
 
       if (rxItems.length === 0) {
         toastInfo("Prescription loaded", "This prescription has no medicine items to add to the cart.");
@@ -1090,6 +1123,33 @@ export function PosTerminal() {
                       </tr>
                     );
                   })}
+                  {consultationFee && (
+                    <tr className="bg-teal-50/80 border-t-2 border-teal-200">
+                      <td className="py-2.5 px-3 text-center font-mono font-bold text-teal-400 text-[11px]">•</td>
+                      <td className="py-2.5 px-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-extrabold text-teal-900">Doctor Consultation</span>
+                          <span className="bg-teal-100 text-teal-700 text-[9px] font-extrabold px-1 rounded uppercase shrink-0">Fee</span>
+                        </div>
+                        <div className="text-[10px] text-teal-700 font-medium">{consultationFee.doctorName}</div>
+                      </td>
+                      <td className="py-2.5 px-3 text-[10px] text-teal-600 font-medium" colSpan={6}>
+                        GST-exempt service line · no stock deducted
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-black text-sm text-teal-800 font-mono">
+                        ₹{consultationFee.amount.toFixed(2)}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <button
+                          onClick={() => setConsultationFee(null)}
+                          className="text-slate-400 hover:text-rose-600 p-1 transition-colors"
+                          title="Remove consultation fee"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             )}
@@ -1475,6 +1535,29 @@ export function PosTerminal() {
                 </div>
               </div>
             ))}
+            {consultationFee && (
+              <div className="px-3.5 py-2.5 bg-teal-50/80 border-t border-teal-100 space-y-1.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                    <span className="text-xs font-bold text-teal-900 truncate">Doctor Consultation</span>
+                    <span className="bg-teal-100 text-teal-700 text-[9px] font-extrabold px-1 rounded uppercase shrink-0">Fee</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-black text-teal-900">₹{consultationFee.amount.toFixed(2)}</span>
+                    <button
+                      onClick={() => setConsultationFee(null)}
+                      className="text-slate-400 hover:text-red-600 p-1 transition-colors"
+                      title="Remove consultation fee"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+                <div className="text-[11px] text-teal-700 font-medium">
+                  {consultationFee.doctorName} · GST-exempt service
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Cart Summary & Checkout Totals Footer */}

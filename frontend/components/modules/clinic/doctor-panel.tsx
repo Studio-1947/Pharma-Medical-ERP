@@ -701,8 +701,12 @@ function ConsultationWorkspace({ tokenId, onCompleted, doctorBranchId }: { token
                               {items.map((it: any, idx: number) => (
                                 <span key={idx} className="text-xs font-semibold text-slate-800 bg-indigo-50/80 border border-indigo-200/60 px-2 py-0.5 rounded-md flex items-center gap-1">
                                   <Pill size={11} className="text-indigo-600" />
-                                  {it.medicine?.name || it.medicineName || "Item"}
-                                  <span className="text-[10px] text-indigo-800 font-mono font-bold">× {it.quantity}</span>
+                                  {it.itemName || it.medicine?.name || it.medicineName || "Item"}
+                                  {it.itemType === "consultation" ? (
+                                    <span className="text-[10px] text-indigo-800 font-mono font-bold">· Fee</span>
+                                  ) : (
+                                    <span className="text-[10px] text-indigo-800 font-mono font-bold">× {it.quantity}</span>
+                                  )}
                                 </span>
                               ))}
                             </div>

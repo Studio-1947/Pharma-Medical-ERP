@@ -152,7 +152,9 @@ export class InvoicePdfService {
         const batchLabel = item.batch?.batchNo ?? item.batchId?.slice(0, 8) ?? "--";
         const expiryLabel = item.batch?.expiryDate ? `Exp: ${dateStr(item.batch.expiryDate)}` : "";
         const rowCols = [
-          { text: item.medicine?.name ?? item.medicineId, align: "left" },
+          // Service lines (consultation fee) carry no medicine row — fall back
+          // to the description stored on the line itself.
+          { text: item.itemName ?? item.medicine?.name ?? item.medicineId, align: "left" },
           { text: `${batchLabel}\n${expiryLabel}`, align: "left" },
           { text: String(item.quantity), align: "right" },
           { text: rupee(item.unitPrice), align: "right" },

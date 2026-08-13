@@ -1506,9 +1506,17 @@ export function ClinicQueue() {
                               {t.status === "completed" && t.prescriptionId && (
                                 <button
                                   onClick={() => {
+                                    // Carry the doctor's consultation fee along so
+                                    // the POS can bill it as a service line on the
+                                    // same invoice as the dispense.
+                                    const fee = (t.doctor as any)?.doctorProfile?.consultationFee;
+                                    const feeParams =
+                                      fee != null && fee !== ""
+                                        ? `&doctorName=${encodeURIComponent(doctorName(t.doctor))}&fee=${encodeURIComponent(String(fee))}`
+                                        : "";
                                     const url = `/billing/pos?rxId=${t.prescriptionId}${
                                       t.patient?.id ? `&patientId=${t.patient.id}` : ""
-                                    }`;
+                                    }${feeParams}`;
                                     router.push(url);
                                   }}
                                   className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition-all shadow-2xs flex items-center gap-1.5"
