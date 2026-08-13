@@ -49,8 +49,12 @@ export class PrescriptionsController {
       throw new BadRequestException("No file uploaded");
     }
 
-    if (!data.mimetype.startsWith("image/")) {
-      throw new BadRequestException("Only image files are allowed");
+    const isImage = data.mimetype.startsWith("image/");
+    const isPdf =
+      data.mimetype === "application/pdf" ||
+      (data.filename?.toLowerCase().endsWith(".pdf") ?? false);
+    if (!isImage && !isPdf) {
+      throw new BadRequestException("Only image or PDF files are allowed");
     }
 
     const buffer = await data.toBuffer();

@@ -75,6 +75,7 @@ export function PrescriptionDetailModal({
   const rx = raw?.data?.data ?? raw?.data ?? raw;
   const items: any[] = Array.isArray(rx?.items) ? rx.items : [];
   const scanUrl: string | undefined = rx?.displayUrl;
+  const scanIsPdf = !!scanUrl && scanUrl.toLowerCase().endsWith(".pdf");
 
   return (
     <Modal
@@ -203,12 +204,20 @@ export function PrescriptionDetailModal({
                 </a>
               </div>
               <div className="rounded-lg border bg-slate-50 overflow-hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={scanUrl}
-                  alt="Handwritten prescription scan"
-                  className="w-full max-h-[50vh] object-contain bg-white"
-                />
+                {scanIsPdf ? (
+                  <iframe
+                    src={scanUrl}
+                    title="Prescription scan PDF"
+                    className="w-full h-[50vh] bg-white"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={scanUrl}
+                    alt="Handwritten prescription scan"
+                    className="w-full max-h-[50vh] object-contain bg-white"
+                  />
+                )}
               </div>
             </div>
           )}

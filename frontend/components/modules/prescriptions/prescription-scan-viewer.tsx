@@ -31,6 +31,7 @@ export function PrescriptionScanViewer({
 
   const rx = (data as any)?.data ?? (data as any);
   const imageUrl: string | undefined = rx?.displayUrl ?? rx?.data?.displayUrl;
+  const isPdf = !!imageUrl && imageUrl.toLowerCase().endsWith(".pdf");
 
   return (
     <Modal
@@ -61,12 +62,20 @@ export function PrescriptionScanViewer({
         ) : (
           <>
             <div className="rounded-xl border bg-slate-50 overflow-hidden">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={imageUrl}
-                alt="Handwritten prescription scan"
-                className="w-full max-h-[65vh] object-contain bg-white"
-              />
+              {isPdf ? (
+                <iframe
+                  src={imageUrl}
+                  title="Prescription scan PDF"
+                  className="w-full h-[65vh] bg-white"
+                />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={imageUrl}
+                  alt="Handwritten prescription scan"
+                  className="w-full max-h-[65vh] object-contain bg-white"
+                />
+              )}
             </div>
             <div className="flex justify-end">
               <a

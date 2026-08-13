@@ -19,6 +19,10 @@ import { Upload, CheckCircle2, X, Loader2, AlertTriangle, Camera, FileText } fro
 
 const MAX_BYTES = 10 * 1024 * 1024; // Backend caps the body at 16MB; stay clear of it.
 
+function isPdfFile(file: File) {
+  return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
+
 interface Props {
   /** S3 object key of the uploaded scan, or null when nothing is attached. */
   value: string | null;
@@ -314,17 +318,20 @@ export function PrescriptionScanUpload({
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [uploadedIsPdf, setUploadedIsPdf] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
     setLocalError(null);
 
-    if (!file.type.startsWith("image/")) {
-      setLocalError("Only image files (JPG, PNG) can be uploaded.");
+    const isImage = file.type.startsWith("image/");
+    const isPdf = isPdfFile(file);
+    if (!isImage && !isPdf) {
+      setLocalError("Only image or PDF files (JPG, PNG, PDF) can be uploaded.");
       return;
     }
     if (file.size > MAX_BYTES) {
-      setLocalError("Image is larger than 10MB. Retake it at a lower resolution.");
+      setLocalError("File is larger than 10MB. Retake it at a lower resolution.");
       return;
     }
 
@@ -341,6 +348,7 @@ export function PrescriptionScanUpload({
 
       onChange(key);
       setPreviewUrl(url ?? null);
+      setUploadedIsPdf(isPdf);
       toastSuccess("Prescription scan attached");
     } catch (err: any) {
       const message =
@@ -357,13 +365,14 @@ export function PrescriptionScanUpload({
     onChange(null);
     setPreviewUrl(null);
     setLocalError(null);
+    setUploadedIsPdf(false);
   }
 
   if (value) {
     return (
       <div className="space-y-2">
         <div className="flex items-start gap-3 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3.5 py-3 shadow-2xs">
-          {previewUrl ? (
+          {previewUrl && !uploadedIsPdf ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={previewUrl}
@@ -402,7 +411,7 @@ export function PrescriptionScanUpload({
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/*,.pdf"
         className="hidden"
         disabled={disabled || uploading}
         onChange={(e) => {
@@ -444,7 +453,7 @@ export function PrescriptionScanUpload({
           <div>
             <p className="text-xs font-bold text-slate-800">Upload Image / File</p>
             <p className="text-[11px] text-slate-500 leading-snug">
-              Select JPG or PNG image file from computer
+              Select JPG, PNG or PDF file from computer
             </p>
           </div>
         </button>
@@ -469,11 +478,11 @@ export function PrescriptionScanUpload({
           {uploading ? "Uploading prescription scan..." : "Or drag and drop prescription file here"}
         </span>
         <span className="text-[11px] text-slate-400">
-          Supports JPG, PNG up to 10MB
+          Supports JPG, PNG, PDF up to 10MB
         </span>
         <input
           type="file"
-          accept="image/*"
+          accept="image/*,.pdf"
           className="hidden"
           disabled={disabled || uploading}
           onChange={(e) => {

@@ -72,6 +72,8 @@ interface ClinicToken {
   tokenNo: number;
   status: "pending" | "called" | "completed" | "cancelled";
   timeSlot?: string;
+  /** "new" = fresh consultation (doctor may prescribe); "follow_up" = repeat visit (no medicines). */
+  visitType?: "new" | "follow_up";
   notes?: string;
   patient?: Patient;
   doctor?: Doctor;
@@ -670,6 +672,7 @@ function NewTokenModal({
   const [doctorId, setDoctorId] = useState(defaultDoctorId ?? "");
   const [date, setDate] = useState(localDateString());
   const [timeSlot, setTimeSlot] = useState("");
+  const [visitType, setVisitType] = useState<"new" | "follow_up">("new");
   const [notes, setNotes] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -714,6 +717,7 @@ function NewTokenModal({
     setDoctorId(defaultDoctorId ?? "");
     setDate(localDateString());
     setTimeSlot("");
+    setVisitType("new");
     setNotes("");
     setFormError(null);
   }
@@ -752,6 +756,7 @@ function NewTokenModal({
         doctorId,
         date,
         timeSlot: timeSlot.trim() || undefined,
+        visitType,
         notes: notes.trim() || undefined,
         branchId,
       },
@@ -891,6 +896,50 @@ function NewTokenModal({
               );
             })}
           </select>
+        </div>
+
+        {/* Visit type: a follow-up cannot be prescribed new medicines by the doctor */}
+        <div className="space-y-1.5">
+          <label className="text-xs font-bold text-slate-700 uppercase tracking-wider">Visit Type</label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setVisitType("new")}
+              className={`flex flex-col items-start gap-0.5 px-3.5 py-2.5 rounded-xl border text-left transition-all ${
+                visitType === "new"
+                  ? "border-emerald-500 bg-emerald-50 shadow-xs"
+                  : "border-slate-200 bg-white hover:border-emerald-300"
+              }`}
+            >
+              <span className={`text-xs font-bold ${visitType === "new" ? "text-emerald-800" : "text-slate-700"}`}>
+                New Consultation
+              </span>
+              <span className="text-[10px] text-slate-500 leading-snug">
+                Fresh visit — doctor can prescribe medicines
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setVisitType("follow_up")}
+              className={`flex flex-col items-start gap-0.5 px-3.5 py-2.5 rounded-xl border text-left transition-all ${
+                visitType === "follow_up"
+                  ? "border-amber-500 bg-amber-50 shadow-xs"
+                  : "border-slate-200 bg-white hover:border-amber-300"
+              }`}
+            >
+              <span className={`text-xs font-bold ${visitType === "follow_up" ? "text-amber-800" : "text-slate-700"}`}>
+                Follow-up
+              </span>
+              <span className="text-[10px] text-slate-500 leading-snug">
+                Repeat visit — prescribing disabled, notes only
+              </span>
+            </button>
+          </div>
+          {visitType === "follow_up" && (
+            <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-1.5">
+              The doctor will not be able to add medicines for this visit — only notes.
+            </p>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1436,8 +1485,15 @@ export function ClinicQueue() {
                             </span>
                           </td>
                           <td className="px-5 py-4">
-                            <div className="font-bold text-slate-900">
-                              {t.patient?.name ?? "--"}
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900">
+                                {t.patient?.name ?? "--"}
+                              </span>
+                              {t.visitType === "follow_up" && (
+                                <span className="px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[10px] font-bold uppercase tracking-wide border border-amber-200">
+                                  Follow-up
+                                </span>
+                              )}
                             </div>
                             <div className="text-xs text-slate-500 font-mono mt-0.5">
                               {t.patient?.phone ?? ""}
