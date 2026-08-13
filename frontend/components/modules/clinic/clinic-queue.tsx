@@ -177,6 +177,41 @@ function getDoctorSchedule(d?: Doctor, index = 0): DoctorSchedule {
   };
 }
 
+const WEEKDAY_ORDER = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+// Expand a day label like "Mon - Fri", "Mon, Wed, Fri", or "Saturday" into a set of weekday abbreviations
+function dayLabelSet(label: string): Set<string> {
+  const set = new Set<string>();
+  const norm = label.replace(/[\u2013\u2014]/g, "-");
+  const rangeRe = /(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s*-\s*(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/gi;
+  let m: RegExpExecArray | null;
+  while ((m = rangeRe.exec(norm)) !== null) {
+    const a = WEEKDAY_ORDER.indexOf(m[1] as (typeof WEEKDAY_ORDER)[number]);
+    const b = WEEKDAY_ORDER.indexOf(m[2] as (typeof WEEKDAY_ORDER)[number]);
+    if (a >= 0 && b >= 0) {
+      const start = Math.min(a, b);
+      const end = Math.max(a, b);
+      for (let i = start; i <= end; i++) set.add(WEEKDAY_ORDER[i]!);
+    }
+  }
+  // Standalone day names (outside ranges)
+  const standalone = norm.replace(rangeRe, " ");
+  const dayRe = /(Mon|Tue|Wed|Thu|Fri|Sat|Sun)/gi;
+  let dm: RegExpExecArray | null;
+  while ((dm = dayRe.exec(standalone)) !== null) {
+    set.add(dm[1]!.charAt(0).toUpperCase() + dm[1]!.slice(1).toLowerCase());
+  }
+  return set;
+}
+
+// Does this schedule row's day label cover the weekday of the selected date?
+function scheduleRowMatchesDay(label: string, dateStr: string): boolean {
+  if (!dateStr) return true;
+  const d = new Date(`${dateStr}T00:00:00`);
+  if (isNaN(d.getTime())) return true;
+  return dayLabelSet(label).has(WEEKDAY_ORDER[d.getDay()]!);
+}
+
 function stripDrPrefix(s: string) {
   // Remove leading "Dr." or "Dr " (case-insensitive) so we never double-up the prefix
   return s.replace(/^dr\.?\s*/i, "").trim();
@@ -1109,13 +1144,15 @@ export function ClinicQueue() {
       );
   }
 
-  // Filtered doctors list for search
-  const filteredDoctors = doctors.filter((d, i) => {
-    const sched = getDoctorSchedule(d, i);
+  // Filtered doctors list for search + doctor dropdown
+  const filteredDoctors = doctors.filter((d) => {
+    const sched = getDoctorSchedule(d);
     const name = doctorName(d).toLowerCase();
     const spec = sched.specialty.toLowerCase();
     const query = searchFilter.toLowerCase();
-    return !query || name.includes(query) || spec.includes(query);
+    if (query && !name.includes(query) && !spec.includes(query)) return false;
+    if (doctorFilter && d.id !== doctorFilter && d.email !== doctorFilter) return false;
+    return true;
   });
 
   // Calculate metrics summary
@@ -1372,16 +1409,39 @@ export function ClinicQueue() {
                     <div className="space-y-1.5 bg-slate-50/70 p-3 rounded-xl border border-slate-100">
                       <p className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 mb-1 flex items-center gap-1">
                         <Clock size={11} /> Weekly OPD Timings
+                        {(() => {
+                          const openToday = sched.weeklySchedule.some((s) => scheduleRowMatchesDay(s.days, date));
+                          return (
+                            <span
+                              className={`ml-auto inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full font-black ${
+                                openToday ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-500"
+                              }`}
+                            >
+                              {openToday ? "Open Today" : "No OPD Today"}
+                            </span>
+                          );
+                        })()}
                       </p>
-                      {sched.weeklySchedule.map((s, sIdx) => (
-                        <div
-                          key={sIdx}
-                          className="flex items-center justify-between text-[11px] font-medium"
-                        >
-                          <span className="font-bold text-slate-700">{s.days}:</span>
-                          <span className="text-slate-600 font-mono">{s.slots}</span>
-                        </div>
-                      ))}
+                      {sched.weeklySchedule.map((s, sIdx) => {
+                        const isToday = scheduleRowMatchesDay(s.days, date);
+                        return (
+                          <div
+                            key={sIdx}
+                            className={`flex items-center justify-between text-[11px] font-medium rounded-lg px-1.5 py-0.5 transition-colors ${
+                              isToday
+                                ? "bg-emerald-50/80 ring-1 ring-emerald-200"
+                                : "opacity-55"
+                            }`}
+                          >
+                            <span className={`font-bold ${isToday ? "text-emerald-800" : "text-slate-700"}`}>
+                              {s.days}:
+                            </span>
+                            <span className={`font-mono ${isToday ? "font-black text-emerald-700" : "text-slate-600"}`}>
+                              {s.slots}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
 
