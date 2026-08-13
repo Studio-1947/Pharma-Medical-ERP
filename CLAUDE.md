@@ -14,6 +14,23 @@ Do not guess APIs, versions, flags, commit SHAs, or package names. Verify by rea
 - The frontend `prebuild` script auto-heals silently on every `pnpm build` run. If it runs `pnpm install --force` unexpectedly, it means the store was corrupted again -- check disk health.
 - Do not run `pnpm install` without `--force` to fix MODULE_NOT_FOUND -- it will reuse the corrupted store entry and fail again.
 
+## DATABASE MIGRATION MANDATORY WORKFLOW & RULES (apply every time DB schema changes)
+
+- **CRITICAL RULE**: Every time any change is made to Drizzle schema files (`backend/src/database/schema/*.ts`), you MUST generate and commit matching migration files BEFORE pushing or deploying to production.
+- **Why DB Migration Mismatches Occur**:
+  1. **Un-generated Schema Changes**: Editing TypeScript schemas in `backend/src/database/schema/` without running `pnpm db:generate` to produce SQL migration files in `backend/drizzle/migrations/`.
+  2. **Unregistered Journal Entries**: Hand-writing SQL files in `backend/drizzle/migrations/` without adding them to `backend/drizzle/migrations/meta/_journal.json`. `runMigrations()` at server boot ONLY executes migrations listed in `_journal.json`.
+  3. **Missing Drizzle Snapshots**: Hand-writing SQL files without generating `meta/XXXX_snapshot.json` files, causing Drizzle Kit CLI to lose track of database state and prompt interactively on subsequent runs.
+  4. **Dev vs Prod Environment Drift (`db:push` vs `db:migrate`)**: Relying on `pnpm db:push` in local development. `db:push` updates local Postgres directly without creating migration files; when deployed to production, `db:migrate` runs and finds no migrations, causing `column "xyz" does not exist` runtime crashes.
+  5. **Misplaced Migration Files**: Placing migration SQL files loose in `backend/drizzle/` instead of `backend/drizzle/migrations/`.
+- **Mandatory Step-by-Step Schema Change Procedure**:
+  1. Edit schema in `backend/src/database/schema/*.ts`.
+  2. Run `pnpm db:generate` (or `pnpm --filter backend drizzle-kit generate`) to create the versioned SQL migration and update `meta/_journal.json`.
+  3. Verify that the generated `.sql` file lives inside `backend/drizzle/migrations/` and is properly registered in `_journal.json`.
+  4. Test the migration locally with `pnpm db:migrate`.
+  5. ALWAYS commit both `backend/src/database/schema/*.ts` AND `backend/drizzle/migrations/*` (including `meta/_journal.json`) together in git before deploying to production.
+- **Never bypass migrations**: Do not use ad-hoc `ALTER TABLE` scripts or `db:push` as a substitute for versioned Drizzle migrations in production pipelines.
+
 # MedERP — Pharmacy ERP System: Claude Code Implementation Guide
 
 > **How to use this file with Claude Code:**
