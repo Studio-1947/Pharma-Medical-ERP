@@ -85,6 +85,9 @@ function PrescriptionStatusBadge({ status }: { status: string }) {
 function PatientHistoryModal({ patient, onClose }: { patient: Patient | null; onClose: () => void }) {
   const [activeTab, setActiveTab] = useState<"prescriptions" | "billing">("prescriptions");
 
+  // Reset to prescriptions tab whenever a new patient is selected
+  useEffect(() => { setActiveTab("prescriptions"); }, [patient?.id]);
+
   const { data: invoicesRes, isLoading: loadingInvoices } = useQuery({
     queryKey: ["patient-invoices", patient?.id],
     queryFn: () => apiClient.get("/billing/invoices", { params: { patientId: patient!.id, limit: 20 } }),
@@ -126,7 +129,8 @@ function PatientHistoryModal({ patient, onClose }: { patient: Patient | null; on
       onClose={onClose}
       size="lg"
     >
-      <div className="flex flex-col h-full">
+      {/* NOTE: Modal already provides overflow-y-auto flex-col — no wrapper div needed */}
+      <div className="-mx-5 sm:-mx-6 flex flex-col">
         {/* Demographics */}
         <div className="px-6 pt-5 pb-4 bg-slate-50/80 border-b border-slate-200">
           <p className="text-[10px] font-extrabold uppercase tracking-widest text-slate-400 mb-2.5">Patient Demographics &amp; Contact</p>
@@ -205,7 +209,7 @@ function PatientHistoryModal({ patient, onClose }: { patient: Patient | null; on
         </div>
 
         {/* Tab Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
+        <div className="px-6 py-4">
 
           {/* ── PRESCRIPTIONS TAB ── */}
           {activeTab === "prescriptions" && (
@@ -223,7 +227,11 @@ function PatientHistoryModal({ patient, onClose }: { patient: Patient | null; on
               <div className="space-y-3">
                 {prescriptions.map((rx: any) => {
                   const items: any[] = rx.items ?? rx.medicines ?? [];
-                  const isControlled = items.some((it: any) => it.scheduleClass || it.isControlled);
+                  // isControlled can come from the Rx header OR from any joined medicine
+                  const isControlled = rx.isControlled || items.some(
+                    (it: any) => it.isControlled || it.medicine?.isControlled ||
+                                 it.medicine?.scheduleClass || it.scheduleClass
+                  );
                   return (
                     <div
                       key={rx.id}
@@ -263,37 +271,174 @@ function PatientHistoryModal({ patient, onClose }: { patient: Patient | null; on
 
                       {/* Rx Medicines List */}
                       {items.length > 0 && (
-                        <div className="px-4 py-2.5">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">Prescribed Medicines</p>
-                          <div className="space-y-1">
-                            {items.map((it: any, idx: number) => (
-                              <div key={idx} className="flex items-start justify-between text-xs">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-black shrink-0">
-                                    {idx + 1}
-                                  </span>
-                                  <div>
-                                    <span className="font-semibold text-slate-800">
-                                      {it.medicineName || it.name || `Medicine ${idx + 1}`}
+                        <div className="px-4 py-3 space-y-2.5">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            Prescribed Medicines ({items.length})
+                          </p>
+                          {items.map((it: any, idx: number) => {
+                            // The backend joins `medicine` object onto each item
+                            const med = it.medicine ?? {};
+                            const displayName = it.medicineName || med.name || `Medicine ${idx + 1}`;
+                            const brandName   = med.brandName || null;
+                            const generic     = med.genericName || med.composition || null;
+                            const strength    = med.strength || null;
+                            const dosageForm  = med.dosageForm || null;
+                            const packSize    = med.packSize || null;
+                            const sku         = med.sku || null;
+                            const hsnCode     = med.hsnCode || null;
+                            const manufacturer = med.manufacturer || null;
+                            const therapeuticClass = med.therapeuticClass || null;
+                            const scheduleClass = it.scheduleClass || med.scheduleClass || null;
+                            const isControlled = it.isControlled || med.isControlled || false;
+                            const requiresPrescription = med.requiresPrescription || false;
+                            const mrp         = med.priceMrp ? `₹${parseFloat(med.priceMrp).toFixed(2)}` : null;
+                            const taxPct      = med.taxPercent ? `${parseFloat(med.taxPercent)}%` : null;
+                            const qtyPrescribed  = it.quantityPrescribed ?? null;
+                            const qtyDispensed   = it.quantityDispensed ?? 0;
+                            const isFullyDispensed = it.isFullyDispensed ?? false;
+
+                            return (
+                              <div key={idx} className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-2xs">
+                                {/* Medicine Header */}
+                                <div className="flex items-start justify-between px-3.5 py-2.5 bg-emerald-50/60 border-b border-slate-200/80">
+                                  <div className="flex items-start gap-2.5 min-w-0">
+                                    <span className="w-6 h-6 rounded-full bg-emerald-600 text-white text-[11px] font-black flex items-center justify-center shrink-0 mt-0.5">
+                                      {idx + 1}
                                     </span>
-                                    {it.dosage && (
-                                      <span className="ml-1.5 text-[11px] text-slate-500">{it.dosage}</span>
+                                    <div className="min-w-0">
+                                      <p className="font-black text-slate-900 text-sm leading-tight">
+                                        {displayName}
+                                      </p>
+                                      {brandName && brandName !== displayName && (
+                                        <p className="text-[11px] font-semibold text-emerald-700">
+                                          Brand: {brandName}
+                                        </p>
+                                      )}
+                                      {generic && (
+                                        <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">
+                                          {generic}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {/* Badges */}
+                                  <div className="flex flex-wrap gap-1 justify-end shrink-0 ml-2">
+                                    {scheduleClass && (
+                                      <span className="text-[10px] font-black text-orange-700 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded">
+                                        {scheduleClass}
+                                      </span>
                                     )}
-                                    {it.duration && (
-                                      <span className="ml-1.5 text-[11px] text-slate-400">× {it.duration}</span>
+                                    {isControlled && (
+                                      <span className="text-[10px] font-black text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded">
+                                        Controlled
+                                      </span>
+                                    )}
+                                    {requiresPrescription && !isControlled && (
+                                      <span className="text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-1.5 py-0.5 rounded">
+                                        Rx
+                                      </span>
+                                    )}
+                                    {isFullyDispensed && (
+                                      <span className="text-[10px] font-black text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">
+                                        ✓ Dispensed
+                                      </span>
                                     )}
                                   </div>
                                 </div>
-                                {(it.scheduleClass || it.isControlled) && (
-                                  <span className="text-[10px] font-bold text-orange-600 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded shrink-0 ml-2">
-                                    {it.scheduleClass || "Controlled"}
-                                  </span>
+
+                                {/* Medicine Details Grid */}
+                                <div className="px-3.5 py-2.5 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-1.5 text-[11px]">
+                                  {/* Formulation */}
+                                  {(strength || dosageForm) && (
+                                    <div>
+                                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Strength / Form</span>
+                                      <span className="text-slate-800 font-semibold">
+                                        {[strength, dosageForm].filter(Boolean).join(" · ")}
+                                      </span>
+                                    </div>
+                                  )}
+                                  {packSize && (
+                                    <div>
+                                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Pack Size</span>
+                                      <span className="text-slate-800 font-semibold">{packSize}</span>
+                                    </div>
+                                  )}
+                                  {hsnCode && (
+                                    <div>
+                                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">HSN Code</span>
+                                      <span className="text-slate-800 font-mono font-bold text-xs">{hsnCode}</span>
+                                    </div>
+                                  )}
+                                  {sku && (
+                                    <div>
+                                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">SKU</span>
+                                      <span className="text-slate-700 font-mono">{sku}</span>
+                                    </div>
+                                  )}
+                                  {manufacturer && (
+                                    <div className="col-span-2">
+                                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Manufacturer</span>
+                                      <span className="text-slate-800 font-semibold">{manufacturer}</span>
+                                    </div>
+                                  )}
+                                  {therapeuticClass && (
+                                    <div className="col-span-2">
+                                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Therapeutic Class</span>
+                                      <span className="text-slate-700">{therapeuticClass}</span>
+                                    </div>
+                                  )}
+                                  {(mrp || taxPct) && (
+                                    <div>
+                                      <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">MRP / GST</span>
+                                      <span className="text-slate-800 font-semibold">
+                                        {mrp ?? "—"}{taxPct ? ` (GST ${taxPct})` : ""}
+                                      </span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Prescription Instructions Row — only render if at least one field is set */}
+                                {(it.dosage || it.frequency || it.duration || qtyPrescribed != null) && (
+                                  <div className="px-3.5 py-2.5 border-t border-dashed border-slate-200 bg-slate-50/60 flex flex-wrap gap-x-5 gap-y-1.5 text-[11px]">
+                                    {it.dosage && (
+                                      <div>
+                                        <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Dosage</span>
+                                        <span className="text-slate-800 font-semibold">{it.dosage}</span>
+                                      </div>
+                                    )}
+                                    {it.frequency && (
+                                      <div>
+                                        <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Frequency</span>
+                                        <span className="text-slate-800 font-semibold">{it.frequency}</span>
+                                      </div>
+                                    )}
+                                    {it.duration && (
+                                      <div>
+                                        <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Duration</span>
+                                        <span className="text-slate-800 font-semibold">{it.duration}</span>
+                                      </div>
+                                    )}
+                                    {qtyPrescribed != null && (
+                                      <div>
+                                        <span className="text-slate-400 font-bold uppercase text-[9px] tracking-wider block">Qty Prescribed</span>
+                                        <span className="text-slate-800 font-semibold">
+                                          {qtyPrescribed}
+                                          {qtyDispensed > 0 && (
+                                            <span className={`ml-1 font-bold ${isFullyDispensed ? "text-emerald-600" : "text-amber-600"}`}>
+                                              ({qtyDispensed} dispensed)
+                                            </span>
+                                          )}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
                                 )}
                               </div>
-                            ))}
-                          </div>
+                            );
+                          })}
                         </div>
                       )}
+
 
                       {/* Notes if any */}
                       {rx.notes && (
