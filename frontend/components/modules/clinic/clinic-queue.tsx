@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
@@ -1588,7 +1589,7 @@ export function ClinicQueue() {
                                     const url = `/billing/pos?rxId=${t.prescriptionId}${
                                       t.patient?.id ? `&patientId=${t.patient.id}` : ""
                                     }${feeParams}`;
-                                    router.push(url);
+                                    router.push(url as Route);
                                   }}
                                   className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition-all shadow-2xs flex items-center gap-1.5"
                                   title="Open prescription in POS and auto-fill cart"
