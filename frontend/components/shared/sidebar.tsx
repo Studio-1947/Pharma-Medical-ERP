@@ -10,6 +10,8 @@ import { NAV_ITEMS } from "@/lib/nav-items";
 import Link from "next/link";
 import { PanelLeftClose, PanelLeftOpen, X, Sparkles } from "lucide-react";
 
+import { useUIStore } from "@/stores/ui.store";
+
 interface SidebarProps {
   mobileOpen?: boolean;
   onMobileClose?: () => void;
@@ -17,14 +19,14 @@ interface SidebarProps {
 
 export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
-  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
+  const { sidebarCollapsed, setSidebarCollapsed } = useUIStore();
   const { isPending } = useNavigation();
   const { can } = usePermissions();
 
   // The collapse feature only exists on desktop; the mobile drawer always
   // shows the full menu.
-  const collapsed = desktopCollapsed && !mobileOpen;
-  const setCollapsed = setDesktopCollapsed;
+  const collapsed = sidebarCollapsed && !mobileOpen;
+  const setCollapsed = setSidebarCollapsed;
 
   const visibleItems = NAV_ITEMS.filter(
     (item) => !item.permission || can(item.permission),
