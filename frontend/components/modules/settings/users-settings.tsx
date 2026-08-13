@@ -15,9 +15,11 @@ import {
   EyeOff,
 } from "lucide-react";
 import { apiClient, queryKeys } from "@/lib/api-client";
-import { Modal } from "@/components/ui/modal";
 import { usePermissions } from "@/hooks/use-permissions";
 import { UserRole } from "@pharmerp/types";
+import { useToast } from "@/components/ui/toast";
+import { Modal } from "@/components/ui/modal";
+import { isValidPhoneNumber } from "@/lib/phone-validation";
 
 interface User {
   id: string;
@@ -172,6 +174,10 @@ function InviteUserModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    if (form.phone?.trim() && !isValidPhoneNumber(form.phone)) {
+      setError("Please enter a valid 10-digit phone number (e.g. 9876543210 or +91 9876543210).");
+      return;
+    }
     mutation.mutate(form);
   };
 

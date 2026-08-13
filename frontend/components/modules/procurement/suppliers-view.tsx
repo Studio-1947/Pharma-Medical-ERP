@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/toast";
 import { Plus, Search, Edit2, Phone, Mail, FileText, Trash2, BookOpen } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { SupplierLedgerModal } from "./supplier-ledger-modal";
+import { isValidPhoneNumber } from "@/lib/phone-validation";
 
 interface Supplier {
   id: string;
@@ -154,6 +155,10 @@ export function SuppliersView() {
     setFormError("");
     if (!form.name.trim() || !form.code.trim() || !form.phone.trim()) {
       setFormError("Name, Code and Phone are required.");
+      return;
+    }
+    if (!isValidPhoneNumber(form.phone)) {
+      setFormError("Please enter a valid 10-digit phone number (e.g. 9876543210 or +91 9876543210).");
       return;
     }
 

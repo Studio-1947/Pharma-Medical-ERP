@@ -20,6 +20,7 @@ import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
+import { isValidPhoneNumber } from "@/lib/phone-validation";
 
 interface Branch {
   id: string;
@@ -113,6 +114,10 @@ function BranchForm({
   return (
     <form
       onSubmit={handleSubmit((d) => {
+        if (d.phone?.trim() && !isValidPhoneNumber(d.phone)) {
+          setError("Please enter a valid 10-digit phone number (e.g. 9876543210 or +91 9876543210).");
+          return;
+        }
         setError(null);
         mutation.mutate(d);
       })}

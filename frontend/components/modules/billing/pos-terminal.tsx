@@ -17,6 +17,7 @@ import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
 import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
 import { useActiveBranchId } from "@/hooks/use-branch";
 import { sendViaWhatsApp } from "@/lib/patient-messaging";
+import { isValidPhoneNumber } from "@/lib/phone-validation";
 
 const CONTROLLED_CLASSES = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"];
 
@@ -109,6 +110,10 @@ export function PosTerminal() {
     setPatientFormError("");
     if (!patientForm.name.trim() || !patientForm.phone.trim()) {
       setPatientFormError("Name and Phone are required.");
+      return;
+    }
+    if (!isValidPhoneNumber(patientForm.phone)) {
+      setPatientFormError("Please enter a valid 10-digit mobile number (e.g. 9876543210 or +91 9876543210).");
       return;
     }
     const payload: Record<string, any> = {

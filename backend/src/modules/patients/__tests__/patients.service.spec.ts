@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { ForbiddenException, NotFoundException, ConflictException } from "@nestjs/common";
 import { PatientsService } from "../patients.service";
+import { createPatientSchema } from "@pharmerp/types";
 import type { JwtPayload } from "../../../common/decorators/current-user.decorator";
 
 function user(overrides: Partial<JwtPayload> = {}): JwtPayload {
@@ -92,6 +93,28 @@ describe("PatientsService", () => {
 
       expect(res.data.id).toBe("p_new");
       expect(mockRepo.createDoctorTokenForPatient).toHaveBeenCalledWith("p_new", "d1", "b1");
+    });
+  });
+
+  describe("createPatientSchema Phone Validation", () => {
+    it("accepts valid 10-digit phone numbers", () => {
+      const valid = createPatientSchema.safeParse({ name: "Jane", phone: "9876543210" });
+      expect(valid.success).toBe(true);
+    });
+
+    it("accepts valid phone numbers with country code prefix", () => {
+      const valid = createPatientSchema.safeParse({ name: "Jane", phone: "+91 9876543210" });
+      expect(valid.success).toBe(true);
+    });
+
+    it("rejects phone numbers with fewer than 10 digits", () => {
+      const invalid = createPatientSchema.safeParse({ name: "Jane", phone: "12345" });
+      expect(invalid.success).toBe(false);
+    });
+
+    it("rejects phone numbers containing invalid non-phone characters", () => {
+      const invalid = createPatientSchema.safeParse({ name: "Jane", phone: "invalidphone" });
+      expect(invalid.success).toBe(false);
     });
   });
 });

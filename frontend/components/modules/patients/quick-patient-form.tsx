@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { UserPlus, AlertTriangle, Loader2 } from "lucide-react";
+import { isValidPhoneNumber } from "@/lib/phone-validation";
 
 /**
  * Minimal patient registration, for use inside another flow.
@@ -77,7 +78,10 @@ export function QuickPatientForm({
 
   function submit() {
     if (!name.trim()) { setError("Patient name is required."); return; }
-    if (phone.trim().length < 7) { setError("Enter a valid phone number (at least 7 digits)."); return; }
+    if (!isValidPhoneNumber(phone)) {
+      setError("Please enter a valid 10-digit mobile number (e.g. 9876543210 or +91 9876543210).");
+      return;
+    }
     setError(null);
 
     mutation.mutate({

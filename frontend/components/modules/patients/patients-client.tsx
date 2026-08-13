@@ -8,6 +8,7 @@ import { useToast } from "@/components/ui/toast";
 import { UserPlus, Search, Edit2, Trash2, Phone, Calendar, Star, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
+import { isValidPhoneNumber } from "@/lib/phone-validation";
 
 interface Patient {
   id: string;
@@ -243,7 +244,11 @@ export function PatientsClient() {
     e.preventDefault();
     setFormError("");
     if (!form.name.trim() || !form.phone.trim()) {
-      setFormError("Name and phone are required.");
+      setFormError("Name and Phone are required.");
+      return;
+    }
+    if (!isValidPhoneNumber(form.phone)) {
+      setFormError("Please enter a valid 10-digit mobile number (e.g. 9876543210 or +91 9876543210).");
       return;
     }
     const payload: Record<string, any> = {
