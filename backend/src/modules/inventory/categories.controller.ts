@@ -13,7 +13,7 @@ export class CategoriesController {
   constructor(private readonly service: InventoryService) {}
 
   @Get()
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiOperation({ summary: "Shelf categories, for the medicine form" })
   listCategories() {
     return this.service.listCategories();

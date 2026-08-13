@@ -20,7 +20,7 @@ export class ClinicController {
   constructor(private readonly service: ClinicService) {}
 
   @Get("doctors")
-  @Roles("admin", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiOperation({ summary: "List active doctors available for token allocation" })
   findDoctors(
     @CurrentUser() user: JwtPayload,
@@ -30,7 +30,7 @@ export class ClinicController {
   }
 
   @Patch("doctors/:id/profile")
-  @Roles("admin", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiOperation({ summary: "Update doctor profile (specialty, fee, OPD room, weekly timings, availability)" })
   updateDoctorProfile(
     @Param("id") id: string,
@@ -41,7 +41,7 @@ export class ClinicController {
   }
 
   @Get("tokens")
-  @Roles("admin", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiOperation({ summary: "Query the clinic token queue" })
   findAll(@CurrentUser() user: JwtPayload, @Query() q: unknown) {
     const query = queryClinicTokenSchema.parse(q);
@@ -53,7 +53,7 @@ export class ClinicController {
 
   // Declared before tokens/:id so "taken-slots" is not captured as an id.
   @Get("tokens/taken-slots")
-  @Roles("admin", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiOperation({
     summary: "Time slots already booked for a doctor on a date",
   })
@@ -65,14 +65,14 @@ export class ClinicController {
   }
 
   @Get("tokens/:id")
-  @Roles("admin", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiOperation({ summary: "Get a single clinic token with patient and prescription detail" })
   findOne(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
     return this.service.findOne(id, user);
   }
 
   @Post("tokens")
-  @Roles("admin", "cashier")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Generate a new clinic token for a patient" })
   create(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
     const dto = createClinicTokenSchema.parse(body);
@@ -83,7 +83,7 @@ export class ClinicController {
   }
 
   @Patch("tokens/:id")
-  @Roles("admin", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiOperation({ summary: "Update token status, notes, or linked prescription" })
   update(@Param("id") id: string, @Body() body: unknown, @CurrentUser() user: JwtPayload) {
     return this.service.update(id, updateClinicTokenSchema.parse(body), user);

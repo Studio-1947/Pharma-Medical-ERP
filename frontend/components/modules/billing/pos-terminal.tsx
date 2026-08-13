@@ -339,7 +339,7 @@ export function PosTerminal() {
   <div class="footer">
     <p><b>Thank you for choosing Radha Madhav Medical Hall</b></p>
     <p>Goods once sold will not be taken back without a valid reason.</p>
-    <p>For queries, please contact your pharmacist.</p>
+    <p>For queries, please contact your shop manager.</p>
   </div>
 </body></html>`);
     w.document.close();

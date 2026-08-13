@@ -10,13 +10,8 @@ import { Mail, Lock, User, Briefcase, AlertCircle, Loader2, Eye, EyeOff } from "
 
 const roles = [
   { label: "Admin", value: UserRole.ADMIN },
+  { label: "Shop Manager", value: UserRole.SHOP_MANAGER },
   { label: "Doctor / OPD Consultant", value: UserRole.DOCTOR },
-  { label: "Pharmacist", value: UserRole.PHARMACIST },
-  { label: "Cashier", value: UserRole.CASHIER },
-  { label: "Inventory Manager", value: UserRole.INVENTORY_MANAGER },
-  { label: "Distribution Staff", value: UserRole.DISTRIBUTION_STAFF },
-  { label: "HR Manager", value: UserRole.HR_MANAGER },
-  { label: "Reports Analyst", value: UserRole.REPORTS_ANALYST },
 ];
 
 interface StaffFormProps {

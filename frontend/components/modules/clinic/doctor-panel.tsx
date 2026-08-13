@@ -1100,7 +1100,7 @@ function ConsultationWorkspace({
           <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
               Wrote this prescription by hand? Photograph the paper slip and it
-              is attached to the consultation for the pharmacist to read.
+              is attached to the consultation for the shop manager to read.
             </p>
             <PrescriptionScanUpload
               value={uploadedUrl}

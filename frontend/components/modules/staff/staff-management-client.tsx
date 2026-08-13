@@ -17,23 +17,15 @@ import { UserDto, UserRole } from "@pharmerp/types";
 const ROLE_LABEL: Record<string, string> = {
   admin: "Admin",
   super_admin: "Super Admin",
-  pharmacist: "Pharmacist",
-  cashier: "Cashier",
-  inventory_manager: "Inventory Manager",
-  distribution_staff: "Distribution Staff",
-  hr_manager: "HR Manager",
-  reports_analyst: "Reports Analyst",
+  shop_manager: "Shop Manager",
+  doctor: "Doctor",
 };
 
 const ROLE_COLOR: Record<string, string> = {
   admin: "bg-teal-100 text-teal-700",
   super_admin: "bg-teal-100 text-teal-700",
-  pharmacist: "bg-green-100 text-green-700",
-  cashier: "bg-amber-100 text-amber-700",
-  inventory_manager: "bg-emerald-100 text-emerald-700",
-  distribution_staff: "bg-cyan-100 text-cyan-700",
-  hr_manager: "bg-rose-100 text-rose-700",
-  reports_analyst: "bg-slate-100 text-slate-700",
+  shop_manager: "bg-amber-100 text-amber-700",
+  doctor: "bg-sky-100 text-sky-700",
 };
 
 const ROLE_OPTIONS = [

@@ -39,25 +39,15 @@ interface ApiListResponse {
 // super_admin cannot be created via UI — seed script only
 const ROLE_OPTIONS = [
   "ADMIN",
+  "SHOP_MANAGER",
   "DOCTOR",
-  "PHARMACIST",
-  "CASHIER",
-  "INVENTORY_MANAGER",
-  "DISTRIBUTION_STAFF",
-  "HR_MANAGER",
-  "REPORTS_ANALYST",
 ];
 
 const ROLE_COLORS: Record<string, string> = {
   SUPER_ADMIN: "bg-teal-100 text-teal-700",
   ADMIN: "bg-emerald-100 text-emerald-700",
   DOCTOR: "bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold",
-  PHARMACIST: "bg-green-100 text-green-700",
-  CASHIER: "bg-amber-100 text-amber-700",
-  INVENTORY_MANAGER: "bg-teal-100 text-teal-700",
-  DISTRIBUTION_STAFF: "bg-orange-100 text-orange-700",
-  HR_MANAGER: "bg-pink-100 text-pink-700",
-  REPORTS_ANALYST: "bg-slate-100 text-slate-700",
+  SHOP_MANAGER: "bg-amber-100 text-amber-700",
 };
 
 const inputCls = (hasError = false) =>
@@ -100,7 +90,7 @@ function InviteUserModal({
     email: "",
     firstName: "",
     lastName: "",
-    role: "CASHIER",
+    role: "SHOP_MANAGER",
     password: "",
     branchId: "",
     specialty: "General Medicine & Primary Care",

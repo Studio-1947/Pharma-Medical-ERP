@@ -52,27 +52,27 @@ describe("AuthService - register", () => {
 
   it("should successfully register branch staff for an admin, inheriting the admin's branchId", async () => {
     const dto = {
-      email: "cashier@example.com",
+      email: "shopmanager@example.com",
       password: "Password123",
       firstName: "Jane",
       lastName: "Doe",
-      role: "cashier" as any,
+      role: "shop_manager" as any,
     };
 
     mockRepo.findUserByEmail.mockResolvedValue(null);
 
     const result = await service.register(dto, callerAdmin);
 
-    expect(mockRepo.findUserByEmail).toHaveBeenCalledWith("cashier@example.com");
+    expect(mockRepo.findUserByEmail).toHaveBeenCalledWith("shopmanager@example.com");
     expect(mockRepo.createUser).toHaveBeenCalledWith({
-      email: "cashier@example.com",
+      email: "shopmanager@example.com",
       passwordHash: "mocked_hash",
       firstName: "Jane",
       lastName: "Doe",
-      role: "cashier",
+      role: "shop_manager",
       branchId: "branch-uuid-1",
     });
-    expect(result.user.role).toBe("cashier");
+    expect(result.user.role).toBe("shop_manager");
     expect(result.user.branchId).toBe("branch-uuid-1");
   });
 
@@ -95,7 +95,7 @@ describe("AuthService - register", () => {
       password: "Password123",
       firstName: "Jane",
       lastName: "Doe",
-      role: "cashier" as any,
+      role: "shop_manager" as any,
       branchId: "different-branch-uuid",
     };
 
@@ -109,7 +109,7 @@ describe("AuthService - register", () => {
       password: "Password123",
       firstName: "Jane",
       lastName: "Doe",
-      role: "cashier" as any,
+      role: "shop_manager" as any,
     };
 
     const adminWithoutBranch = { ...callerAdmin, branchId: undefined };
@@ -133,11 +133,11 @@ describe("AuthService - register", () => {
 
   it("should allow super_admin to register any valid role with any branchId", async () => {
     const dto = {
-      email: "pharmacist@example.com",
+      email: "shopmanager2@example.com",
       password: "Password123",
       firstName: "Jane",
       lastName: "Doe",
-      role: "pharmacist" as any,
+      role: "shop_manager" as any,
       branchId: "any-branch-uuid",
     };
 
@@ -146,14 +146,14 @@ describe("AuthService - register", () => {
     const result = await service.register(dto, callerSuperAdmin);
 
     expect(mockRepo.createUser).toHaveBeenCalledWith({
-      email: "pharmacist@example.com",
+      email: "shopmanager2@example.com",
       passwordHash: "mocked_hash",
       firstName: "Jane",
       lastName: "Doe",
-      role: "pharmacist",
+      role: "shop_manager",
       branchId: "any-branch-uuid",
     });
-    expect(result.user.role).toBe("pharmacist");
+    expect(result.user.role).toBe("shop_manager");
     expect(result.user.branchId).toBe("any-branch-uuid");
   });
 
@@ -163,7 +163,7 @@ describe("AuthService - register", () => {
       password: "Password123",
       firstName: "Jane",
       lastName: "Doe",
-      role: "cashier" as any,
+      role: "shop_manager" as any,
     };
 
     mockRepo.findUserByEmail.mockResolvedValue({ id: "existing-id" });

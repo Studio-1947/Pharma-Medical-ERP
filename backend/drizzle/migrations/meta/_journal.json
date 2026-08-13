@@ -211,6 +211,13 @@
       "when": 1786800000000,
       "tag": "0029_visit_type",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1786800100000,
+      "tag": "0030_user_roles_shrink",
+      "breakpoints": true
     }
   ]
 }

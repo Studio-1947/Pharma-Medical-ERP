@@ -44,12 +44,10 @@ async function seed() {
 
   // 2. Hash passwords
   console.log("Hashing passwords...");
-  const [rkmcHash, adminHash, pharmHash, cashHash, invHash, doctorHash] = await Promise.all([
+  const [rkmcHash, adminHash, shopHash, doctorHash] = await Promise.all([
     argon2.hash("RadhaMadhav@123"),
     argon2.hash("Admin@123"),
-    argon2.hash("Pharm@123"),
-    argon2.hash("Cash@123"),
-    argon2.hash("Inv@1234"),
+    argon2.hash("Shop@123"),
     argon2.hash("Doctor@123"),
   ]);
 
@@ -69,21 +67,15 @@ async function seed() {
       branchId: null,
     },
     {
-      email: "pharmacist@mederp.com",
-      passwordHash: pharmHash,
-      role: "pharmacist" as const,
+      email: "shopmanager@mederp.com",
+      passwordHash: shopHash,
+      role: "shop_manager" as const,
       branchId: brn01.id,
     },
     {
-      email: "cashier@mederp.com",
-      passwordHash: cashHash,
-      role: "cashier" as const,
-      branchId: brn01.id,
-    },
-    {
-      email: "inventory@mederp.com",
-      passwordHash: invHash,
-      role: "inventory_manager" as const,
+      email: "shopmanager2@mederp.com",
+      passwordHash: shopHash,
+      role: "shop_manager" as const,
       branchId: brn02.id,
     },
     {

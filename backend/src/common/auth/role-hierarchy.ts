@@ -16,12 +16,7 @@ import type { JwtPayload } from "../decorators/current-user.decorator";
 
 /** Roles a branch admin may onboard and manage. Mirrors auth.service.register(). */
 export const BRANCH_LEVEL_ROLES: readonly string[] = [
-  UserRole.PHARMACIST,
-  UserRole.CASHIER,
-  UserRole.INVENTORY_MANAGER,
-  UserRole.DISTRIBUTION_STAFF,
-  UserRole.HR_MANAGER,
-  UserRole.REPORTS_ANALYST,
+  UserRole.SHOP_MANAGER,
   UserRole.DOCTOR,
 ];
 
@@ -51,7 +46,7 @@ export function normaliseRole(role: string): string {
  *
  * super_admin may grant anything, including another super_admin — that is the
  * deliberate capability behind the admin console. admin is capped at
- * branch-level staff.
+ * branch-level staff (shop_manager, doctor).
  */
 export function assertCanAssignRole(caller: JwtPayload, requestedRole: string): string {
   const role = normaliseRole(requestedRole);

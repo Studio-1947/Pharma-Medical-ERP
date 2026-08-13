@@ -30,7 +30,7 @@ export class PrescriptionsController {
   ) {}
 
   @Post("upload")
-  @Roles("admin", "pharmacist", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiConsumes("multipart/form-data")
   @ApiBody({
     schema: {
@@ -67,7 +67,7 @@ export class PrescriptionsController {
   }
 
   @Get()
-  @Roles("admin", "pharmacist", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiOperation({ summary: "List prescriptions with optional filters" })
   findAll(
     @Query() q: unknown,
@@ -79,7 +79,7 @@ export class PrescriptionsController {
   }
 
   @Get(":id")
-  @Roles("admin", "pharmacist", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiOperation({ summary: "Get prescription by ID with items and patient" })
   async findOne(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
     const prescription = await this.service.findOne(id);
@@ -88,14 +88,14 @@ export class PrescriptionsController {
   }
 
   @Post()
-  @Roles("admin", "pharmacist", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiOperation({ summary: "Create a new prescription (auto-verified when created by a doctor)" })
   create(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
     return this.service.create(createPrescriptionSchema.parse(body), user);
   }
 
   @Patch(":id")
-  @Roles("admin", "pharmacist")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Edit a prescription that is still pending verification" })
   async update(@Param("id") id: string, @Body() body: unknown, @CurrentUser() user: JwtPayload) {
     const prescription = await this.service.findOne(id);
@@ -104,7 +104,7 @@ export class PrescriptionsController {
   }
 
   @Post(":id/verify")
-  @Roles("admin", "pharmacist")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Verify or reject a prescription" })
   async verify(
     @Param("id") id: string,

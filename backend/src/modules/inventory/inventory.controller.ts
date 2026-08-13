@@ -39,7 +39,7 @@ export class InventoryController {
   ) {}
 
   @Get()
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiOperation({ summary: "List medicines with pagination and search" })
   findAll(
     @Query() query: unknown,
@@ -52,14 +52,14 @@ export class InventoryController {
 
   // Declared before :id so "categories" is not captured as a medicine id.
   @Get("categories")
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiOperation({ summary: "Shelf categories, for the medicine form" })
   listCategories() {
     return this.service.listCategories();
   }
 
   @Get("low-stock")
-  @Roles("admin", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Medicines at or below reorder level" })
   getLowStock(
     @CurrentUser() user: JwtPayload,
@@ -69,7 +69,7 @@ export class InventoryController {
   }
 
   @Get("valuation")
-  @Roles("admin", "inventory_manager", "reports_analyst")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Stock valuation — cost and MRP value per medicine" })
   getValuation(
     @CurrentUser() user: JwtPayload,
@@ -82,21 +82,21 @@ export class InventoryController {
   }
 
   @Get("barcode/:code")
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Exact-match medicine lookup by barcode (indexed, for scanning)" })
   getByBarcode(@Param("code") code: string) {
     return this.service.getByBarcode(code);
   }
 
   @Get(":id")
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiOperation({ summary: "Get a medicine by ID" })
   findOne(@Param("id") id: string) {
     return this.service.findOne(id);
   }
 
   @Get(":id/batches")
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier", "doctor")
+  @Roles("admin", "shop_manager", "doctor")
   @ApiOperation({ summary: "FEFO-ordered active batches for dispense" })
   getBatches(
     @Param("id") id: string,
@@ -107,7 +107,7 @@ export class InventoryController {
   }
 
   @Get(":id/movements")
-  @Roles("admin", "pharmacist", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Full stock movement history for a medicine" })
   async getMovements(@Param("id") id: string) {
     const movements = await this.movementRepo.findByMedicine(id);
@@ -115,7 +115,7 @@ export class InventoryController {
   }
 
   @Get(":id/barcode.png")
-  @Roles("admin", "pharmacist", "inventory_manager", "cashier")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Generate barcode PNG for a medicine" })
   async getBarcode(@Param("id") id: string, @Res() reply: FastifyReply) {
     const png = await this.barcodeService.generateForMedicine(id);
@@ -126,7 +126,7 @@ export class InventoryController {
   }
 
   @Post("bulk-import")
-  @Roles("admin", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({
     summary:
       "Bulk-import medicines from CSV rows — deduplicates by SKU. Rows carrying " +
@@ -150,21 +150,21 @@ export class InventoryController {
   }
 
   @Post()
-  @Roles("admin", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Create a new medicine" })
   create(@Body() body: unknown, @CurrentUser() user: JwtPayload) {
     return this.service.create(createMedicineSchema.parse(body), user.sub);
   }
 
   @Patch(":id")
-  @Roles("admin", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Update a medicine" })
   update(@Param("id") id: string, @Body() body: unknown) {
     return this.service.update(id, updateMedicineSchema.parse(body));
   }
 
   @Delete(":id")
-  @Roles("admin", "inventory_manager")
+  @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Soft-delete a medicine" })
   remove(@Param("id") id: string) {
     return this.service.remove(id);

@@ -39,7 +39,7 @@ export class AuthRepository {
         passwordHash: data.passwordHash,
         firstName: data.firstName,
         lastName: data.lastName,
-        role: (data.role as any) ?? "cashier",
+        role: (data.role as any) ?? "shop_manager",
         branchId: data.branchId,
         doctorProfile: data.doctorProfile,
       })

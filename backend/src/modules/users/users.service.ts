@@ -265,10 +265,9 @@ export class UsersService {
     }
     const demoEmails = [
       "admin@mederp.com",
-      "pharmacist@mederp.com",
-      "cashier@mederp.com",
+      "shopmanager@mederp.com",
+      "shopmanager2@mederp.com",
       "doctor@mederp.com",
-      "analyst@mederp.com",
     ];
     let deactivatedCount = 0;
     for (const email of demoEmails) {

@@ -26,11 +26,11 @@ export class AuthService {
   async register(dto: RegisterDto, caller: JwtPayload) {
     // super_admin can create any role except another super_admin
     // admin can only create branch-level roles (not super_admin or admin)
-    const requestedRole = dto.role ?? "cashier";
+    const requestedRole = dto.role ?? "shop_manager";
     // Every non-privileged role a branch admin may onboard. `doctor` belongs
     // here: it is a branch-level clinical role, and leaving it out meant only
     // super_admin could staff a branch's own clinic.
-    const adminOnlyRoles = ["pharmacist", "cashier", "inventory_manager", "distribution_staff", "hr_manager", "reports_analyst", "doctor"];
+    const adminOnlyRoles = ["shop_manager", "doctor"];
 
     if (caller.role === "admin" && !adminOnlyRoles.includes(requestedRole)) {
       throw new ForbiddenException("Admins can only create branch-level staff accounts");
