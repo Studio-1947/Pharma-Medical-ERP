@@ -198,12 +198,16 @@ gcloud artifacts repositories describe pharmerp --location=asia-south1
 
 ## 5. Database Schema Sync & Migrations (GCP / Production)
 
-To prevent schema drift errors (e.g. `Database schema mismatch - a pending migration may not be applied`):
+To prevent schema drift and database migration mismatch errors (e.g. `Database schema mismatch`, missing columns like `prescriptions.branch_id` or `storage_locations.branch_id`):
 
-1. **Automatic Container Startup Sync**: The backend service (`drizzle.service.ts`) automatically verifies and executes `ALTER TABLE ... ADD COLUMN IF NOT EXISTS ...` SQL schema synchronizations on container startup.
-2. **Explicit GCP CI/CD Pipeline Sync Command**:
-```bash
-# Run schema sync for production GCP database before/during deployment
-pnpm db:sync:prod
-```
-3. **Formal Drizzle SQL Migration**: Migration `0024_branch_gstin_licensing.sql` is present under `backend/drizzle/migrations/` and recorded in `_journal.json`.
+1. **Automatic Container Startup Migration**: The backend service automatically executes `runMigrations()` on startup using Drizzle ORM migrator, running all versioned migrations listed in `backend/drizzle/migrations/meta/_journal.json`.
+2. **Mandatory Schema Change Workflow**:
+   - Whenever editing TypeScript schemas in `backend/src/database/schema/*.ts`, run `pnpm db:generate` to produce the SQL migration file under `backend/drizzle/migrations/` and update `meta/_journal.json`.
+   - Ensure the new `.sql` file and `_journal.json` are committed to git together with the schema TypeScript file.
+3. **Formal Drizzle SQL Migration Command**:
+   ```bash
+   # Run schema migration for production database before/during deployment
+   pnpm db:migrate:prod
+   ```
+4. **Never rely on `db:push` or ad-hoc `ALTER TABLE` scripts in Production**: Always use versioned migrations in `backend/drizzle/migrations/` so `runMigrations()` and `drizzle-kit` track schema versions accurately.
+

@@ -190,6 +190,13 @@
       "when": 1786515000000,
       "tag": "0026_doctor_profile",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1786600000000,
+      "tag": "0027_prescriptions_branch_id",
+      "breakpoints": true
     }
   ]
 }
