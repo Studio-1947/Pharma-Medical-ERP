@@ -1062,7 +1062,7 @@ export function ClinicQueue() {
   const doctors: Doctor[] = (doctorsRes as any)?.data ?? [];
 
   const params = { date, doctorId: doctorFilter || undefined, limit: 100 };
-  const { data: tokensRes, isLoading } = useClinicTokens(params);
+  const { data: tokensRes, isLoading, isError: tokensError, refetch: refetchTokens } = useClinicTokens(params);
   const tokensRaw = (tokensRes as any)?.data;
   const tokens: ClinicToken[] = Array.isArray(tokensRaw)
     ? tokensRaw
@@ -1433,6 +1433,21 @@ export function ClinicQueue() {
               {[1, 2, 3].map((i) => (
                 <div key={i} className="h-16 bg-slate-200/60 rounded-2xl" />
               ))}
+            </div>
+          ) : tokensError ? (
+            <div className="bg-white rounded-2xl border border-amber-200 bg-amber-50/60 p-10 text-center shadow-2xs">
+              <AlertTriangle size={28} className="text-amber-500 mx-auto mb-3" />
+              <h3 className="text-sm font-extrabold text-slate-800">Could not load today&apos;s queue</h3>
+              <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
+                The queue could not be fetched. Check your connection and try again.
+              </p>
+              <button
+                type="button"
+                onClick={() => refetchTokens()}
+                className="mt-4 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold transition-colors"
+              >
+                Retry
+              </button>
             </div>
           ) : tokens.length === 0 ? (
             <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-2xs">

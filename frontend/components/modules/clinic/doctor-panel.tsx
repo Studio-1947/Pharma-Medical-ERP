@@ -283,7 +283,12 @@ function ConsultationWorkspace({
 }) {
   const qc = useQueryClient();
   const { success: toastSuccess, error: toastError } = useToast();
-  const { data: tokenRes, isLoading } = useClinicToken(tokenId);
+  const {
+    data: tokenRes,
+    isLoading,
+    isError: tokenError,
+    refetch: refetchToken,
+  } = useClinicToken(tokenId);
   const token = (tokenRes as any)?.data;
   const updateMutation = useUpdateClinicToken(tokenId);
 
@@ -552,8 +557,37 @@ function ConsultationWorkspace({
     }
   }
 
-  if (isLoading || !token) {
-    return <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">Loading token...</div>;
+  if (isLoading && !token) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+        Loading consultation...
+      </div>
+    );
+  }
+
+  if (!token) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center gap-3 p-8 text-center">
+        <AlertTriangle size={28} className="text-amber-500" />
+        <div>
+          <p className="font-semibold text-slate-800">Could not load this consultation</p>
+          <p className="text-xs text-slate-500 mt-1 max-w-sm">
+            {tokenError
+              ? "The consultation could not be fetched. Check your connection and try again."
+              : "This consultation may have been removed or is no longer available."}
+          </p>
+        </div>
+        {tokenError && (
+          <button
+            type="button"
+            onClick={() => refetchToken()}
+            className="px-4 py-2 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+          >
+            Retry
+          </button>
+        )}
+      </div>
+    );
   }
 
   const patient = token.patient;
@@ -1149,7 +1183,10 @@ export function DoctorPanel() {
   // undefined asks for every doctor's queue; the API now pins it to the caller
   // anyway, but there is no reason to fire a request that can only be wrong.
   const params = { date, doctorId: user?.id, limit: 100 };
-  const { data: tokensRes, isLoading } = useClinicTokens(params, { enabled: !!user?.id });
+  const { data: tokensRes, isLoading, isError: tokensError, refetch: refetchTokens } = useClinicTokens(
+    params,
+    { enabled: !!user?.id },
+  );
   const tokensRaw = (tokensRes as any)?.data;
   const tokens: any[] = Array.isArray(tokensRaw) ? tokensRaw : Array.isArray(tokensRaw?.data) ? tokensRaw.data : [];
 
@@ -1234,6 +1271,18 @@ export function DoctorPanel() {
             {isLoading ? (
               <div className="animate-pulse space-y-2">
                 {[1, 2, 3].map((i) => <div key={i} className="h-14 bg-muted rounded-lg" />)}
+              </div>
+            ) : tokensError ? (
+              <div className="flex flex-col items-center gap-2 py-6 text-center px-3">
+                <AlertTriangle size={20} className="text-amber-500" />
+                <p className="text-xs text-slate-600 font-medium">Could not load today&apos;s queue</p>
+                <button
+                  type="button"
+                  onClick={() => refetchTokens()}
+                  className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  Retry
+                </button>
               </div>
             ) : tokens.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-8">No tokens for today.</p>
