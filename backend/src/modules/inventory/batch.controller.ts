@@ -24,6 +24,7 @@ import {
   queryBatchSchema,
   reserveBatchStockSchema,
   releaseBatchStockSchema,
+  otcSupplyBatchSchema,
 } from "@pharmerp/types";
 
 @ApiTags("inventory / batches")
@@ -112,6 +113,25 @@ export class BatchController {
   @ApiOperation({ summary: "Delete a batch (admin only — blocked if stock movements exist)" })
   remove(@Param("id") id: string) {
     return this.service.remove(id);
+  }
+
+  @Post(":id/otc-supply")
+  @Roles("admin", "shop_manager")
+  @ApiOperation({
+    summary: "Record an OTC supply — hand out medicine without billing, logs a stock movement",
+  })
+  otcSupply(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const dto = otcSupplyBatchSchema.parse(body);
+    const branchId = requireBranchScope(user, dto.branchId);
+    return this.service.recordOtcSupply(
+      id,
+      { ...dto, branchId },
+      user.sub,
+    );
   }
 
   @Patch(":id/adjust")

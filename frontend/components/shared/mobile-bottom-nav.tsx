@@ -14,7 +14,10 @@ export function MobileBottomNav({ onOpenMenu }: Props) {
 
   const navs = [
     { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    { label: "POS", href: "/billing/pos", icon: Receipt },
+    // The billing entry is the counter desk (new flow) / invoice list (old
+    // flow) — /billing/pos is only reached through the desk's handoff or a
+    // super admin's classic POS link.
+    { label: "Billing", href: "/billing", icon: Receipt },
     { label: "Inventory", href: "/inventory", icon: Package },
     { label: "Patients", href: "/patients", icon: Users },
   ];

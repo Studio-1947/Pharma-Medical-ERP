@@ -3,14 +3,16 @@
 import { useState, useRef, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera, ShieldAlert, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, LayoutGrid, Table, Percent, Edit3, SlidersHorizontal } from "lucide-react";
+import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera, ShieldAlert, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, LayoutGrid, Table, Percent, Edit3, SlidersHorizontal, CheckCircle2 } from "lucide-react";
 import { useCartStore, CartItem } from "@/stores/cart.store";
 import { useUIStore } from "@/stores/ui.store";
 import { formatStockUnit, getUnitLabel } from "@/lib/stock-unit-formatter";
 import { PaymentModal } from "./payment-modal";
 import { RxPickerModal } from "./rx-picker-modal";
+import { OtcSupplyModal } from "./otc-supply-modal";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
+import { usePermissions } from "@/hooks/use-permissions";
 import { queueOfflineInvoice, syncOfflineQueue } from "@/lib/pos-db";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
@@ -28,7 +30,18 @@ const formInputCls =
   "w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary transition placeholder:text-slate-400";
 const formLabelCls = "block text-xs font-semibold text-slate-600 mb-1";
 
-export function PosTerminal() {
+export function PosTerminal({
+  paymentOnly = false,
+}: {
+  /**
+   * Render a focused checkout view instead of the classic POS terminal — used
+   * by the new billing flow when the counter desk hands the bill over for
+   * payment. The classic chrome (dark Point of Sale bar, medicine search,
+   * barcode scanner, scale mode) is hidden; the cart review, totals and the
+   * payment modal are identical to the terminal's.
+   */
+  paymentOnly?: boolean;
+}) {
   const { warning: toastWarning, success: toastSuccess, info: toastInfo, error: toastError } = useToast();
   // Batch lookups are pinned to the selling branch so the packs shown on screen
   // are the packs the checkout will actually allocate. Branch staff are scoped
@@ -38,6 +51,7 @@ export function PosTerminal() {
   const [payOpen, setPayOpen] = useState(false);
   const [rxPickerOpen, setRxPickerOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
+  const [otcSupplyTarget, setOtcSupplyTarget] = useState<{ id: string; name: string } | null>(null);
   const [isOnline, setIsOnline] = useState(true);
   const [printOpen, setPrintOpen] = useState(false);
   const [lastInvoice, setLastInvoice] = useState<any>(null);
@@ -167,6 +181,11 @@ export function PosTerminal() {
     setPatient, hasControlledItems,
   } = useCartStore();
   const { user } = useAuthStore();
+  // OTC hand-outs are admin/shop-manager actions on the API; a doctor who sees
+  // the button would only get a 403 on click, so hide it for roles without
+  // inventory.adjust (super_admin, admin, shop_manager all hold it).
+  const { can: canPerm } = usePermissions();
+  const canOtc = canPerm("inventory.adjust");
   const { subtotal, tax, discount, total } = totals();
 
   const needsRx = hasControlledItems();
@@ -615,6 +634,28 @@ export function PosTerminal() {
   // GST-exempt service line on the same invoice as the dispense.
   const urlDoctorName = searchParams.get("doctorName");
   const urlFee = searchParams.get("fee");
+  // Auto-pay: the counter desk hands the bill over with ?pay=1 so the payment
+  // modal opens immediately instead of landing the staff on the empty search
+  // screen. Rehydration above has already run by the time this effect fires.
+  const urlAutoPay = searchParams.get("pay") === "1";
+  const autoPayHandledRef = useRef(false);
+  useEffect(() => {
+    if (!urlAutoPay || autoPayHandledRef.current) return;
+    autoPayHandledRef.current = true;
+    // Read the store directly — rehydration above has already merged the
+    // persisted cart, so this sees the bill the desk handed over.
+    const st = useCartStore.getState();
+    if (st.items.length > 0 || !!st.consultationFee) {
+      setPayOpen(true);
+    } else {
+      toastInfo(
+        "No bill to pay",
+        "The bill was empty when it was handed over. Build it here and press F4 to pay.",
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlAutoPay]);
+
   // Re-run only when the URL rxId actually changes; identical navigation
   // (e.g. the user returning to the same link) must not re-fill the cart.
   const handledRxRef = useRef<string | null>(null);
@@ -624,6 +665,26 @@ export function PosTerminal() {
     if (handledRxRef.current === urlRxId) return;
     handledRxRef.current = urlRxId;
     loadRxIntoCart(urlRxId, urlPatientId ?? undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [urlRxId, urlPatientId]);
+
+  // Patient-only preload from the URL (new patient-first billing flow). The
+  // counter desk opens the POS with ?patientId=… but no rxId, so the cart is
+  // linked to the patient without loading any prescription. Same guard as the
+  // Rx load: identical navigation must not re-run.
+  const handledPatientRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (urlRxId || !urlPatientId) return;
+    if (handledPatientRef.current === urlPatientId) return;
+    handledPatientRef.current = urlPatientId;
+    // Fresh cart for the new patient — same as the Rx auto-load path, so a
+    // leftover cart from the previous sale can never land on the wrong bill.
+    clear();
+    setPatient(urlPatientId);
+    toastInfo(
+      "Patient selected",
+      "Patient linked from the counter desk. Add medicines to build the bill.",
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [urlRxId, urlPatientId]);
 
@@ -725,6 +786,186 @@ export function PosTerminal() {
 
   const searchRaw = searchResults as any;
   const medicines: any[] = Array.isArray(searchRaw?.data?.data) ? searchRaw.data.data : Array.isArray(searchRaw?.data) ? searchRaw.data : [];
+
+  if (paymentOnly) {
+    return (
+      <div className="w-full max-w-3xl mx-auto">
+        {/* Bill review — the checkout view of the new billing flow. No classic
+            POS chrome: no Point of Sale bar, no search, no barcode scanner. */}
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          {/* Header: patient context + bill state */}
+          <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 bg-slate-50/70">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black text-sm shrink-0">
+                {selectedPatient?.name?.slice(0, 1).toUpperCase() ?? "W"}
+              </div>
+              <div className="min-w-0">
+                <p className="text-sm font-extrabold text-slate-900 truncate">
+                  {selectedPatient?.name ?? "Walk-in Customer"}
+                </p>
+                <p className="text-xs text-slate-500 font-mono truncate">
+                  {selectedPatient?.phone ?? "No patient linked — OTC sale"}
+                </p>
+              </div>
+            </div>
+            <span className="px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 text-[11px] font-extrabold">
+              {items.length} {items.length === 1 ? "item" : "items"} · ₹{finalTotal.toFixed(2)}
+            </span>
+          </div>
+
+          {/* Bill lines */}
+          <div className="divide-y divide-slate-100">
+            {items.map((item) => (
+              <div key={item.batchId} className="px-5 py-3 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-slate-900 truncate">{item.name}</p>
+                  <p className="text-[11px] text-slate-400 font-mono truncate">
+                    {item.batchNo} · {item.quantity} × ₹{(item.saleUnit === "loose" ? item.unitPrice / (item.stripSize || 1) : item.unitPrice).toFixed(2)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-black text-slate-900">₹{item.lineTotal.toFixed(2)}</span>
+                  <button
+                    onClick={() => removeItem(item.medicineId, item.batchId)}
+                    className="text-slate-300 hover:text-red-600 p-1 transition-colors"
+                    title="Remove item"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+            {consultationFee && (
+              <div className="px-5 py-3 flex items-center justify-between gap-3 bg-teal-50/60">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-teal-900">
+                    Doctor Consultation
+                    <span className="ml-2 bg-teal-100 text-teal-700 text-[9px] font-extrabold px-1 rounded uppercase align-middle">Fee</span>
+                  </p>
+                  <p className="text-[11px] text-teal-700 font-medium truncate">{consultationFee.doctorName} · GST-exempt service</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <span className="text-xs font-black text-teal-900">₹{consultationFee.amount.toFixed(2)}</span>
+                  <button
+                    onClick={() => setConsultationFee(null)}
+                    className="text-slate-300 hover:text-red-600 p-1 transition-colors"
+                    title="Remove consultation fee"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            )}
+            {items.length === 0 && !consultationFee && (
+              <div className="px-5 py-12 text-center">
+                <ShoppingCart className="w-8 h-8 mx-auto text-slate-300" />
+                <p className="mt-2 text-sm font-semibold text-slate-600">Bill is empty</p>
+                <p className="text-xs text-slate-400 mt-1">Add medicines on the counter desk first.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Totals */}
+          <div className="px-5 py-4 border-t border-slate-100 bg-slate-50/50 space-y-1.5 text-sm">
+            <div className="flex justify-between text-slate-600">
+              <span>Subtotal</span>
+              <span>₹{subtotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between text-slate-600">
+              <span>Tax (GST)</span>
+              <span>₹{tax.toFixed(2)}</span>
+            </div>
+            {loyaltyDiscount > 0 && (
+              <div className="flex justify-between text-amber-700 font-bold">
+                <span className="flex items-center gap-1"><Star size={12} /> Loyalty ({loyaltyPointsToRedeem} pts)</span>
+                <span>−₹{loyaltyDiscount.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center font-black text-slate-900 pt-2 border-t border-slate-200">
+              <span>TOTAL</span>
+              <span className="text-emerald-700 text-xl">₹{finalTotal.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {/* Pay action */}
+          <div className="px-5 py-4 border-t border-slate-100 bg-white">
+            <button
+              onClick={() => setPayOpen(true)}
+              disabled={items.length === 0 && !consultationFee}
+              className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white rounded-xl text-sm font-black tracking-wide disabled:opacity-40 transition-all shadow-md flex items-center justify-center gap-2"
+            >
+              <span>PAY &amp; CHECKOUT</span>
+              <span className="bg-white/20 text-white text-[11px] px-1.5 py-0.5 rounded font-mono">[F4]</span>
+            </button>
+            {needsRx && !prescriptionId?.trim() && (
+              <div className="mt-2.5 flex items-center justify-between gap-2 bg-amber-50 border border-amber-300 rounded-xl px-3 py-2 text-xs">
+                <span className="font-bold text-amber-900 flex items-center gap-1.5">
+                  <AlertTriangle size={13} /> Controlled meds — verified Rx required
+                </span>
+                <button
+                  onClick={() => setRxPickerOpen(true)}
+                  className="px-3 py-1 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-lg shrink-0"
+                >
+                  Select Rx
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Same checkout machinery as the terminal: payment modal, Rx picker, receipt */}
+        <PaymentModal
+          open={payOpen}
+          total={finalTotal}
+          onClose={() => setPayOpen(false)}
+          onConfirm={handlePayConfirm}
+          loading={createMutation.isPending}
+          needsRx={needsRx}
+          prescriptionId={prescriptionId}
+          onOpenRxPicker={() => setRxPickerOpen(true)}
+        />
+
+        <RxPickerModal
+          open={rxPickerOpen}
+          onClose={() => setRxPickerOpen(false)}
+          onSelectRx={(id) => {
+            setPrescriptionId(id);
+            toastSuccess("Prescription Linked", `Verified prescription linked to checkout.`);
+          }}
+          patientId={patientId}
+          patientName={selectedPatient?.name}
+        />
+
+        {printOpen && lastInvoice && (
+          <div className="fixed inset-0 z-[70] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-sm bg-white rounded-2xl shadow-2xl p-6 text-center">
+              <div className="w-14 h-14 mx-auto rounded-full bg-emerald-100 flex items-center justify-center">
+                <CheckCircle2 size={28} className="text-emerald-600" />
+              </div>
+              <h3 className="mt-3 text-base font-black text-slate-900">Payment Successful</h3>
+              <p className="mt-1 text-xs text-slate-500">
+                Invoice {lastInvoice.invoiceNo} · ₹{parseFloat(lastInvoice.totalAmount ?? "0").toFixed(2)}
+              </p>
+              <div className="mt-5 flex gap-2">
+                <button
+                  onClick={() => { setPrintOpen(false); setLastInvoice(null); }}
+                  className="flex-1 py-2.5 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
+                >
+                  New Sale
+                </button>
+                <button
+                  onClick={() => { printReceipt(); }}
+                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm inline-flex items-center justify-center gap-1.5"
+                >
+                  <Printer size={14} /> Print Receipt
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3 lg:h-[calc(100vh-7.5rem)]">
@@ -981,7 +1222,20 @@ export function PosTerminal() {
                           </span>
                         )}
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2.5">
+                        {canOtc && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOtcSupplyTarget({ id: m.id, name: m.name });
+                          }}
+                          className="px-2 py-1 rounded-lg bg-orange-100 hover:bg-orange-500 hover:text-white text-orange-700 text-[10px] font-extrabold transition-colors"
+                          title="Hand out without billing — stock deducted and recorded"
+                        >
+                          OTC · No bill
+                        </button>
+                        )}
                         <span className="text-[11px] text-emerald-700 font-semibold">{formatStockUnit(Number(m.totalStock || 0), m)}</span>
                         <span className="font-black text-slate-900">₹{parseFloat(m.priceMrp).toFixed(2)}</span>
                       </div>
@@ -1408,7 +1662,22 @@ export function PosTerminal() {
                         )}
                       </div>
                     </div>
-                    <span className="font-extrabold text-sm text-emerald-700 shrink-0 ml-3">₹{parseFloat(m.priceMrp).toFixed(2)}</span>
+                    <div className="flex items-center gap-2 shrink-0 ml-3">
+                      {canOtc && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOtcSupplyTarget({ id: m.id, name: m.name });
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-orange-100 hover:bg-orange-500 hover:text-white text-orange-700 text-[10px] font-extrabold transition-colors"
+                        title="Hand out without billing — stock deducted and recorded"
+                      >
+                        OTC · No bill
+                      </button>
+                      )}
+                      <span className="font-extrabold text-sm text-emerald-700">₹{parseFloat(m.priceMrp).toFixed(2)}</span>
+                    </div>
                   </div>
                 ))}
                 {!isFetching && medicines.length === 0 && (
@@ -2062,6 +2331,12 @@ export function PosTerminal() {
           </div>
         </div>
       )}
+
+      {/* OTC supply without billing — shared with the counter desk */}
+      <OtcSupplyModal
+        medicine={otcSupplyTarget}
+        onClose={() => setOtcSupplyTarget(null)}
+      />
     </div>
   );
 }

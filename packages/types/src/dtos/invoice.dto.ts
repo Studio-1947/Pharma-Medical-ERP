@@ -23,22 +23,42 @@ export const consultationFeeSchema = z.object({
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/),
 });
 
-export const createInvoiceSchema = z.object({
-  patientId: z.string().uuid().optional(),
-  prescriptionId: z.string().uuid().optional(),
-  // Honoured only for super_admin, who has no branch of their own; every other
-  // role is pinned to its own branch server-side regardless of what is sent.
-  branchId: z.string().uuid().optional(),
-  discountAmount: z.string().regex(/^\d+(\.\d{1,2})?$/).default("0"),
-  loyaltyPointsToRedeem: z.number().int().min(0).default(0),
-  notes: z.string().optional(),
-  isOfflineSync: z.boolean().default(false),
-  consultationFee: consultationFeeSchema.optional(),
-  items: z.array(invoiceItemSchema).min(1),
-  payments: z.array(paymentEntrySchema).min(1),
-  overrideReason: z.string().min(1).optional(),
-  overriddenBy: z.string().uuid().optional(),
-});
+export const createInvoiceSchema = z
+  .object({
+    patientId: z.string().uuid().optional(),
+    prescriptionId: z.string().uuid().optional(),
+    // Honoured only for super_admin, who has no branch of their own; every other
+    // role is pinned to its own branch server-side regardless of what is sent.
+    branchId: z.string().uuid().optional(),
+    discountAmount: z.string().regex(/^\d+(\.\d{1,2})?$/).default("0"),
+    loyaltyPointsToRedeem: z.number().int().min(0).default(0),
+    notes: z.string().optional(),
+    isOfflineSync: z.boolean().default(false),
+    consultationFee: consultationFeeSchema.optional(),
+    items: z.array(invoiceItemSchema),
+    payments: z.array(paymentEntrySchema).min(1),
+    overrideReason: z.string().min(1).optional(),
+    overriddenBy: z.string().uuid().optional(),
+  })
+  // A consultation-only bill (doctor path on the counter desk, no medicines)
+  // legitimately carries an empty items array — the fee is billed as a
+  // GST-exempt service line. Allow that; any other empty-items invoice stays
+  // rejected.
+  .superRefine((val, ctx) => {
+    if (val.items.length === 0 && !val.consultationFee) {
+      // Match the shape of a normal array issue so the errors object is
+      // consistent for API clients.
+      ctx.addIssue({
+        code: "too_small",
+        minimum: 1,
+        type: "array",
+        inclusive: true,
+        exact: false,
+        message: "At least one medicine or a consultation fee is required",
+        path: ["items"],
+      });
+    }
+  });
 
 export const returnItemSchema = z.object({
   invoiceItemId: z.string().uuid(),

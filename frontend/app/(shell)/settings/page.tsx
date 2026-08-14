@@ -1,25 +1,32 @@
 "use client";
 
 import { useState } from "react";
-import { Settings, Users, Building2, Bell, Lock, ShieldAlert } from "lucide-react";
+import { Settings, Users, Building2, Bell, Lock, ShieldAlert, Receipt } from "lucide-react";
 import { UsersSettings } from "@/components/modules/settings/users-settings";
 import { BranchSettings } from "@/components/modules/settings/branch-settings";
 import { NotificationSettings } from "@/components/modules/settings/notification-settings";
 import { SecuritySettings } from "@/components/modules/settings/security-settings";
+import { BillingSettings } from "@/components/modules/settings/billing-settings";
 import { usePermissions } from "@/hooks/use-permissions";
+import { useAuthStore } from "@/stores/auth.store";
 
-type Tab = "users" | "branches" | "notifications" | "security";
+type Tab = "users" | "branches" | "notifications" | "security" | "billing";
 
-const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+const TABS: { id: Tab; label: string; icon: React.ReactNode; superAdminOnly?: boolean }[] = [
   { id: "users", label: "Users & Roles", icon: <Users size={16} /> },
   { id: "branches", label: "Branches", icon: <Building2 size={16} /> },
+  { id: "billing", label: "Billing Flow", icon: <Receipt size={16} />, superAdminOnly: true },
   { id: "notifications", label: "Notifications", icon: <Bell size={16} /> },
   { id: "security", label: "Security", icon: <Lock size={16} /> },
 ];
 
 export default function SettingsPage() {
   const { can } = usePermissions();
+  const { user } = useAuthStore();
+  const isSuperAdmin = user?.role === "super_admin";
   const [activeTab, setActiveTab] = useState<Tab>("users");
+
+  const visibleTabs = TABS.filter((tab) => !tab.superAdminOnly || isSuperAdmin);
 
   if (!can("users.manage")) {
     return (
@@ -43,7 +50,7 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex gap-1 border-b border-slate-200">
-        {TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
@@ -62,6 +69,7 @@ export default function SettingsPage() {
       <div className="pt-2">
         {activeTab === "users" && <UsersSettings />}
         {activeTab === "branches" && <BranchSettings />}
+        {activeTab === "billing" && <BillingSettings />}
         {activeTab === "notifications" && <NotificationSettings />}
         {activeTab === "security" && <SecuritySettings />}
       </div>
