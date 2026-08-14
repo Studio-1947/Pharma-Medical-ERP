@@ -1,0 +1,1379 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import {
+  Search,
+  UserPlus,
+  Phone,
+  ChevronRight,
+  ShoppingCart,
+  Users,
+  ArrowRight,
+  AlertCircle,
+  Sparkles,
+  Pill,
+  Clock,
+  Ticket,
+  FileText,
+  Stethoscope,
+  CheckCircle2,
+  X,
+  Plus,
+  Minus,
+  IndianRupee,
+  RefreshCw,
+  LayoutList,
+} from "lucide-react";
+import { apiClient } from "@/lib/api-client";
+import { useCreateClinicToken } from "@/queries/clinic.queries";
+import { useNavigation } from "@/lib/navigation-context";
+import { useDebounce } from "@/hooks/use-debounce";
+import { useActiveBranchId } from "@/hooks/use-branch";
+import { localDateString } from "@/lib/date";
+import { QuickPatientForm, QuickPatient } from "@/components/modules/patients/quick-patient-form";
+import { CounterDeskModals, DeskModalView } from "@/components/modules/billing/counter-desk-modals";
+import { OtcSupplyModal } from "@/components/modules/billing/otc-supply-modal";
+import { isValidPhoneNumber } from "@/lib/phone-validation";
+import { useToast } from "@/components/ui/toast";
+import { useCartStore } from "@/stores/cart.store";
+import { useAuthStore } from "@/stores/auth.store";
+import { usePermissions } from "@/hooks/use-permissions";
+import { formatStockUnit } from "@/lib/stock-unit-formatter";
+
+type DeskPath = "prescription" | "doctor" | "otc" | null;
+
+/**
+ * New billing flow — the patient-first counter desk journey.
+ *
+ * Mirrors the reference one-screen flow: find the patient, pick what they
+ * need today (fill a prescription / book a doctor / OTC medicine), build the
+ * bill on this screen, then hand the filled cart to the POS terminal for
+ * stock allocation, payment and printing.
+ *
+ * The cart is written to the shared cart store, which the POS rehydrates on
+ * mount — so checkout carries the patient, Rx link, consultation fee and all
+ * line items without duplicating any of the POS checkout logic.
+ *
+ * The legacy medicine-first POS is never removed — "Open Classic POS" stays on
+ * this screen so a branch can fall back to it at any moment.
+ */
+export function PatientFirstBilling({
+  onContinueToPayment,
+}: {
+  /** Called when the built bill is handed over — the host page shows the POS for payment inline (new flow never navigates to the classic POS route). */
+  onContinueToPayment?: () => void;
+}) {
+  const { navigate } = useNavigation();
+  const { success: toastSuccess, warning: toastWarning, info: toastInfo, error: toastError } = useToast();
+  const { user } = useAuthStore();
+  // OTC hand-outs are an admin/shop-manager action (see the API's @Roles); a
+  // doctor must not see a button that would 403 on click.
+  const { can: canPerm } = usePermissions();
+  const canOtc = canPerm("inventory.adjust");
+  const [nowTick, setNowTick] = useState(Date.now());
+  const [query, setQuery] = useState("");
+  const [submitted, setSubmitted] = useState("");
+  const [showResults, setShowResults] = useState(false);
+  const [registering, setRegistering] = useState(false);
+  const [path, setPath] = useState<DeskPath>(null);
+  const [deskModal, setDeskModal] = useState<DeskModalView>(null);
+  const { branchId: activeBranchId } = useActiveBranchId();
+  const today = localDateString();
+
+  // Shared cart — the POS terminal reads the same store, so anything built
+  // here shows up there when we hand off for payment.
+  const cart = useCartStore();
+
+  const branchParams = activeBranchId ? { branchId: activeBranchId } : {};
+
+  // Keep the ongoing-consultation "last N minutes" timer live.
+  useEffect(() => {
+    const t = setInterval(() => setNowTick(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const minutesSince = (iso?: string | null) => {
+    if (!iso) return 0;
+    return Math.max(0, Math.floor((nowTick - new Date(iso).getTime()) / 60_000));
+  };
+
+  const formatTime = (iso?: string | null) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  };
+
+  // ── Total sale today (end-of-day summary for today) ────────────────────────
+  const { data: todaysSaleRaw } = useQuery({
+    queryKey: ["counter-today-sale", today, activeBranchId],
+    queryFn: () =>
+      apiClient.get("/billing/reports/end-of-day", { params: { date: today, ...branchParams } }) as any,
+    retry: 1,
+  });
+  const todaysSale: number = (() => {
+    const raw = todaysSaleRaw as any;
+    const s = raw?.data ?? raw;
+    if (typeof s?.totalSales === "number") return s.totalSales;
+    return 0;
+  })();
+
+  // ── Counter desk stat cards ────────────────────────────────────────────────
+  const { data: lowStockRaw } = useQuery({
+    queryKey: ["counter-low-stock", activeBranchId],
+    queryFn: () => apiClient.get("/inventory/medicines/low-stock", { params: branchParams }) as any,
+    retry: 1,
+  });
+  const lowStockCount: number = (() => {
+    const raw = lowStockRaw as any;
+    if (Array.isArray(raw)) return raw.length;
+    if (Array.isArray(raw?.data)) return raw.data.length;
+    if (Array.isArray(raw?.data?.data)) return raw.data.data.length;
+    return 0;
+  })();
+
+  // Prescriptions created today (list is createdAt-desc; count locally by date).
+  const { data: rxTodayRaw } = useQuery({
+    queryKey: ["counter-rx-today", activeBranchId],
+    queryFn: () => apiClient.get("/prescriptions", { params: { ...branchParams, limit: 100 } }) as any,
+    retry: 1,
+  });
+  const rxTodayCount: number = (() => {
+    const raw = rxTodayRaw as any;
+    const rows = Array.isArray(raw?.data) ? raw.data : Array.isArray(raw?.data?.data) ? raw.data.data : [];
+    if (rows.length === 0) return 0;
+    return rows.filter((r: any) => {
+      const d = r?.createdAt ?? r?.issuedDate;
+      if (!d) return false;
+      return String(d).slice(0, 10) === today;
+    }).length;
+  })();
+
+  // OTC medicines supplied today (hand-outs without a bill, from the stock
+  // ledger) — the counter desk serves medicine through OTC too, not only
+  // prescriptions.
+  const { data: otcTodayRaw } = useQuery({
+    queryKey: ["counter-otc-today", today, activeBranchId],
+    queryFn: () =>
+      apiClient.get("/inventory/medicines/otc-supplies", {
+        params: { date: today, ...branchParams },
+      }) as any,
+    retry: 1,
+  });
+  const otcToday: { supplies: number; units: number } = (() => {
+    const raw = otcTodayRaw as any;
+    const d = raw?.data ?? raw;
+    return {
+      supplies: Number(d?.supplies ?? 0),
+      units: Number(d?.units ?? 0),
+    };
+  })();
+
+  // Recently served today — the last few billed customers, so a returning
+  // patient can be picked up again without a fresh search.
+  const { data: servedTodayRaw } = useQuery({
+    queryKey: ["counter-served-today", today, activeBranchId],
+    queryFn: () =>
+      apiClient.get("/billing/invoices", {
+        params: { from: today, to: today, limit: 5, ...branchParams },
+      }) as any,
+    retry: 1,
+  });
+  const servedToday: any[] = (() => {
+    const raw = servedTodayRaw as any;
+    if (Array.isArray(raw?.data)) return raw.data;
+    if (Array.isArray(raw?.data?.data)) return raw.data.data;
+    return [];
+  })();
+
+  // Today's clinic queue — drives "patients visited by doctors", the ongoing
+  // consultation card and the next appointment card.
+  const { data: queueRaw } = useQuery({
+    queryKey: ["counter-clinic-queue", today, activeBranchId],
+    queryFn: () => apiClient.get("/clinic/tokens", { params: { date: today, ...branchParams, limit: 100 } }) as any,
+    retry: 1,
+  });
+  const queueRows: any[] = (() => {
+    const raw = queueRaw as any;
+    if (Array.isArray(raw?.data)) return raw.data;
+    if (Array.isArray(raw?.data?.data)) return raw.data.data;
+    return [];
+  })();
+  const visitedByDoctors = new Set(
+    queueRows
+      .filter((t: any) => t.status === "called" || t.status === "completed")
+      .map((t: any) => t.patientId ?? t.patient?.id)
+      .filter(Boolean),
+  ).size;
+  const ongoingToken = queueRows.find((t: any) => t.status === "called") ?? null;
+  const nextToken = queueRows.find((t: any) => t.status === "pending") ?? null;
+  const docDisplay = (t: any) => {
+    const d = t?.doctor;
+    if (!d) return t?.doctorName ?? "—";
+    return [d.firstName, d.lastName].filter(Boolean).join(" ") || d.email || "Doctor";
+  };
+
+  // ── Unified search: patients AND medicines ────────────────────────────────
+  const debounced = useDebounce(query, 300);
+  const searchActive = debounced.trim().length >= 3;
+
+  const { data: searchRaw, isFetching } = useQuery({
+    queryKey: ["patient-search-counter", debounced],
+    queryFn: () =>
+      apiClient.get("/patients", {
+        params: { search: debounced, limit: 6 },
+      }) as any,
+    enabled: searchActive,
+  });
+
+  // Medicines share the same search box — the counter desk also supplies OTC
+  // medicines without a bill, so staff can look up any medicine right here.
+  const { data: medSearchRaw, isFetching: medSearching } = useQuery({
+    queryKey: ["medicine-search-counter", debounced, activeBranchId],
+    queryFn: () =>
+      apiClient.get("/inventory/medicines", {
+        params: { search: debounced, limit: 6 },
+      }) as any,
+    enabled: searchActive,
+  });
+
+  const patients: any[] = (() => {
+    const raw = searchRaw as any;
+    if (Array.isArray(raw?.data?.data)) return raw.data.data;
+    if (Array.isArray(raw?.data)) return raw.data;
+    if (Array.isArray(raw)) return raw;
+    return [];
+  })();
+
+  const medResults: any[] = (() => {
+    const raw = medSearchRaw as any;
+    if (Array.isArray(raw?.data?.data)) return raw.data.data;
+    if (Array.isArray(raw?.data)) return raw.data;
+    if (Array.isArray(raw)) return raw;
+    return [];
+  })();
+
+  const [otcSupplyTarget, setOtcSupplyTarget] = useState<{ id: string; name: string } | null>(null);
+
+  const selectedPatientRaw = cart.patientId
+    ? patients.find((p) => p.id === cart.patientId)
+    : null;
+
+  // The cart store only keeps the patient id; fetch the full record so the
+  // desk can render the patient card without relying on the search list.
+  const { data: selectedPatientDetail } = useQuery({
+    queryKey: ["counter-patient-detail", cart.patientId],
+    queryFn: () => apiClient.get(`/patients/${cart.patientId}`) as any,
+    enabled: !!cart.patientId,
+  });
+  const selectedPatientRaw2: any =
+    (selectedPatientDetail as any)?.data ?? selectedPatientDetail ?? null;
+  const selectedPatient =
+    selectedPatientRaw ??
+    (selectedPatientRaw2?.data ?? selectedPatientRaw2) ??
+    null;
+
+  const openPosFor = (patientId: string) => {
+    // Write to the shared cart first; POS rehydrates on mount.
+    cart.setPatient(patientId);
+    navigate(`/billing/pos`);
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = query.trim();
+    if (trimmed.length < 3) {
+      toastWarning("Enter more characters", "Type at least 3 characters of the mobile number or name.");
+      return;
+    }
+    if (isValidPhoneNumber(trimmed)) {
+      const exact = patients.find(
+        (p) => (p.phone ?? "").replace(/[^0-9]/g, "").endsWith(trimmed.replace(/[^0-9]/g, "")),
+      );
+      if (exact) {
+        selectPatient(exact.id, exact.name);
+        return;
+      }
+    }
+    setSubmitted(trimmed);
+    setShowResults(true);
+  };
+
+  const selectPatient = (id: string, name: string) => {
+    cart.setPatient(id);
+    setQuery(name);
+    setShowResults(false);
+    setPath(null);
+    setRegistering(false);
+    toastInfo("Patient selected", "Choose what they need today, or jump straight to OTC.");
+  };
+
+  const clearPatient = () => {
+    cart.clear();
+    setQuery("");
+    setPath(null);
+  };
+
+  const startPath = (p: DeskPath) => {
+    if (!cart.patientId) {
+      toastWarning("Select a patient first", "Search or create the patient before starting a path.");
+      return;
+    }
+    setPath(p);
+  };
+
+  // ── Rx path: verified prescriptions for this patient ──────────────────────
+  const { data: rxListRaw, isFetching: rxFetching } = useQuery({
+    queryKey: ["counter-rx-list", cart.patientId],
+    queryFn: () =>
+      apiClient.get("/prescriptions", {
+        params: { patientId: cart.patientId || undefined, status: "verified", limit: 10 },
+      }) as any,
+    enabled: path === "prescription" && !!cart.patientId,
+  });
+  const rxList: any[] = (() => {
+    const raw = rxListRaw as any;
+    if (Array.isArray(raw?.data?.data)) return raw.data.data;
+    if (Array.isArray(raw?.data)) return raw.data;
+    if (Array.isArray(raw)) return raw;
+    return [];
+  })();
+
+  // ── Doctor path: also issues the patient a clinic token so the doctor's
+  // queue stays intact — booking a doctor on the desk is a queue entry too.
+  const createToken = useCreateClinicToken();
+  const [tokenLoadingId, setTokenLoadingId] = useState<string | null>(null);
+
+  const [rxLoadingId, setRxLoadingId] = useState<string | null>(null);
+
+  const loadRxIntoCart = async (rx: any) => {
+    setRxLoadingId(rx.id);
+    try {
+      // Full detail with items, if the list row lacks them.
+      let detail = rx;
+      if (!Array.isArray(rx?.items)) {
+        const res: any = await apiClient.get(`/prescriptions/${rx.id}`);
+        detail = res?.data?.data ?? res?.data ?? res;
+      }
+      const rxItems: any[] = Array.isArray(detail?.items) ? detail.items : [];
+      if (rxItems.length === 0) {
+        toastInfo("Prescription loaded", "This prescription has no medicine items to add to the bill.");
+        cart.setPrescriptionId(rx.id);
+        setPath(null);
+        return;
+      }
+      const warnings: string[] = [];
+      for (const item of rxItems) {
+        const med = item?.medicine ?? null;
+        const medId = item.medicineId ?? med?.id;
+        const label = med?.name ?? item.medicineName ?? "Medicine";
+        if (!medId) {
+          warnings.push(label);
+          continue;
+        }
+        try {
+          const batchesRes: any = await apiClient.get(`/inventory/medicines/${medId}/batches`, {
+            params: { branchId: activeBranchId },
+          });
+          const batchList: any[] = Array.isArray(batchesRes)
+            ? batchesRes
+            : Array.isArray(batchesRes?.data?.data)
+              ? batchesRes.data.data
+              : Array.isArray(batchesRes?.data)
+                ? batchesRes.data
+                : [];
+          const first = batchList[0];
+          const availableQty = first?.quantity ?? 0;
+          if (!first || availableQty <= 0) {
+            warnings.push(label);
+            continue;
+          }
+          cart.addItem({
+            medicineId: medId,
+            batchId: first.id,
+            name: label,
+            sku: med?.sku ?? item.medicineName ?? "",
+            batchNo: first.batchNo,
+            unitPrice: parseFloat(med?.priceMrp ?? "0") || 0,
+            stripSize: med?.stripSize ? Number(med.stripSize) : 1,
+            taxPct: parseFloat(med?.taxPercent ?? "0") || 0,
+            discountPct: 0,
+            quantity: item.quantityPrescribed || 1,
+            scheduleClass: med?.scheduleClass,
+            requiresPrescription: med?.requiresPrescription,
+            unit: med?.unit,
+            batchStock: availableQty,
+            totalStock: availableQty,
+          });
+        } catch {
+          warnings.push(label);
+        }
+      }
+      cart.setPrescriptionId(rx.id);
+      setPath(null);
+      if (warnings.length > 0) {
+        toastWarning(
+          "Some items skipped",
+          `Out of stock or unlinked on this Rx: ${warnings.join(", ")}. Continue in POS to adjust.`,
+          8000,
+        );
+      } else {
+        toastSuccess("Prescription loaded", "Medicines added to the bill. Review below and continue to payment.");
+      }
+    } catch {
+      toastError("Could not load prescription", "Failed to load the prescription items. Try again.");
+    } finally {
+      setRxLoadingId(null);
+    }
+  };
+
+  // ── Doctor path: in-store doctors ──────────────────────────────────────────
+  const { data: doctorsRaw } = useQuery({
+    queryKey: ["counter-doctors"],
+    queryFn: () => apiClient.get("/clinic/doctors") as any,
+    enabled: path === "doctor",
+  });
+  const doctors: any[] = (() => {
+    const raw = doctorsRaw as any;
+    if (Array.isArray(raw?.data)) return raw.data;
+    if (Array.isArray(raw?.data?.data)) return raw.data.data;
+    return [];
+  })();
+
+  const bookDoctor = async (doc: any) => {
+    const dp = doc?.doctorProfile;
+    const fee = Number(dp?.consultationFee ?? 400);
+    const name = [doc.firstName, doc.lastName].filter(Boolean).join(" ") || doc.email || "Doctor";
+
+    // Issue the clinic token first — booking a doctor on the counter desk is
+    // also a queue entry, so the doctor's queue stays intact and the token
+    // appears on the clinic queue screen (pending, with the patient's name).
+    if (!cart.patientId) {
+      toastWarning("Select a patient first", "A patient is needed to issue the clinic token.");
+      return;
+    }
+    setTokenLoadingId(doc.id);
+    try {
+      await createToken.mutateAsync({
+        patientId: cart.patientId,
+        doctorId: doc.id,
+        date: today,
+        branchId: activeBranchId,
+      });
+      cart.setConsultationFee({ doctorName: name, amount: fee });
+      setPath(null);
+      toastSuccess(
+        "Consultation booked",
+        `${name} — ₹${fee.toFixed(2)} fee added to the bill. Clinic token issued; the queue shows the patient as next in line.`,
+      );
+    } catch {
+      toastError(
+        "Could not book the doctor",
+        "The clinic token could not be issued. Check the doctor is active and try again.",
+      );
+    } finally {
+      setTokenLoadingId(null);
+    }
+  };
+
+  // ── OTC path: medicine search + add ────────────────────────────────────────
+  const [medicineSearch, setMedicineSearch] = useState("");
+  const debouncedMeds = useDebounce(medicineSearch, 300);
+  const { data: medsRaw, isFetching: medsFetching } = useQuery({
+    queryKey: ["counter-medicine-search", debouncedMeds],
+    queryFn: () => apiClient.get("/inventory/medicines", { params: { search: debouncedMeds, limit: 8 } }) as any,
+    enabled: path === "otc" && debouncedMeds.trim().length >= 2,
+  });
+  const meds: any[] = (() => {
+    const raw = medsRaw as any;
+    if (Array.isArray(raw?.data?.data)) return raw.data.data;
+    if (Array.isArray(raw?.data)) return raw.data;
+    if (Array.isArray(raw)) return raw;
+    return [];
+  })();
+  const [medLoadingId, setMedLoadingId] = useState<string | null>(null);
+
+  const addMedicineToCart = async (m: any) => {
+    setMedLoadingId(m.id);
+    try {
+      const batchRes: any = await apiClient.get(`/inventory/medicines/${m.id}/batches`, {
+        params: { branchId: activeBranchId },
+      });
+      const batchArr: any[] = Array.isArray(batchRes)
+        ? batchRes
+        : Array.isArray(batchRes?.data?.data)
+          ? batchRes.data.data
+          : Array.isArray(batchRes?.data)
+            ? batchRes.data
+            : [];
+      const first = batchArr[0];
+      if (!first) {
+        toastWarning("Out of stock", `No active batch found for "${m.name}". Add stock via Inventory first.`, 7000);
+        return;
+      }
+      const availableQty = first.quantity ?? Number(m.totalStock ?? 99999);
+      cart.addItem({
+        medicineId: m.id,
+        batchId: first.id,
+        name: m.name,
+        sku: m.sku,
+        batchNo: first.batchNo,
+        unitPrice: parseFloat(m.priceMrp),
+        stripSize: m.stripSize ? parseInt(m.stripSize) : 1,
+        taxPct: parseFloat(m.taxPercent ?? "0"),
+        discountPct: 0,
+        quantity: 1,
+        scheduleClass: m.scheduleClass,
+        requiresPrescription: m.requiresPrescription,
+        unit: m.unit,
+        batchStock: availableQty,
+        totalStock: Number(m.totalStock ?? availableQty),
+      });
+      toastSuccess(`${m.name} added`, "Added to the bill. Quantity can be changed in the POS.");
+    } catch {
+      toastError("Failed to add", `Could not fetch stock for "${m.name}".`);
+    } finally {
+      setMedLoadingId(null);
+    }
+  };
+
+  const totals = cart.totals();
+  const cartItems = cart.items;
+  const hasCart = cartItems.length > 0 || !!cart.consultationFee;
+
+  const continueToPayment = () => {
+    if (!hasCart) {
+      toastWarning("Bill is empty", "Add at least one medicine or a consultation before continuing.");
+      return;
+    }
+    if (onContinueToPayment) {
+      onContinueToPayment();
+      return;
+    }
+    // Fallback (standalone render): hand off to the POS route.
+    navigate("/billing/pos");
+  };
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">          <div className="flex items-center gap-2.5">
+          <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-700 shrink-0">
+            <Users size={18} />
+          </div>
+          <div>
+            <h1 className="text-xl font-extrabold tracking-tight text-slate-900 flex items-center gap-2">
+              Counter Desk Billing
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 text-[10px] font-extrabold uppercase tracking-wide border border-orange-200">
+                <Sparkles size={10} /> New Flow
+              </span>
+            </h1>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Find the patient, pick what they need, then hand the bill to the POS for payment.
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2.5">
+          {/* Total sale today — mirrors the reference header pill */}
+          <div className="hidden sm:flex flex-col items-end rounded-2xl border border-slate-200 bg-white px-4 py-2 shadow-sm">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Total sale today</p>
+            <p className="text-lg font-black text-slate-900 leading-tight">
+              ₹{todaysSale.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </p>
+          </div>
+          {user?.role === "super_admin" && (
+            <button
+              type="button"
+              onClick={() => navigate("/billing/pos")}
+              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-semibold hover:bg-slate-50 hover:text-slate-900 transition-all"
+              title="Legacy medicine-first POS terminal — super admin only"
+            >
+              <ShoppingCart size={14} />
+              Open Classic POS
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Stat cards row — live counters for the counter desk */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col">
+          <p className="text-2xl font-black text-orange-600">{lowStockCount}</p>
+          <p className="text-xs font-semibold text-slate-600 mt-0.5">Low-stock medicines</p>
+          <button
+            type="button"
+            onClick={() => setDeskModal("low-stock")}
+            className="mt-2 self-end w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600 transition-colors"
+            title="View low-stock medicines"
+          >
+            <ArrowRight size={13} />
+          </button>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col">
+          <p className="text-2xl font-black text-emerald-700">{rxTodayCount}</p>
+          <p className="text-xs font-semibold text-slate-600 mt-0.5">Prescriptions filled today</p>
+          <button
+            type="button"
+            onClick={() => setDeskModal("rx-today")}
+            className="mt-2 self-end w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600 transition-colors"
+            title="View prescriptions filled today"
+          >
+            <ArrowRight size={13} />
+          </button>
+        </div>
+
+        {/* OTC medicines supplied today — the desk serves medicine without a
+            bill too, so this card sits beside the prescription count. */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col">
+          <p className="text-2xl font-black text-emerald-700">{otcToday.supplies}</p>
+          <p className="text-xs font-semibold text-slate-600 mt-0.5">
+            OTC medicines supplied
+            {otcToday.units > 0 && (
+              <span className="ml-1 text-[10px] font-bold text-slate-400">({otcToday.units} units)</span>
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={() => setDeskModal("otc-today")}
+            className="mt-2 self-end w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600 transition-colors"
+            title="View OTC medicines supplied today"
+          >
+            <ArrowRight size={13} />
+          </button>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col">
+          <p className="text-2xl font-black text-emerald-700">{visitedByDoctors}</p>
+          <p className="text-xs font-semibold text-slate-600 mt-0.5">Patients visited by doctors</p>
+          <button
+            type="button"
+            onClick={() => setDeskModal("patients-visited")}
+            className="mt-2 self-end w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600 transition-colors"
+            title="View patients visited by doctors"
+          >
+            <ArrowRight size={13} />
+          </button>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col">
+          {ongoingToken ? (
+            <>
+              <p className="font-bold text-slate-900 text-sm truncate">{ongoingToken.patient?.name ?? "—"}</p>
+              <p className="text-[11px] text-slate-400 mt-0.5 truncate">
+                Ongoing · {docDisplay(ongoingToken)}
+              </p>
+              <div className="mt-2 flex items-center justify-between">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-emerald-300 bg-emerald-50 text-emerald-700 text-[10px] font-bold">
+                  Token {ongoingToken.tokenNo}
+                </span>
+                <span className="flex items-center gap-1 text-[10px] text-emerald-600 font-semibold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Last {Math.max(1, minutesSince(ongoingToken.calledAt))} minute{minutesSince(ongoingToken.calledAt) === 1 ? "" : "s"}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-2xl font-black text-slate-300">—</p>
+              <p className="text-xs font-semibold text-slate-600 mt-0.5">No consultation ongoing</p>
+              <span className="mt-2 self-end flex items-center gap-1 text-[10px] text-slate-400 font-medium">
+                <Clock size={11} /> idle
+              </span>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => setDeskModal("ongoing")}
+            className="mt-2 self-end w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600 transition-colors"
+            title="View ongoing consultation"
+          >
+            <ArrowRight size={13} />
+          </button>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col">
+          {nextToken ? (
+            <>
+              <p className="font-bold text-slate-900 text-sm truncate">{nextToken.patient?.name ?? "—"}</p>
+              <p className="text-[11px] text-emerald-600 mt-0.5 truncate font-semibold">Next appointment</p>
+              <div className="mt-2 flex items-center justify-between gap-1">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full border border-emerald-300 bg-emerald-50 text-emerald-700 text-[10px] font-bold">
+                  Token {nextToken.tokenNo}
+                </span>
+                <span className="text-[10px] text-slate-400 font-medium truncate">
+                  {nextToken.timeSlot ? `${nextToken.timeSlot} · ` : ""}{docDisplay(nextToken)}
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <p className="text-2xl font-black text-slate-300">—</p>
+              <p className="text-xs font-semibold text-slate-600 mt-0.5">No pending appointments</p>
+              <span className="mt-2 self-end flex items-center gap-1 text-[10px] text-slate-400 font-medium">
+                <Ticket size={11} /> queue clear
+              </span>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => setDeskModal("next")}
+            className="mt-2 self-end w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600 transition-colors"
+            title="View next appointment"
+          >
+            <ArrowRight size={13} />
+          </button>
+        </div>
+      </div>
+
+      {/* Journey card: patient search -> patient card -> path -> path content */}
+      <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        {/* Step 1 — find the patient */}
+        {!cart.patientId ? (
+          <div className="p-6">
+            {registering ? (
+              <QuickPatientForm
+                initialQuery={query}
+                onCreated={(p: QuickPatient) => {
+                  setRegistering(false);
+                  selectPatient(p.id, p.name);
+                }}
+                onCancel={() => setRegistering(false)}
+              />
+            ) : (
+              <>
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-black flex items-center justify-center">1</span>
+                  <p className="text-sm font-bold text-slate-800">Who is being served?</p>
+                </div>
+                <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
+                  <div className="relative flex-1">
+                    <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      autoFocus
+                      value={query}
+                      onChange={(e) => {
+                        setQuery(e.target.value);
+                        setShowResults(false);
+                      }}
+                      placeholder="Search patient by mobile / name, or medicine…"
+                      inputMode="tel"
+                      className="w-full border-2 border-slate-200 rounded-full pl-11 pr-4 py-3 text-sm font-medium bg-white focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 transition-all"
+                    />
+                  </div>
+                  <div className="flex gap-3 shrink-0">
+                    <button
+                      type="submit"
+                      disabled={query.trim().length < 3}
+                      className="flex items-center gap-2 px-6 py-3 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+                    >
+                      {isFetching ? (
+                        <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      ) : (
+                        <Search size={14} />
+                      )}
+                      Search
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setRegistering(true)}
+                      className="flex items-center gap-2 px-6 py-3 rounded-full bg-orange-500 hover:bg-orange-600 text-white text-sm font-bold transition-all shadow-sm"
+                    >
+                      <UserPlus size={14} />
+                      + Add New
+                    </button>
+                  </div>
+                </form>
+
+                {/* Recently served today — pick up a returning customer */}
+                {!showResults && !searchActive && !registering && servedToday.length > 0 && (
+                  <div className="mt-4">
+                    <p className="px-1 mb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                      <Clock size={11} /> Recently served today
+                    </p>
+                    <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white">
+                      {servedToday.map((inv: any) => {
+                        const servedPatientId = inv?.patientId;
+                        const servedName = inv?.patientName ?? "Walk-in";
+                        return (
+                          <button
+                            key={inv.id}
+                            type="button"
+                            disabled={!servedPatientId}
+                            onClick={() => servedPatientId && selectPatient(servedPatientId, servedName)}
+                            className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-orange-50/60 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 shrink-0 border border-slate-200">
+                                {servedName.slice(0, 1).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-[13px] font-bold text-slate-800 truncate">{servedName}</p>
+                                <p className="text-[11px] text-slate-400 font-mono truncate">{inv?.invoiceNo}</p>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-xs font-bold text-slate-700">₹{Number(inv?.totalAmount ?? 0).toFixed(2)}</p>
+                              <p className="text-[10px] text-slate-400">{formatTime(inv?.createdAt)}</p>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {(showResults || searchActive) && (
+                  <div className="mt-4 border border-slate-200 rounded-xl overflow-hidden">
+                    {(submitted || searchActive) && (
+                      <div className="px-4 py-2 bg-slate-50 border-b border-slate-100 flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold text-slate-500">
+                          Results for{" "}
+                          <span className="font-extrabold text-slate-800">
+                            &ldquo;{submitted || query}&rdquo;
+                          </span>
+                        </p>
+                        <span className="text-[10px] font-bold text-slate-400 shrink-0">
+                          {patients.length + medResults.length} match{patients.length + medResults.length !== 1 ? "es" : ""}
+                        </span>
+                      </div>
+                    )}
+                    {(isFetching || medSearching) && (
+                      <div className="p-4 text-xs text-slate-400 text-center animate-pulse">Searching patients and medicines…</div>
+                    )}
+
+                    {!isFetching && !medSearching && patients.length === 0 && medResults.length === 0 && (
+                      <div className="p-6 text-center">
+                        <AlertCircle size={20} className="mx-auto text-slate-300" />
+                        <p className="mt-2 text-sm font-semibold text-slate-600">
+                          Nothing found for &ldquo;{submitted || query}&rdquo;
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          No matching patient or medicine. Register the patient
+                          with <strong>+ Add New</strong>.
+                        </p>
+                      </div>
+                    )}
+
+                    {/* Patients group */}
+                    {patients.length > 0 && (
+                      <div className="divide-y divide-slate-100">
+                        <p className="px-4 py-1.5 bg-slate-50 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-b border-slate-100 flex items-center gap-1.5">
+                          <Users size={11} /> Patients
+                        </p>
+                        {patients.map((p: any) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            onClick={() => selectPatient(p.id, p.name)}
+                            className="w-full flex items-center justify-between px-4 py-3 hover:bg-orange-50/60 transition-colors text-left group"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="w-9 h-9 rounded-full bg-slate-100 group-hover:bg-white flex items-center justify-center text-sm font-bold text-slate-600 shrink-0 border border-slate-200">
+                                {(p.name ?? "?").slice(0, 1).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold text-slate-800 truncate">{p.name}</p>
+                                <p className="text-xs text-slate-400 font-mono flex items-center gap-1">
+                                  <Phone size={10} /> {p.phone}
+                                </p>
+                              </div>
+                            </div>
+                            <span className="flex items-center gap-1.5 text-xs font-bold text-orange-600 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                              Select <ArrowRight size={13} />
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Medicines group — OTC supply without billing */}
+                    {medResults.length > 0 && (
+                      <div className="divide-y divide-slate-100 border-t border-slate-100">
+                        <p className="px-4 py-1.5 bg-slate-50 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-b border-slate-100 flex items-center gap-1.5">
+                          <Pill size={11} /> Medicines
+                        </p>
+                        {medResults.map((m: any) => (
+                          <div
+                            key={m.id}
+                            className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-orange-50/40 transition-colors"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-slate-800 truncate">{m.name}</p>
+                              <p className="text-xs text-slate-400 font-mono truncate">
+                                {m.sku}
+                                {m.scheduleClass ? ` · ${m.scheduleClass}` : ""}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-[11px] text-emerald-700 font-semibold">
+                                {formatStockUnit(Number(m.totalStock || 0), m)}
+                              </span>
+                              {canOtc && (
+                              <button
+                                type="button"
+                                onClick={() => setOtcSupplyTarget({ id: m.id, name: m.name })}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold transition-colors shadow-sm"
+                                title="Hand out without billing — stock deducted and recorded"
+                              >
+                                <Pill size={11} />
+                                OTC · No bill
+                              </button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="p-6">
+            {/* Patient card */}
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-200 bg-emerald-50/50 px-4 py-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-full bg-emerald-600 text-white flex items-center justify-center font-black text-sm shrink-0">
+                  {(selectedPatient?.name ?? "?").slice(0, 1).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <p className="font-bold text-slate-900 text-sm truncate">{selectedPatient?.name ?? "Patient"}</p>
+                  <p className="text-xs text-slate-500 font-mono truncate">{selectedPatient?.phone ?? ""}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {cart.items.length > 0 && (
+                  <span className="px-2.5 py-1 rounded-full bg-white border border-emerald-200 text-emerald-700 text-[11px] font-bold">
+                    {cart.items.length} item{cart.items.length !== 1 ? "s" : ""} in bill
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={clearPatient}
+                  className="px-3 py-1.5 rounded-full bg-white border border-slate-200 text-slate-600 text-xs font-semibold hover:bg-slate-50 transition-colors"
+                >
+                  Change patient
+                </button>
+              </div>
+            </div>
+
+            {/* Step 2 — path selection */}
+            {!path && (
+              <div className="mt-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-black flex items-center justify-center">2</span>
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">What does {selectedPatient?.name?.split(" ")[0] ?? "the patient"} need today?</p>
+                    <p className="text-xs text-slate-400">Choose the fastest path for this visit</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => startPath("prescription")}
+                    className="rounded-2xl border border-slate-200 bg-white p-5 text-left hover:border-emerald-400 hover:bg-emerald-50/40 transition-all group"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center text-emerald-700">
+                      <FileText size={18} />
+                    </div>
+                    <p className="mt-3 font-bold text-slate-800 text-sm">Fill a prescription</p>
+                    <p className="mt-1 text-xs text-slate-500">Verify a doctor&apos;s Rx and dispense its medicines.</p>
+                    <span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-emerald-600">
+                      Start dispensing <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => startPath("doctor")}
+                    className="rounded-2xl border border-slate-200 bg-white p-5 text-left hover:border-purple-400 hover:bg-purple-50/40 transition-all group"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center text-purple-700">
+                      <Stethoscope size={18} />
+                    </div>
+                    <p className="mt-3 font-bold text-slate-800 text-sm">Book a doctor</p>
+                    <p className="mt-1 text-xs text-slate-500">Choose an available in-store doctor; consultation fee is added to the bill.</p>
+                    <span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-purple-600">
+                      View doctors <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => startPath("otc")}
+                    className="rounded-2xl border border-slate-200 bg-white p-5 text-left hover:border-orange-400 hover:bg-orange-50/40 transition-all group"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center text-orange-700">
+                      <Pill size={18} />
+                    </div>
+                    <p className="mt-3 font-bold text-slate-800 text-sm">OTC medicine</p>
+                    <p className="mt-1 text-xs text-slate-500">Sell over-the-counter medicines straight from the counter.</p>
+                    <span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-orange-600">
+                      Search medicines <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Step 2 content — prescription path */}
+            {path === "prescription" && (
+              <div className="mt-5">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-black flex items-center justify-center">2</span>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">Fill a prescription</p>
+                      <p className="text-xs text-slate-400">Verified prescriptions for {selectedPatient?.name ?? "this patient"}</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPath(null)}
+                    className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                  >
+                    <X size={13} /> Back to paths
+                  </button>
+                </div>
+
+                {rxFetching ? (
+                  <div className="space-y-2.5">
+                    {[1, 2].map((i) => <div key={i} className="h-20 bg-slate-100 rounded-xl animate-pulse" />)}
+                  </div>
+                ) : rxList.length === 0 ? (
+                  <div className="py-10 text-center">
+                    <FileText size={28} className="mx-auto text-slate-300" />
+                    <p className="mt-2 text-sm font-semibold text-slate-600">No verified prescriptions found</p>
+                    <p className="text-xs text-slate-400 mt-1">Does the patient have a paper Rx? Log it in the POS, or pick another path.</p>
+                    <button
+                      type="button"
+                      onClick={() => setPath(null)}
+                      className="mt-3 px-4 py-2 rounded-full bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 transition-colors"
+                    >
+                      Choose another path
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    {rxList.map((rx: any) => (
+                      <button
+                        key={rx.id}
+                        type="button"
+                        disabled={rxLoadingId === rx.id}
+                        onClick={() => loadRxIntoCart(rx)}
+                        className="w-full text-left rounded-xl border border-slate-200 bg-white p-4 hover:border-emerald-400 hover:bg-emerald-50/40 transition-all disabled:opacity-60"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold text-slate-800 truncate">
+                              #{rx.prescriptionNumber ?? rx.id.slice(0, 8)}
+                              <span className="ml-2 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-bold">Verified</span>
+                            </p>
+                            <p className="text-xs text-slate-500 mt-0.5 truncate">
+                              {rx.doctorName ? `Dr. ${rx.doctorName}` : "Doctor"} ·{" "}
+                              {rx.createdAt
+                                ? new Date(rx.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short" })
+                                : ""}
+                            </p>
+                          </div>
+                          {rxLoadingId === rx.id ? (
+                            <span className="w-4 h-4 border-2 border-emerald-300 border-t-emerald-700 rounded-full animate-spin shrink-0" />
+                          ) : (
+                            <span className="flex items-center gap-1 text-xs font-bold text-emerald-600 shrink-0">
+                              Dispense <ArrowRight size={13} />
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 2 content — doctor path */}
+            {path === "doctor" && (
+              <div className="mt-5">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-[11px] font-black flex items-center justify-center">2</span>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">Book a doctor</p>
+                      <p className="text-xs text-slate-400">Consultation fee is added to the bill</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPath(null)}
+                    className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                  >
+                    <X size={13} /> Back to paths
+                  </button>
+                </div>
+
+                {doctors.length === 0 ? (
+                  <div className="py-10 text-center">
+                    <Stethoscope size={28} className="mx-auto text-slate-300" />
+                    <p className="mt-2 text-sm font-semibold text-slate-600">No doctors available today</p>
+                    <p className="text-xs text-slate-400 mt-1">Choose another path or check the clinic queue.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {doctors.map((doc: any) => {
+                      const dp = doc?.doctorProfile;
+                      const fee = Number(dp?.consultationFee ?? 400);
+                      const name = [doc.firstName, doc.lastName].filter(Boolean).join(" ") || doc.email || "Doctor";
+                      return (
+                        <button
+                          key={doc.id}
+                          type="button"
+                          disabled={tokenLoadingId === doc.id}
+                          onClick={() => bookDoctor(doc)}
+                          className="rounded-2xl border border-slate-200 bg-white p-4 text-left hover:border-purple-400 hover:bg-purple-50/40 transition-all disabled:opacity-60"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-black text-sm shrink-0">
+                              {name.replace("Dr. ", "").slice(0, 2).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-bold text-slate-800 truncate">{name}</p>
+                              <p className="text-xs text-slate-500 truncate">{dp?.specialty ?? "General Medicine"}</p>
+                            </div>
+                          </div>
+                          <div className="mt-3 flex items-center justify-between">
+                            <span className="text-xs text-slate-500 font-medium">{dp?.opdRoom ?? "OPD"}</span>
+                            <span className="text-sm font-black text-slate-900">₹{fee.toFixed(0)}</span>
+                          </div>
+                          <span className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-purple-600">
+                            {tokenLoadingId === doc.id ? (
+                              <span className="flex items-center gap-1.5">
+                                <span className="w-3 h-3 border-2 border-purple-300 border-t-purple-700 rounded-full animate-spin" />
+                                Issuing token…
+                              </span>
+                            ) : (
+                              <>
+                                Book & issue token <ArrowRight size={13} />
+                              </>
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 2 content — OTC path */}
+            {path === "otc" && (
+              <div className="mt-5">
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-700 text-[11px] font-black flex items-center justify-center">2</span>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">OTC medicine</p>
+                      <p className="text-xs text-slate-400">Search and add medicines to the bill</p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setPath(null)}
+                    className="text-xs font-semibold text-slate-500 hover:text-slate-800 flex items-center gap-1"
+                  >
+                    <X size={13} /> Back to paths
+                  </button>
+                </div>
+
+                <div className="relative">
+                  <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    autoFocus
+                    value={medicineSearch}
+                    onChange={(e) => setMedicineSearch(e.target.value)}
+                    placeholder="Search medicines by name, SKU or barcode…"
+                    className="w-full border-2 border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm bg-white focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 transition-all"
+                  />
+                </div>
+
+                <div className="mt-3 space-y-2">
+                  {medsFetching && <div className="p-4 text-xs text-slate-400 text-center animate-pulse">Searching catalog…</div>}
+                  {!medsFetching && meds.length === 0 && debouncedMeds.trim().length >= 2 && (
+                    <div className="p-6 text-center text-xs text-slate-400">No medicines matched. Try a different name.</div>
+                  )}
+                  {meds.map((m: any) => (
+                    <div
+                      key={m.id}
+                      className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 hover:border-orange-300 transition-colors"
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold text-slate-800 truncate">{m.name}</p>
+                        <p className="text-xs text-slate-400 font-mono truncate">
+                          {m.sku} · {formatStockUnit(Number(m.totalStock || 0), m)} in stock
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="text-sm font-black text-slate-900">₹{parseFloat(m.priceMrp ?? "0").toFixed(2)}</span>
+                        <button
+                          type="button"
+                          disabled={medLoadingId === m.id}
+                          onClick={() => addMedicineToCart(m)}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold disabled:opacity-60 transition-colors"
+                        >
+                          {medLoadingId === m.id ? (
+                            <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          ) : (
+                            <Plus size={12} />
+                          )}
+                          Add
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Step 3 — bill summary + hand off to POS */}
+      {cart.patientId && (
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-black flex items-center justify-center">3</span>
+              <p className="text-sm font-bold text-slate-800">Bill summary</p>
+              {!path && cart.items.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPath("otc")}
+                  className="text-[11px] font-bold text-orange-600 hover:text-orange-700 flex items-center gap-0.5"
+                >
+                  <Plus size={11} /> Add more
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={() => { cart.clear(); setPath(null); }}
+              className="text-xs font-semibold text-slate-400 hover:text-rose-600 flex items-center gap-1"
+            >
+              <RefreshCw size={12} /> Clear bill
+            </button>
+          </div>
+
+          {!hasCart ? (
+            <div className="p-6 text-center">
+              <LayoutList size={26} className="mx-auto text-slate-300" />
+              <p className="mt-2 text-sm font-semibold text-slate-500">No items yet</p>
+              <p className="text-xs text-slate-400 mt-0.5">Pick a path above to add medicines or a consultation.</p>
+            </div>
+          ) : (
+            <>
+              <div className="px-5 py-3 space-y-2 divide-y divide-slate-50 max-h-64 overflow-y-auto">
+                {cart.consultationFee && (
+                  <div className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-800">Doctor consultation</p>
+                      <p className="text-xs text-slate-400 truncate">{cart.consultationFee.doctorName} · GST-exempt</p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-sm font-bold text-slate-900">₹{cart.consultationFee.amount.toFixed(2)}</span>
+                      <button
+                        type="button"
+                        onClick={() => cart.setConsultationFee(null)}
+                        className="text-slate-300 hover:text-rose-500 transition-colors"
+                        title="Remove consultation fee"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {cartItems.map((item) => (
+                  <div key={item.batchId} className="flex items-center justify-between gap-3 py-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-slate-800 truncate">{item.name}</p>
+                      <p className="text-xs text-slate-400 truncate">
+                        {item.saleUnit === "loose" ? `${item.quantity} loose` : `${item.quantity} × ${item.saleUnit}`} · {item.taxPct > 0 ? `${item.taxPct}% GST` : "No GST"}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-3 shrink-0">
+                      <div className="flex items-center gap-1 border border-slate-200 rounded-lg px-1 py-0.5">
+                        <button
+                          type="button"
+                          onClick={() => cart.updateQty(item.medicineId, item.batchId, item.quantity - 1)}
+                          className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-900"
+                        >
+                          <Minus size={11} />
+                        </button>
+                        <span className="text-xs font-bold text-slate-800 w-5 text-center">{item.quantity}</span>
+                        <button
+                          type="button"
+                          onClick={() => cart.updateQty(item.medicineId, item.batchId, item.quantity + 1)}
+                          className="w-5 h-5 flex items-center justify-center text-slate-500 hover:text-slate-900"
+                        >
+                          <Plus size={11} />
+                        </button>
+                      </div>
+                      <span className="text-sm font-bold text-slate-900 w-16 text-right">₹{item.lineTotal.toFixed(2)}</span>
+                      <button
+                        type="button"
+                        onClick={() => cart.removeItem(item.medicineId, item.batchId)}
+                        className="text-slate-300 hover:text-rose-500 transition-colors"
+                        title="Remove"
+                      >
+                        <X size={14} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/60">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-4 text-sm">
+                    <span className="text-slate-500">
+                      Subtotal <b className="text-slate-800">₹{totals.subtotal.toFixed(2)}</b>
+                    </span>
+                    <span className="text-slate-500">
+                      Tax <b className="text-slate-800">₹{totals.tax.toFixed(2)}</b>
+                    </span>
+                    <span className="text-base font-black text-slate-900 flex items-center gap-1">
+                      <IndianRupee size={15} /> {totals.total.toFixed(2)}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={continueToPayment}
+                    className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold transition-all shadow-md hover:shadow-lg active:scale-[0.98]"
+                  >
+                    <CheckCircle2 size={15} />
+                    Continue to payment
+                  </button>
+                </div>
+                <p className="mt-2 text-[11px] text-slate-400">
+                  Stock allocation, payment and printing happen in the POS terminal. Your bill carries over automatically.
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Stat-card drill-down modals — never leave the desk */}
+      <CounterDeskModals view={deskModal} onClose={() => setDeskModal(null)} />
+
+      {/* OTC supply without billing — shared with the classic POS */}
+      <OtcSupplyModal
+        medicine={otcSupplyTarget}
+        onClose={() => setOtcSupplyTarget(null)}
+      />
+    </div>
+  );
+}

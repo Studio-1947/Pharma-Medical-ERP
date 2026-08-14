@@ -40,7 +40,14 @@ function AccessDenied() {
   );
 }
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+export function AppShell({
+  children,
+  fullscreen = false,
+}: {
+  children: React.ReactNode;
+  /** Renders without sidebar/header — used by the new billing flow counter desk. */
+  fullscreen?: boolean;
+}) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const pathname = usePathname();
   const { can, role } = usePermissions();
@@ -52,6 +59,34 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   const required = permissionForPath(pathname);
   const allowed = !required || !role || can(required);
+
+  // Sidebar-less mode: the billing flow hides the sidebar but keeps the top
+  // header (search, notifications, user pill) so the counter desk still has the
+  // usual navigation. On phones the off-canvas drawer and the bottom nav are
+  // still rendered (drawerOnly keeps the drawer out of the desktop layout) so
+  // the header menu button works and staff can leave the desk without desktop
+  // chrome creeping back in.
+  if (fullscreen) {
+    return (
+      <div className="flex h-dvh overflow-hidden relative bg-slate-100">
+        <Sidebar
+          mobileOpen={mobileNavOpen}
+          onMobileClose={() => setMobileNavOpen(false)}
+          drawerOnly
+        />
+        <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
+          <Header onMenuClick={() => setMobileNavOpen(true)} />
+          <ImpersonationBanner />
+          <main className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 pb-16 lg:pb-8 bg-gradient-to-br from-slate-50 via-slate-100/60 to-emerald-50/20">
+            <div className="max-w-7xl mx-auto space-y-6">
+              {allowed ? children : <AccessDenied />}
+            </div>
+          </main>
+        </div>
+        <MobileBottomNav onOpenMenu={() => setMobileNavOpen(true)} />
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-dvh overflow-hidden relative bg-slate-100">

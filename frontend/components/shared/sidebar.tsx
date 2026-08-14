@@ -15,17 +15,25 @@ import { useUIStore } from "@/stores/ui.store";
 interface SidebarProps {
   mobileOpen?: boolean;
   onMobileClose?: () => void;
+  /**
+   * Render only the off-canvas drawer (no desktop static column) — used by
+   * fullscreen layouts like the billing counter desk, which keep the desktop
+   * chrome hidden but still need the mobile drawer + backdrop so the header
+   * menu button works on phones.
+   */
+  drawerOnly?: boolean;
 }
 
-export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
+export function Sidebar({ mobileOpen = false, onMobileClose, drawerOnly = false }: SidebarProps) {
   const pathname = usePathname();
   const { sidebarCollapsed, setSidebarCollapsed } = useUIStore();
   const { isPending } = useNavigation();
   const { can } = usePermissions();
 
   // The collapse feature only exists on desktop; the mobile drawer always
-  // shows the full menu.
-  const collapsed = sidebarCollapsed && !mobileOpen;
+  // shows the full menu. In drawerOnly mode the sidebar never becomes a
+  // static column, so the collapse flag is irrelevant to its layout.
+  const collapsed = sidebarCollapsed && !mobileOpen && !drawerOnly;
   const setCollapsed = setSidebarCollapsed;
 
   const visibleItems = NAV_ITEMS.filter(
@@ -45,11 +53,12 @@ export function Sidebar({ mobileOpen = false, onMobileClose }: SidebarProps) {
     <aside
       className={clsx(
         "flex flex-col bg-gradient-to-b from-slate-950 via-slate-900 to-emerald-950 text-white border-r border-slate-800/60 shadow-xl overflow-visible",
-        // Mobile: fixed off-canvas drawer. Desktop (lg+): static column.
+        // Mobile: fixed off-canvas drawer. Desktop (lg+): static column
+        // (skipped in drawerOnly mode, where it stays off-canvas at all sizes).
         "fixed inset-y-0 left-0 z-50 w-72 sm:w-64 transition-all duration-300 ease-in-out",
         mobileOpen ? "translate-x-0 shadow-2xl ring-1 ring-white/10" : "-translate-x-full",
-        "lg:relative lg:translate-x-0 lg:shrink-0",
-        collapsed ? "lg:w-16" : "lg:w-64",
+        !drawerOnly && "lg:relative lg:translate-x-0 lg:shrink-0",
+        !drawerOnly && (collapsed ? "lg:w-16" : "lg:w-64"),
       )}
     >
       {/* Background ambient lighting */}

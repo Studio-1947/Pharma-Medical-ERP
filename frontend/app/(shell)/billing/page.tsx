@@ -4,8 +4,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useNavigation } from "@/lib/navigation-context";
-import { ShoppingCart, XCircle, RotateCcw, AlertCircle, Download, Search, BarChart2 } from "lucide-react";
+import { useAuthStore } from "@/stores/auth.store";
+import { ShoppingCart, XCircle, RotateCcw, AlertCircle, Download, Search, BarChart2, Receipt, ListOrdered } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
+import { PatientFirstBilling } from "@/components/modules/billing/patient-first-billing";
+import { PosTerminal } from "@/components/modules/billing/pos-terminal";
 
 // ─── PDF download button (polls until ready) ─────────────────────────────────
 
@@ -371,13 +374,32 @@ function EodSummary() {
 
 export default function BillingPage() {
   const { navigate } = useNavigation();
+  const { user } = useAuthStore();
   const [page, setPage] = useState(1);
+  const [showHistory, setShowHistory] = useState(false);
+  // In the new flow the payment POS renders inline on this page — the classic
+  // POS route is never navigated to, so no classic POS screen is ever shown.
+  const [paying, setPaying] = useState(false);
   const [voidTarget, setVoidTarget] = useState<any | null>(null);
   const [returnTarget, setReturnTarget] = useState<any | null>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+
+  // The super-admin billing flow switch decides what the counter desk lands
+  // on. "new" = patient-first screen; "old" (default) = the invoice list with
+  // the classic POS button. The legacy flow is never removed — the new screen
+  // carries a link to it, and the invoice list below stays reachable via the
+  // "Invoice History" toggle.
+  const { data: settingsRaw } = useQuery({
+    queryKey: ["billing-flow"],
+    queryFn: () => apiClient.get("/settings") as any,
+    retry: 1,
+  });
+  const billingFlow: "old" | "new" =
+    (settingsRaw as any)?.data?.billingFlow === "old" ? "old" : "new";
+  const newFlowActive = billingFlow === "new";
 
   const filters = {
     page,
@@ -391,6 +413,9 @@ export default function BillingPage() {
   const { data, isLoading } = useQuery({
     queryKey: queryKeys.invoices.list(filters),
     queryFn: () => apiClient.get("/billing/invoices", { params: filters }) as any,
+    // Skip fetching the invoice list while the counter desk is showing; the
+    // hooks still run so order is stable across the flow switch.
+    enabled: !(newFlowActive && !showHistory),
   });
 
   const invoices: any[] = (data as any)?.data ?? [];
@@ -409,16 +434,76 @@ export default function BillingPage() {
     draft: "bg-gray-100 text-gray-600",
   };
 
+  if (newFlowActive && !showHistory) {
+    // Payment happens inline: the desk builds the bill, then this page swaps
+    // to the embedded POS terminal for checkout. The classic POS route is
+    // never visited, so a shop manager never sees a classic POS screen.
+    if (paying) {
+      return (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setPaying(false)}
+              className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-semibold hover:bg-slate-50 hover:text-slate-900 transition-all"
+              title="Back to the counter desk — the bill is kept"
+            >
+              <ShoppingCart size={14} />
+              Back to Counter Desk
+            </button>
+          </div>
+          <PosTerminal paymentOnly />
+        </div>
+      );
+    }
+    return (
+      <div>
+        <div className="mb-4 flex items-center justify-end">
+          <button
+            onClick={() => setShowHistory(true)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-semibold hover:bg-slate-50 hover:text-slate-900 transition-all"
+          >
+            <ListOrdered size={14} />
+            Invoice History
+          </button>
+        </div>
+        <PatientFirstBilling onContinueToPayment={() => setPaying(true)} />
+      </div>
+    );
+  }
+
   return (
     <div>
+      {newFlowActive && (
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <Receipt size={14} className="text-emerald-600" />
+            New billing flow is active — this is the invoice history for the
+            patient-first counter desk.
+          </div>
+          <button
+            onClick={() => setShowHistory(false)}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-semibold hover:bg-slate-50 hover:text-slate-900 transition-all"
+          >
+            <ShoppingCart size={14} />
+            Back to Counter Desk
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-2xl font-semibold">Billing</h2>
-        <button
-          onClick={() => navigate("/billing/pos")}
-          className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg text-sm font-medium hover:from-emerald-700 hover:to-teal-700 transition-all"
-        >
-          <ShoppingCart size={16} /> Open POS
-        </button>
+        {/* Open POS is available to everyone in the old (legacy) flow — the
+            classic terminal is its primary interface. In the new flow it stays
+            reachable only for super admins, who use it as the fallback; shop
+            managers are sent back to the counter desk by /billing/pos anyway. */}
+        {(user?.role === "super_admin" || !newFlowActive) && (
+          <button
+            onClick={() => navigate("/billing/pos")}
+            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg text-sm font-medium hover:from-emerald-700 hover:to-teal-700 transition-all"
+          >
+            <ShoppingCart size={16} /> Open POS
+          </button>
+        )}
       </div>
 
       {/* Filters */}

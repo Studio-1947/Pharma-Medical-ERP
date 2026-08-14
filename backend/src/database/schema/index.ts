@@ -9,3 +9,4 @@ export * from "./hr";
 export * from "./distribution";
 export * from "./notifications";
 export * from "./clinic";
+export * from "./settings";

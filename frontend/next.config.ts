@@ -4,7 +4,7 @@ const nextConfig: NextConfig = {
   output: "standalone",
   transpilePackages: ["@pharmerp/types"],
   experimental: {
-    typedRoutes: true,
+    typedRoutes: false,
   },
 };
 

@@ -47,10 +47,23 @@ export const releaseBatchStockSchema = z.object({
   quantity: z.number().int().min(1),
 });
 
+/**
+ * OTC supply — a medicine handed over from the counter WITHOUT an invoice.
+ * Stock is decremented and a ledger movement is recorded so the supply stays
+ * traceable, but no bill is generated. Common to the counter desk and the
+ * classic POS.
+ */
+export const otcSupplyBatchSchema = z.object({
+  quantity: z.number().int().min(1),
+  branchId: z.string().uuid().optional(),
+  notes: z.string().max(300).optional(),
+});
+
 export type CreateBatchDto = z.infer<typeof createBatchSchema>;
 export type UpdateBatchDto = z.infer<typeof updateBatchSchema>;
 export type UpdateBatchStatusDto = z.infer<typeof updateBatchStatusSchema>;
 export type AdjustBatchQuantityDto = z.infer<typeof adjustBatchQuantitySchema>;
 export type QueryBatchDto = z.infer<typeof queryBatchSchema>;
 export type ReserveBatchStockDto = z.infer<typeof reserveBatchStockSchema>;
+export type OtcSupplyBatchDto = z.infer<typeof otcSupplyBatchSchema>;
 export type ReleaseBatchStockDto = z.infer<typeof releaseBatchStockSchema>;

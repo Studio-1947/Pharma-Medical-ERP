@@ -12,6 +12,7 @@ import type {
   UpdateBatchStatusDto,
   AdjustBatchQuantityDto,
   QueryBatchDto,
+  OtcSupplyBatchDto,
 } from "@pharmerp/types";
 import { BarcodeService } from "./barcode.service";
 
@@ -143,6 +144,53 @@ export class BatchService {
     });
 
     return { data: updated, message: "Stock adjusted" };
+  }
+
+  /**
+   * OTC supply — a medicine handed over from the counter without an invoice.
+   * Decrements the batch (atomic, guarded against negative stock) and logs a
+   * ledger movement so the supply stays traceable. No bill is generated.
+   */
+  async recordOtcSupply(
+    id: string,
+    dto: OtcSupplyBatchDto,
+    userId?: string,
+  ) {
+    const existing = await this.batchRepo.findBatchById(id);
+    if (!existing) throw new NotFoundException(`Batch ${id} not found`);
+
+    if (dto.quantity > existing.quantity) {
+      throw new UnprocessableEntityException(
+        `Only ${existing.quantity} units available on batch ${existing.batchNo}`,
+      );
+    }
+
+    const updated = await this.batchRepo.adjustQuantity(id, -dto.quantity);
+    if (!updated) {
+      throw new UnprocessableEntityException(
+        "Supply failed — stock guard prevented it. Refresh and try again.",
+      );
+    }
+
+    await this.movementRepo.log({
+      batchId: id,
+      medicineId: existing.medicineId,
+      branchId: existing.branchId,
+      movementType: "otc_supply",
+      quantity: -dto.quantity,
+      performedBy: userId,
+      notes: dto.notes ?? "OTC supply without billing",
+    });
+
+    return {
+      data: {
+        batchId: id,
+        batchNo: existing.batchNo,
+        quantitySupplied: dto.quantity,
+        remainingQuantity: updated.quantity,
+      },
+      message: "OTC supply recorded — stock updated, no bill generated.",
+    };
   }
 
   async remove(id: string) {

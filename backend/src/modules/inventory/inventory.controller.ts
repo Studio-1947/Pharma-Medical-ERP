@@ -68,6 +68,23 @@ export class InventoryController {
     return this.service.getLowStock(resolveBranchScope(user, branchId));
   }
 
+  @Get("otc-supplies")
+  @Roles("admin", "shop_manager")
+  @ApiOperation({
+    summary: "OTC supplies (hand-outs without a bill) on a date — count + units from the stock ledger",
+  })
+  async getOtcSupplies(
+    @CurrentUser() user: JwtPayload,
+    @Query("date") date: string,
+    @Query("branchId") branchId?: string,
+  ) {
+    const data = await this.movementRepo.findOtcSupplies(
+      date,
+      resolveBranchScope(user, branchId),
+    );
+    return { data };
+  }
+
   @Get("valuation")
   @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Stock valuation — cost and MRP value per medicine" })

@@ -96,6 +96,14 @@ export const medicines = pgTable(
     barcodeIdx: uniqueIndex("medicines_barcode_unique")
       .on(t.barcode)
       .where(sql`${t.barcode} IS NOT NULL AND ${t.deletedAt} IS NULL`),
+    // POS/counter type-ahead: every search is ILIKE '%term%' across these
+    // columns, which a plain btree cannot serve. The GIN trigram index makes
+    // the substring match index-assisted instead of a full-table scan + regex
+    // pass. Requires the pg_trgm extension (created in the migration).
+    searchTrgmIdx: index("medicines_search_trgm_idx").using(
+      "gin",
+      sql`${t.name} gin_trgm_ops, ${t.brandName} gin_trgm_ops, ${t.genericName} gin_trgm_ops, ${t.composition} gin_trgm_ops, ${t.manufacturer} gin_trgm_ops, ${t.sku} gin_trgm_ops, ${t.barcode} gin_trgm_ops`,
+    ),
   }),
 );
 
