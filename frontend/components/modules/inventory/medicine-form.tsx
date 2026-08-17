@@ -240,10 +240,14 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
             />
           </Field>
 
-          <Field label="SKU / Code" required error={errors.sku?.message}>
+          <Field
+            label="SKU / Code"
+            error={errors.sku?.message}
+            hint="Leave blank to auto-generate (MED00001, MED00002…)"
+          >
             <input
               {...register("sku")}
-              placeholder="e.g. PCM-500-STR"
+              placeholder="Auto-generated if left blank"
               className={`${inputCls(!!errors.sku)} font-mono`}
             />
           </Field>

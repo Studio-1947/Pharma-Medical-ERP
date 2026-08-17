@@ -221,12 +221,42 @@ export class InventoryService {
 
   async create(dto: CreateMedicineDto, userId?: string) {
     await this.assertBarcodeUnique(dto.barcode);
-    try {
-      const medicine = await this.repo.createMedicine(dto, userId);
-      return { data: medicine, message: "Medicine created" };
-    } catch (e) {
-      throw this.mapBarcodeConflict(e, dto.barcode);
+    // If the operator left SKU blank, mint a MEDNNNNN like bulk import does.
+    // Two simultaneous mints can race on the same next value, so retry a few
+    // times on the sku unique-index conflict before giving up. Non-mint
+    // (operator-typed) SKUs never retry — a duplicate typed SKU is a real
+    // conflict the caller must resolve.
+    const wantsAutoSku = !dto.sku || dto.sku.trim().length === 0;
+    const maxAttempts = wantsAutoSku ? 4 : 1;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      const sku = wantsAutoSku
+        ? `${SKU_PREFIX}${String((await this.repo.getMaxSequentialSku()) + attempt).padStart(SKU_WIDTH, "0")}`
+        : dto.sku!;
+      try {
+        const medicine = await this.repo.createMedicine(
+          { ...dto, sku } as CreateMedicineDto,
+          userId,
+        );
+        return { data: medicine, message: "Medicine created" };
+      } catch (e) {
+        // Race on the auto-minted sku: bump attempt and retry.
+        if (wantsAutoSku && this.isSkuUniqueConflict(e) && attempt < maxAttempts) {
+          continue;
+        }
+        throw this.mapBarcodeConflict(e, dto.barcode);
+      }
     }
+    // Unreachable: the loop either returns or throws inside mapBarcodeConflict.
+    throw new ConflictException("Could not mint a unique SKU after retries");
+  }
+
+  /** Detects the 23505 unique-violation raised by the sku column specifically,
+   *  so barcode conflicts and other unique constraints still fall through to
+   *  mapBarcodeConflict / the generic error path. */
+  private isSkuUniqueConflict(e: unknown): boolean {
+    const err = e as { code?: string; cause?: { code?: string }; message?: string };
+    const code = err?.code ?? err?.cause?.code;
+    return code === "23505" && /sku/i.test(err?.message ?? "");
   }
 
   async update(id: string, dto: UpdateMedicineDto) {
@@ -285,7 +315,11 @@ export class InventoryService {
     // errors so a seeding run does not read as 500 failures when the records
     // are in fact present and only need a follow-up edit.
     const warnings: { row: number; sku: string; reason: string }[] = [];
-    const valid: CreateMedicineDto[] = [];
+    // sku is optional on the shared DTO (auto-minted on single create) but the
+    // bulk pipeline always resolves a concrete sku above — either an explicit
+    // one from the row or a freshly minted MEDNNNNN. Narrowing here lets the
+    // downstream dedupe / batch load code treat sku as required without casts.
+    const valid: Array<CreateMedicineDto & { sku: string }> = [];
     // Opening stock parsed alongside each medicine, held until the medicines
     // are inserted and their ids known. Keyed by SKU.
     const pendingBatches = new Map<string, PendingBatch>();
@@ -483,7 +517,10 @@ export class InventoryService {
         errors.push({ row: rowNum, sku, reason: msg });
         continue;
       }
-      valid.push(parsed.data);
+      // Re-attach the resolved sku so the narrowed valid[] type holds — the
+      // parsed schema now treats sku as optional so parsed.data.sku is
+      // string | undefined even though we passed one in.
+      valid.push({ ...parsed.data, sku });
 
       // --- opening stock on the same line -------------------------------
       const batchNo = pick(raw, "batchno", "batchnumber", "batch");

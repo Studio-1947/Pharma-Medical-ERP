@@ -52,6 +52,90 @@ describe("InventoryService - barcode uniqueness", () => {
   });
 });
 
+describe("InventoryService - SKU auto-generation", () => {
+  let service: InventoryService;
+  let mockRepo: any;
+
+  beforeEach(() => {
+    mockRepo = {
+      findMedicineByBarcode: vi.fn().mockResolvedValue(null),
+      getMaxSequentialSku: vi.fn().mockResolvedValue(42),
+      createMedicine: vi.fn((data) => Promise.resolve({ id: "med-new", ...data })),
+    };
+    service = new InventoryService(mockRepo);
+  });
+
+  it("mints MED00043 when SKU is omitted", async () => {
+    const { sku, ...dtoNoSku } = baseDto;
+    await service.create(dtoNoSku);
+    expect(mockRepo.getMaxSequentialSku).toHaveBeenCalledOnce();
+    expect(mockRepo.createMedicine).toHaveBeenCalledWith(
+      expect.objectContaining({ sku: "MED00043" }),
+      undefined,
+    );
+  });
+
+  it("mints when SKU is an empty or whitespace string", async () => {
+    await service.create({ ...baseDto, sku: "   " });
+    expect(mockRepo.createMedicine).toHaveBeenCalledWith(
+      expect.objectContaining({ sku: "MED00043" }),
+      undefined,
+    );
+  });
+
+  it("keeps the operator-typed SKU untouched", async () => {
+    await service.create({ ...baseDto, sku: "PCM-500-STR" });
+    expect(mockRepo.getMaxSequentialSku).not.toHaveBeenCalled();
+    expect(mockRepo.createMedicine).toHaveBeenCalledWith(
+      expect.objectContaining({ sku: "PCM-500-STR" }),
+      undefined,
+    );
+  });
+
+  it("retries the mint on a SKU race and lands on the next number", async () => {
+    // First attempt collides on MED00043 (two admins hitting Save at once).
+    // Second attempt should bump to MED00044 by incrementing the offset.
+    let call = 0;
+    mockRepo.createMedicine = vi.fn(() => {
+      call += 1;
+      if (call === 1) {
+        const err: any = new Error(
+          'duplicate key value violates unique constraint "medicines_sku_key"',
+        );
+        err.code = "23505";
+        return Promise.reject(err);
+      }
+      return Promise.resolve({ id: "med-new" });
+    });
+    const { sku, ...dtoNoSku } = baseDto;
+    await service.create(dtoNoSku);
+    // The retry re-reads the max, which the mock still returns as 42, then
+    // adds attempt=2 → MED00044.
+    expect(mockRepo.createMedicine).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ sku: "MED00043" }),
+      undefined,
+    );
+    expect(mockRepo.createMedicine).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ sku: "MED00044" }),
+      undefined,
+    );
+  });
+
+  it("does not retry when the operator typed a colliding SKU", async () => {
+    const err: any = new Error(
+      'duplicate key value violates unique constraint "medicines_sku_key"',
+    );
+    err.code = "23505";
+    mockRepo.createMedicine = vi.fn().mockRejectedValue(err);
+    await expect(
+      service.create({ ...baseDto, sku: "PCM-500-STR" }),
+    ).rejects.toThrow();
+    expect(mockRepo.createMedicine).toHaveBeenCalledOnce();
+  });
+});
+
 describe("createMedicineSchema - barcode EAN-13 checksum", () => {
   it("accepts a 13-digit barcode with a valid checksum", () => {
     const res = createMedicineSchema.safeParse({ ...baseDto, barcode: "8901030865275" });
