@@ -21,8 +21,19 @@ export const createPatientSchema = z.object({
 
 export const updatePatientSchema = createPatientSchema.partial();
 
+// z.coerce.boolean() maps the string "false" to true — every non-empty string
+// is truthy in JS — so a `?hasDues=false` query would filter instead of not
+// filtering. Parse the literal query-string spellings instead.
+const booleanFlag = z.preprocess(
+  (v) => (typeof v === "string" ? ["true", "1", "yes"].includes(v.trim().toLowerCase()) : v),
+  z.boolean(),
+);
+
 export const queryPatientSchema = z.object({
   search: z.string().optional(),
+  // Narrows to patients carrying an unpaid balance and orders by the largest
+  // debt first — the collection worklist, rather than an alphabetical roster.
+  hasDues: booleanFlag.optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
 });

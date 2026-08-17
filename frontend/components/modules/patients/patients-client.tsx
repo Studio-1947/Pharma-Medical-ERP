@@ -5,11 +5,12 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
-import { UserPlus, Search, Edit2, Trash2, Phone, Calendar, Star, Eye, FileText, ClipboardList, AlertTriangle, CheckCircle2, XCircle, IndianRupee } from "lucide-react";
+import { UserPlus, Search, Edit2, Trash2, Phone, Calendar, Star, Eye, FileText, ClipboardList, AlertTriangle, CheckCircle2, XCircle, IndianRupee, BookOpen } from "lucide-react";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
 import { SettleDueModal } from "@/components/modules/patients/settle-due-modal";
+import { PatientLedgerModal } from "@/components/modules/patients/patient-ledger-modal";
 
 interface Patient {
   id: string;
@@ -527,8 +528,10 @@ export function PatientsClient() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [historyTarget, setHistoryTarget] = useState<Patient | null>(null);
   const [settleDueTarget, setSettleDueTarget] = useState<Patient | null>(null);
+  const [ledgerTarget, setLedgerTarget] = useState<Patient | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [duesOnly, setDuesOnly] = useState(false);
   const [page, setPage] = useState(1);
   const [isOpen, setIsOpen] = useState(false);
   const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
@@ -540,7 +543,14 @@ export function PatientsClient() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const queryParams = { search: debouncedSearch, page, limit: 20 };
+  // hasDues is omitted rather than sent false: the backend flag is optional and
+  // an absent param reads more clearly in the query key and the request log.
+  const queryParams = {
+    search: debouncedSearch,
+    page,
+    limit: 20,
+    ...(duesOnly ? { hasDues: true } : {}),
+  };
 
   const { data: rawData, isLoading } = useQuery({
     queryKey: queryKeys.patients.list(queryParams),
@@ -705,16 +715,33 @@ export function PatientsClient() {
         </button>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-        <input
-          type="text"
-          placeholder="Search by name or phone..."
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-          className="w-full border rounded-lg pl-9 pr-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
-        />
+      {/* Search + dues filter */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative max-w-sm flex-1 min-w-[220px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            placeholder="Search by name or phone..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+            className="w-full border rounded-lg pl-9 pr-3 py-2 text-sm bg-background focus:outline-none focus:ring-2 focus:ring-primary/50"
+          />
+        </div>
+        {/* Turns the roster into a collection worklist — the server also
+            reorders by largest balance when this is on. */}
+        <button
+          onClick={() => { setDuesOnly((v) => !v); setPage(1); }}
+          aria-pressed={duesOnly}
+          className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-bold border transition-colors ${
+            duesOnly
+              ? "bg-purple-600 text-white border-purple-600 hover:bg-purple-700"
+              : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+          }`}
+          title="Show only patients carrying an unpaid balance, largest first"
+        >
+          <IndianRupee size={13} />
+          With dues only
+        </button>
       </div>
 
       {/* Table */}
@@ -802,6 +829,13 @@ export function PatientsClient() {
                             Collect
                           </button>
                         )}
+                        <button
+                          onClick={() => setLedgerTarget(patient)}
+                          className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-purple-600"
+                          title="View account statement — invoices, payments and running balance"
+                        >
+                          <BookOpen className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => setHistoryTarget(patient)}
                           className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-emerald-600"
@@ -1127,6 +1161,20 @@ export function PatientsClient() {
         outstandingBalance={settleDueTarget?.outstandingBalance ?? "0"}
         onClose={() => setSettleDueTarget(null)}
       />
+      {ledgerTarget && (
+        <PatientLedgerModal
+          open
+          patientId={ledgerTarget.id}
+          patientName={ledgerTarget.name}
+          onClose={() => setLedgerTarget(null)}
+          // Reading the statement is usually the step before collecting, so
+          // the ledger hands straight over to the existing collection modal.
+          onCollect={() => {
+            setSettleDueTarget(ledgerTarget);
+            setLedgerTarget(null);
+          }}
+        />
+      )}
     </div>
   );
 }

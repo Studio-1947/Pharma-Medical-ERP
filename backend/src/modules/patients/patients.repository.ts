@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, eq, ilike, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 import type { CreatePatientDto, UpdatePatientDto, QueryPatientDto } from "@pharmerp/types";
@@ -48,7 +48,15 @@ export class PatientsRepository {
         ) as any,
       );
     }
+    if (params.hasDues) {
+      conditions.push(sql`${schema.patients.outstandingBalance} > 0`);
+    }
     const where = and(...conditions);
+    // A dues query is a collection worklist, so it leads with the largest
+    // debt; every other listing is a roster and stays alphabetical.
+    const orderBy = params.hasDues
+      ? desc(schema.patients.outstandingBalance)
+      : asc(schema.patients.name);
     const [items, [countRow]] = await Promise.all([
       this.db
         .select({
@@ -66,7 +74,7 @@ export class PatientsRepository {
         })
         .from(schema.patients)
         .where(where)
-        .orderBy(asc(schema.patients.name))
+        .orderBy(orderBy)
         .limit(params.limit)
         .offset((params.page - 1) * params.limit),
       this.db

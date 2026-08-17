@@ -4,9 +4,10 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { useToast } from "@/components/ui/toast";
+import { useActiveBranchId } from "@/hooks/use-branch";
 import { Modal } from "@/components/ui/modal";
 import { ExportButton } from "@/components/shared/export-button";
-import { ChevronDown, ChevronRight, Wallet, BookOpen, RotateCcw } from "lucide-react";
+import { ChevronDown, ChevronRight, Wallet, BookOpen, RotateCcw, AlertTriangle } from "lucide-react";
 
 interface Supplier {
   id: string;
@@ -69,13 +70,26 @@ interface Bill {
   paidAmount: string;
   balance: string;
   status: "paid" | "partial" | "unpaid";
+  daysOverdue: number;
+  isOverdue: boolean;
 }
+
+/** The dropdown offers a fourth choice; overdue is a filter, not a status. */
+type BillFilter = Bill["status"] | "overdue";
 
 const statusStyles: Record<Bill["status"], string> = {
   paid: "bg-emerald-50 text-emerald-700 border-emerald-100",
   partial: "bg-amber-50 text-amber-700 border-amber-100",
   unpaid: "bg-red-50 text-red-600 border-red-100",
 };
+
+/** How late reads at a glance: a week is a nudge, a quarter is a problem. */
+function overdueStyle(days: number) {
+  if (days > 90) return "bg-red-600 text-white border-red-700";
+  if (days > 60) return "bg-red-100 text-red-700 border-red-200";
+  if (days > 30) return "bg-orange-100 text-orange-700 border-orange-200";
+  return "bg-amber-100 text-amber-800 border-amber-200";
+}
 
 const returnOutcomeStyles: Record<SupplierReturn["outcome"], string> = {
   pending: "bg-amber-50 text-amber-700 border-amber-100",
@@ -105,18 +119,25 @@ export function SupplierLedgerModal({
   supplier,
   open,
   onClose,
+  initialTab = "ledger",
+  initialBillFilter = "",
 }: {
   supplier: Supplier;
   open: boolean;
   onClose: () => void;
+  /** Lets a caller that already summarised the balance open straight on the
+   *  tab where it can be acted on, instead of on the statement. */
+  initialTab?: "ledger" | "bills" | "returns";
+  initialBillFilter?: "" | BillFilter;
 }) {
   const queryClient = useQueryClient();
   const { success: toastSuccess, error: toastError } = useToast();
+  const { branchId: activeBranchId, needsSelection: needsBranch } = useActiveBranchId();
 
-  const [tab, setTab] = useState<"ledger" | "bills" | "returns">("ledger");
+  const [tab, setTab] = useState<"ledger" | "bills" | "returns">(initialTab);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [billStatus, setBillStatus] = useState<"" | Bill["status"]>("");
+  const [billStatus, setBillStatus] = useState<"" | BillFilter>(initialBillFilter);
   const [expandedBillId, setExpandedBillId] = useState<string | null>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
@@ -155,11 +176,17 @@ export function SupplierLedgerModal({
     | undefined;
   const bills = ((billsQuery.data as any)?.data ?? []) as Bill[];
   const openBills = bills.filter((b) => b.status !== "paid");
+  const overdueBills = bills.filter((b) => b.isOverdue);
+  const overdueCount = overdueBills.length;
+  const overdueTotal = overdueBills.reduce((sum, b) => sum + parseFloat(b.balance), 0);
   const returns = ((returnsQuery.data as any)?.data ?? []) as SupplierReturn[];
 
   const paymentMutation = useMutation({
     mutationFn: (data: typeof paymentForm) =>
       apiClient.post(`/procurement/suppliers/${supplier.id}/payments`, {
+        // Only a super_admin sends one; every other role is pinned server-side
+        // and passing a branchId that differs from theirs is a 403.
+        branchId: activeBranchId,
         grnId: data.grnId || undefined,
         amount: data.amount,
         method: data.method,
@@ -187,6 +214,12 @@ export function SupplierLedgerModal({
     e.preventDefault();
     if (!paymentForm.amount || parseFloat(paymentForm.amount) <= 0) {
       toastError("Invalid amount", "Enter a payment amount greater than zero.");
+      return;
+    }
+    // Caught here rather than letting the API answer "branchId is required":
+    // the payment moves one branch's cash, so an unscoped admin has to say which.
+    if (needsBranch) {
+      toastError("Select a branch", "Pick the branch this payment is made from before recording it.");
       return;
     }
     paymentMutation.mutate(paymentForm);
@@ -534,16 +567,30 @@ export function SupplierLedgerModal({
 
         {tab === "bills" && (
           <div className="space-y-3">
-            <select
-              value={billStatus}
-              onChange={(e) => setBillStatus(e.target.value as any)}
-              className="border rounded-lg px-3 py-1.5 text-sm bg-background"
-            >
-              <option value="">All bills</option>
-              <option value="unpaid">Unpaid</option>
-              <option value="partial">Partially paid</option>
-              <option value="paid">Paid</option>
-            </select>
+            <div className="flex flex-wrap items-center gap-3">
+              <select
+                value={billStatus}
+                onChange={(e) => setBillStatus(e.target.value as any)}
+                className="border rounded-lg px-3 py-1.5 text-sm bg-background"
+              >
+                <option value="">All bills</option>
+                <option value="overdue">Overdue</option>
+                <option value="unpaid">Unpaid</option>
+                <option value="partial">Partially paid</option>
+                <option value="paid">Paid</option>
+              </select>
+              {/* Only meaningful on the unfiltered list — under any other
+                  filter `bills` is a subset and the count would understate. */}
+              {billStatus === "" && overdueCount > 0 && (
+                <button
+                  onClick={() => setBillStatus("overdue")}
+                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-1.5 hover:bg-red-100 transition-colors"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" />
+                  {overdueCount} overdue · {inr(overdueTotal)}
+                </button>
+              )}
+            </div>
 
             {billsQuery.isLoading ? (
               <div className="animate-pulse h-40 bg-muted rounded-xl" />
@@ -576,12 +623,22 @@ export function SupplierLedgerModal({
                             </p>
                             <p className="text-xs text-slate-500">
                               {bill.receivedAt.slice(0, 10)} · {bill.itemCount} item
-                              {bill.itemCount === 1 ? "" : "s"} · {bill.totalQty} units · due{" "}
-                              {bill.dueDate.slice(0, 10)}
+                              {bill.itemCount === 1 ? "" : "s"} · {bill.totalQty} units ·{" "}
+                              <span className={bill.isOverdue ? "font-semibold text-red-600" : ""}>
+                                due {bill.dueDate.slice(0, 10)}
+                              </span>
                             </p>
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
+                          {bill.isOverdue && (
+                            <span
+                              className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${overdueStyle(bill.daysOverdue)}`}
+                              title={`Payment was due ${bill.dueDate.slice(0, 10)}`}
+                            >
+                              {bill.daysOverdue}d OVERDUE
+                            </span>
+                          )}
                           <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${statusStyles[bill.status]}`}>
                             {bill.status.toUpperCase()}
                           </span>

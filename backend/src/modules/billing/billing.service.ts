@@ -13,6 +13,15 @@ import { InvoicePdfService } from "./invoice-pdf.service";
 import { AuditService } from "../../common/audit/audit.service";
 import { AuditAction } from "../../common/audit/audit-actions";
 import { NotificationsService } from "../notifications/notifications.service";
+import {
+  addToBucket,
+  bucketBreakdown,
+  daysPastDue,
+  newBucketTotals,
+  serializeBuckets,
+  sumBuckets,
+  sumOverdue,
+} from "../../common/utils/aging.util";
 import * as schema from "../../database/schema";
 import type {
   CreateInvoiceDto,
@@ -21,6 +30,8 @@ import type {
   VoidInvoiceDto,
   ReturnInvoiceDto,
   SaleEventDto,
+  QueryPatientLedgerDto,
+  QueryReceivablesAgingDto,
 } from "@pharmerp/types";
 
 interface MedicineSnapshot {
@@ -744,6 +755,185 @@ export class BillingService {
     return {
       data: result,
       message: clearsDue ? "Payment recorded — invoice fully paid" : "Payment recorded",
+    };
+  }
+
+  /**
+   * Customer account statement: invoices as debits, payments as credits, with
+   * a running balance — the receivables mirror of the supplier ledger.
+   *
+   * A return invoice carries a negative total, so it lands as a negative debit
+   * and its refund row as a negative credit. That nets to zero on the balance,
+   * which is correct: refunding cash for returned goods does not change what
+   * the patient still owes. Modelling returns with a second sign convention
+   * would have to be unwound again to reconcile.
+   */
+  async getPatientLedger(patientId: string, query: QueryPatientLedgerDto) {
+    const patient = await this.patientsRepo.findById(patientId);
+    if (!patient) throw new NotFoundException(`Patient ${patientId} not found`);
+
+    const { invoices, payments } = await this.repo.getPatientLedgerRows(patientId);
+
+    type Row = {
+      date: Date;
+      type: "invoice" | "credit_note" | "payment" | "refund";
+      reference: string;
+      debit: Decimal;
+      credit: Decimal;
+    };
+
+    const invoiceRows: Row[] = invoices.map((inv) => ({
+      date: new Date(inv.createdAt),
+      type: inv.isReturn ? "credit_note" : "invoice",
+      reference: inv.invoiceNo,
+      debit: new Decimal(inv.totalAmount),
+      credit: new Decimal(0),
+    }));
+
+    const paymentRows: Row[] = payments.map((p) => {
+      const amount = new Decimal(p.amount);
+      const mode = (p.mode ?? "").toUpperCase();
+      return {
+        date: new Date(p.createdAt),
+        type: amount.isNegative() ? ("refund" as const) : ("payment" as const),
+        reference: [p.invoiceNo, mode, p.referenceNo].filter(Boolean).join(" · "),
+        debit: new Decimal(0),
+        credit: amount,
+      };
+    });
+
+    const allRows = [...invoiceRows, ...paymentRows].sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    const fromDate = query.from ? new Date(`${query.from}T00:00:00.000Z`) : null;
+    const toDate = query.to ? new Date(`${query.to}T23:59:59.999Z`) : null;
+
+    let runningBalance = new Decimal(0);
+    let openingBalance = new Decimal(0);
+    const entries: Array<Row & { balance: Decimal }> = [];
+
+    for (const row of allRows) {
+      runningBalance = runningBalance.plus(row.debit).minus(row.credit);
+      if (fromDate && row.date < fromDate) {
+        openingBalance = runningBalance;
+        continue;
+      }
+      if (toDate && row.date > toDate) continue;
+      entries.push({ ...row, balance: runningBalance });
+    }
+
+    return {
+      patientId,
+      patientName: patient.name,
+      patientPhone: patient.phone,
+      openingBalance: openingBalance.toFixed(2),
+      entries: entries.map((e) => ({
+        date: e.date.toISOString(),
+        type: e.type,
+        reference: e.reference,
+        debit: e.debit.toFixed(2),
+        credit: e.credit.toFixed(2),
+        balance: e.balance.toFixed(2),
+      })),
+      closingBalance: runningBalance.toFixed(2),
+      // The denormalised column the POS reads. Shown next to the computed
+      // closing balance rather than instead of it: if the two ever disagree,
+      // that divergence is the thing worth seeing.
+      storedOutstanding: patient.outstandingBalance,
+    };
+  }
+
+  /**
+   * Receivables aging: open customer dues banded by how long they have been
+   * outstanding, rolled up per patient.
+   *
+   * Patients have no credit-term field yet, so a due is treated as payable on
+   * the day of sale and the ladder measures days since the invoice. When
+   * customer credit terms are added, only `dueDate` below has to change — the
+   * banding and totals work unaltered.
+   */
+  async getReceivablesAging(query: QueryReceivablesAgingDto) {
+    const asOf = new Date();
+    const invoices = await this.repo.openReceivables(query.branchId);
+
+    type Group = {
+      patientId: string | null;
+      patientName: string;
+      patientPhone: string | null;
+      buckets: ReturnType<typeof newBucketTotals>;
+      invoiceCount: number;
+      overdueInvoiceCount: number;
+      oldestInvoiceDate: string | null;
+    };
+
+    const groups = new Map<string, Group>();
+    const grandTotals = newBucketTotals();
+    let grandOverdueInvoices = 0;
+
+    for (const inv of invoices) {
+      const balance = new Decimal(inv.amountDue);
+      if (balance.lessThanOrEqualTo(0)) continue;
+
+      const dueDate = new Date(inv.createdAt);
+      const daysOverdue = daysPastDue(dueDate, asOf);
+
+      // A walk-in should never accrue a due (the POS only records one against
+      // a named patient), but an offline sync could still land one. Bucketing
+      // it under a synthetic row keeps the total honest instead of dropping it.
+      const key = inv.patientId ?? "__unassigned__";
+      let group = groups.get(key);
+      if (!group) {
+        group = {
+          patientId: inv.patientId,
+          patientName: inv.patientName ?? "Walk-in / unassigned",
+          patientPhone: inv.patientPhone ?? null,
+          buckets: newBucketTotals(),
+          invoiceCount: 0,
+          overdueInvoiceCount: 0,
+          oldestInvoiceDate: null,
+        };
+        groups.set(key, group);
+      }
+
+      addToBucket(group.buckets, daysOverdue, balance);
+      addToBucket(grandTotals, daysOverdue, balance);
+      group.invoiceCount += 1;
+
+      const invoiceDate = dueDate.toISOString();
+      if (!group.oldestInvoiceDate || invoiceDate < group.oldestInvoiceDate) {
+        group.oldestInvoiceDate = invoiceDate;
+      }
+      if (daysOverdue > 0) {
+        group.overdueInvoiceCount += 1;
+        grandOverdueInvoices += 1;
+      }
+    }
+
+    const rows = [...groups.values()]
+      .map((g) => ({
+        patientId: g.patientId,
+        patientName: g.patientName,
+        patientPhone: g.patientPhone,
+        ...serializeBuckets(g.buckets),
+        overdue: sumOverdue(g.buckets).toFixed(2),
+        total: sumBuckets(g.buckets).toFixed(2),
+        invoiceCount: g.invoiceCount,
+        overdueInvoiceCount: g.overdueInvoiceCount,
+        oldestInvoiceDate: g.oldestInvoiceDate,
+      }))
+      .sort((a, b) => Number(b.total) - Number(a.total));
+
+    return {
+      asOf: asOf.toISOString(),
+      branchId: query.branchId ?? null,
+      buckets: bucketBreakdown(grandTotals),
+      totals: {
+        ...serializeBuckets(grandTotals),
+        overdue: sumOverdue(grandTotals).toFixed(2),
+        total: sumBuckets(grandTotals).toFixed(2),
+        patientCount: rows.length,
+        overdueInvoiceCount: grandOverdueInvoices,
+      },
+      patients: rows,
     };
   }
 
