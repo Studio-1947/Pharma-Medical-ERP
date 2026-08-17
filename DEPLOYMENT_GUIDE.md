@@ -214,14 +214,22 @@ To prevent schema drift and database migration mismatch errors (e.g. `Database s
 3. **Mandatory Schema Change Workflow**:
    - Whenever editing TypeScript schemas in `backend/src/database/schema/*.ts`, run `pnpm db:generate` **from the repo root** (the `db:*` scripts live in the root `package.json`, not `backend/package.json`) to produce the SQL migration file under `backend/drizzle/migrations/` and update `meta/_journal.json`.
    - Ensure the new `.sql` file and `_journal.json` are committed to git together with the schema TypeScript file.
-4. **Formal Drizzle SQL Migration Command** (for applying migrations without a redeploy):
+4. **Which database is production**: GCP Cloud SQL instance `pharmerp-prod` (asia-south1, Postgres 16), defined in `infra/gcp/main.tf`. It is configured with `ipv4_enabled = false` and a private network, so **it has no public IP and cannot be reached from a developer machine or from CI**. The two ways in are:
+   - the backend container, which runs inside the VPC — this is why boot migration exists and is the normal path;
+   - the Cloud SQL Proxy (`cloud-sql-proxy.exe`, in the repo root) for manual inspection.
+
+   > **`DATABASE_URL_PROD` is not production.** It currently holds a Neon connection string left over from an earlier hosting evaluation. `pnpm db:migrate:prod` and `scripts/export-gcp-db.sh` both resolve to it (`drizzle.config.ts` switches on `DB_TARGET=prod`), so running either would touch the Neon database rather than Cloud SQL. Point `DATABASE_URL_PROD` at the Cloud SQL Proxy endpoint before using those commands, or delete it so they fail loudly instead of silently hitting the wrong database.
+
+5. **Formal Drizzle SQL Migration Command** (for applying migrations without a redeploy):
    ```bash
    # Local development database
    pnpm db:migrate
 
-   # Production database (DB_TARGET=prod -> DATABASE_URL_PROD)
+   # Cloud SQL, via the proxy — start it first, then point DATABASE_URL_PROD
+   # at 127.0.0.1 on the proxy's port:
+   #   ./cloud-sql-proxy radha-madhav-497409:asia-south1:pharmerp-prod --port 5433
    pnpm db:migrate:prod
    ```
-   This only works where the database is reachable from your machine. The private Cloud SQL instance is not — for that path, deploy the container and let boot migration do it.
-5. **Never rely on `db:push` or ad-hoc `ALTER TABLE` scripts in Production**: Always use versioned migrations in `backend/drizzle/migrations/` so `runMigrations()` and `drizzle-kit` track schema versions accurately.
+   Deploying the container and letting boot migration run is the preferred path; the proxy route is for inspection and recovery.
+6. **Never rely on `db:push` or ad-hoc `ALTER TABLE` scripts in Production**: Always use versioned migrations in `backend/drizzle/migrations/` so `runMigrations()` and `drizzle-kit` track schema versions accurately.
 

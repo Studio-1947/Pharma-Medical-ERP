@@ -1,3 +1,11 @@
+// Loaded before anything else reads process.env. ConfigModule also reads .env,
+// but only once NestFactory.create() runs — and the migration step below
+// happens before that, so without this line RUN_MIGRATIONS_ON_BOOT and
+// DATABASE_URL are invisible to it on any machine that keeps its config in a
+// .env file rather than in real environment variables. Deployed containers set
+// real env vars and are unaffected either way; local development is not.
+import "dotenv/config";
+
 import { NestFactory } from "@nestjs/core";
 import {
   FastifyAdapter,
