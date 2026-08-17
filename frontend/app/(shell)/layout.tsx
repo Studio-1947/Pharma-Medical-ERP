@@ -1,11 +1,5 @@
 "use client";
 
-// The whole shell is client-rendered, auth-gated UI — there is nothing to
-// statically prerender. Forcing dynamic rendering also sidesteps a Next
-// 15.0.0 prerender bug where the shared Providers chunk resolves React to
-// null and `next build` fails on these pages.
-export const dynamic = "force-dynamic";
-
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AppShell } from "@/components/shared/app-shell";

@@ -32,6 +32,10 @@ services:
     env_file: .env.production
     environment:
       NODE_ENV: production
+      # Apply pending Drizzle migrations before the API starts serving. Also
+      # set in .env.production and baked into the image; repeated here so the
+      # stack still migrates if an operator's .env.production predates it.
+      RUN_MIGRATIONS_ON_BOOT: "true"
     depends_on:
       postgres:
         condition: service_healthy
