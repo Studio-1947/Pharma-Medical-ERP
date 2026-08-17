@@ -264,17 +264,35 @@ export class BillingService {
         throw new UnprocessableEntityException("Discount exceeds invoice total");
       }
 
-      const paymentTotal = dto.payments.reduce(
-        (sum, p) => new Decimal(sum).plus(p.amount).toNumber(),
-        0
+      const paymentTotalDec = dto.payments.reduce(
+        (sum, p) => sum.plus(p.amount),
+        new Decimal(0),
       );
+      const finalTotalDec = new Decimal(finalTotal.toFixed(2));
 
-      // Allow 0.01 tolerance for rounding if necessary, but here we expect exact match
-      if (!new Decimal(paymentTotal).equals(new Decimal(finalTotal.toFixed(2)))) {
+      // Over-payment is always a bug at the counter — the operator either
+      // typed the wrong number or the cart changed after the modal opened.
+      // Refunds are a separate return flow, not an invoice with negative due.
+      if (paymentTotalDec.greaterThan(finalTotalDec)) {
         throw new UnprocessableEntityException(
-          `Payment total ${paymentTotal} does not match invoice total ${finalTotal.toFixed(2)}`
+          `Payment total ${paymentTotalDec.toFixed(2)} exceeds invoice total ${finalTotalDec.toFixed(2)} — issue a return instead of over-paying`,
         );
       }
+
+      // Under-payment is the "Due billing" path: the balance becomes what the
+      // patient owes. A walk-in has no account to owe against, so we still
+      // require full payment for anonymous sales.
+      const amountDueDec = finalTotalDec.minus(paymentTotalDec);
+      const hasDue = amountDueDec.greaterThan(0);
+      if (hasDue && !dto.patientId) {
+        throw new UnprocessableEntityException(
+          "Walk-in sales must be paid in full — register a patient to accept a partial payment as due",
+        );
+      }
+
+      const invoiceStatus: "paid" | "partially_paid" = hasDue
+        ? "partially_paid"
+        : "paid";
 
       // 4. Batch Deduction & Logs — the quantity UPDATE stays one-per-batch
       // (each needs its own atomic "don't oversell" guard), but the
@@ -360,11 +378,11 @@ export class BillingService {
         subtotal: subtotalWithFee.toFixed(2),
         discountAmount: discountAmount.toFixed(2),
         taxAmount: taxAmount.toFixed(2),
-        totalAmount: finalTotal.toFixed(2),
-        amountPaid: finalTotal.toFixed(2),
-        amountDue: "0.00",
+        totalAmount: finalTotalDec.toFixed(2),
+        amountPaid: paymentTotalDec.toFixed(2),
+        amountDue: amountDueDec.toFixed(2),
         paymentMode: dto.payments.length > 1 ? "mixed" : dto.payments[0]!.mode as any,
-        status: "paid",
+        status: invoiceStatus,
         notes: dto.notes,
         isOfflineSync: dto.isOfflineSync ?? false,
         isReturn: false,
@@ -423,6 +441,18 @@ export class BillingService {
         if (pointsEarned > 0) {
           await this.patientsRepo.addLoyaltyPoints(dto.patientId, pointsEarned, tx);
         }
+      }
+
+      // 7. Add the un-paid balance to the patient's dues so the counter can
+      // collect it later via /billing/payments. Guarded by dto.patientId above
+      // (walk-ins can't reach here with hasDue). Same-tx as the invoice so a
+      // rolled-back sale never leaves an orphaned dues entry.
+      if (hasDue && dto.patientId) {
+        await this.patientsRepo.addOutstanding(
+          dto.patientId,
+          amountDueDec.toFixed(2),
+          tx,
+        );
       }
 
       return { invoice, items: insertedItems, _lines: lines as AllocationLine[] };
@@ -657,17 +687,64 @@ export class BillingService {
     });
   }
 
+  /**
+   * Settles part or all of an invoice's outstanding due. Rejects if the
+   * invoice has no due, or if the payment would over-pay it. On success:
+   * (a) inserts the payment row, (b) increments amountPaid + decrements
+   * amountDue, (c) flips status to paid when amountDue hits zero, and
+   * (d) decrements the patient's outstandingBalance by the same amount.
+   * All four writes happen in one transaction so a mid-op failure leaves
+   * neither the invoice nor the patient in a half-updated state.
+   */
   async recordPayment(dto: any, staffId: string) {
     const inv = await this.repo.findById(dto.invoiceId);
     if (!inv) throw new NotFoundException(`Invoice ${dto.invoiceId} not found`);
-    const payment = await this.repo.recordPayment({
-      invoiceId: dto.invoiceId,
-      amount: dto.amount,
-      mode: dto.mode as any,
-      referenceNo: dto.referenceNo,
-      processedBy: staffId,
+
+    const currentDue = new Decimal(inv.amountDue ?? "0");
+    const paymentAmt = new Decimal(dto.amount);
+
+    if (currentDue.lessThanOrEqualTo(0)) {
+      throw new UnprocessableEntityException(
+        `Invoice ${inv.invoiceNo} has no outstanding due — status ${inv.status}`,
+      );
+    }
+    if (paymentAmt.greaterThan(currentDue)) {
+      throw new UnprocessableEntityException(
+        `Payment ${paymentAmt.toFixed(2)} exceeds outstanding due ${currentDue.toFixed(2)} — use a return for over-collection`,
+      );
+    }
+
+    const newDue = currentDue.minus(paymentAmt);
+    const clearsDue = newDue.equals(0);
+
+    const result = await this.drizzle.db.transaction(async (tx) => {
+      const payment = await this.repo.recordPayment(
+        {
+          invoiceId: dto.invoiceId,
+          amount: dto.amount,
+          mode: dto.mode as any,
+          referenceNo: dto.referenceNo,
+          processedBy: staffId,
+        },
+        tx,
+      );
+      if (clearsDue) {
+        await this.repo.markInvoicePaid(dto.invoiceId, tx);
+      }
+      if (inv.patientId) {
+        await this.patientsRepo.deductOutstanding(
+          inv.patientId,
+          paymentAmt.toFixed(2),
+          tx,
+        );
+      }
+      return payment;
     });
-    return { data: payment, message: "Payment recorded" };
+
+    return {
+      data: result,
+      message: clearsDue ? "Payment recorded — invoice fully paid" : "Payment recorded",
+    };
   }
 
   async endOfDaySummary(branchId: string | undefined, date?: string) {

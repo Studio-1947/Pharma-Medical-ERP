@@ -150,15 +150,34 @@ export class BillingRepository {
     return inv!;
   }
 
-  async recordPayment(data: typeof schema.payments.$inferInsert) {
-    const [payment] = await this.db.insert(schema.payments).values(data).returning();
-    // update amountPaid and amountDue
-    await this.db.update(schema.salesInvoices).set({
+  async recordPayment(data: typeof schema.payments.$inferInsert, tx?: any) {
+    const db = tx ?? this.db;
+    const [payment] = await db.insert(schema.payments).values(data).returning();
+    // Amount clamps at zero — the service layer already rejects over-payment,
+    // so the GREATEST is a belt-and-suspenders against a race where two
+    // concurrent settlements both read the same amountDue.
+    await db.update(schema.salesInvoices).set({
       amountPaid: sql`${schema.salesInvoices.amountPaid} + ${data.amount}`,
-      amountDue: sql`${schema.salesInvoices.amountDue} - ${data.amount}`,
+      amountDue: sql`GREATEST(${schema.salesInvoices.amountDue} - ${data.amount}, 0)`,
       updatedAt: new Date(),
     }).where(eq(schema.salesInvoices.id, data.invoiceId));
     return payment!;
+  }
+
+  /** Flips status to "paid" once amountDue reaches zero. Only touches
+   *  partially_paid rows so a manual status override or a return-in-progress
+   *  invoice does not get silently marked paid. */
+  async markInvoicePaid(invoiceId: string, tx?: any) {
+    const db = tx ?? this.db;
+    await db.update(schema.salesInvoices).set({
+      status: "paid",
+      updatedAt: new Date(),
+    }).where(
+      and(
+        eq(schema.salesInvoices.id, invoiceId),
+        eq(schema.salesInvoices.status, "partially_paid"),
+      ),
+    );
   }
 
   async findReturnedQuantities(originalInvoiceId: string): Promise<Record<string, number>> {

@@ -89,6 +89,8 @@ function buildService() {
   const mockPatientsRepo = {
     addLoyaltyPoints: vi.fn().mockResolvedValue(undefined),
     deductLoyaltyPoints: vi.fn().mockResolvedValue(undefined),
+    addOutstanding: vi.fn().mockResolvedValue(undefined),
+    deductOutstanding: vi.fn().mockResolvedValue(undefined),
   };
 
   const mockS3 = { getPresignedUrl: vi.fn() };
@@ -468,7 +470,155 @@ describe("CHECKOUT-11 — Doctor consultation fee billed as GST-exempt line", ()
       [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" }],
     ]);
 
-    await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(/does not match/i);
+    // Walk-in underpay (no patientId) is rejected with the walk-in guard,
+    // not the generic payment-mismatch — a registered patient's underpayment
+    // would instead be accepted as a due (see CHECKOUT-DUE tests below).
+    await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(/walk-in/i);
+  });
+});
+
+// ─── CHECKOUT-DUE: partial-payment / due billing ────────────────────────────
+
+describe("CHECKOUT-DUE — partial payment accepted for a registered patient", () => {
+  it("records amountDue, sets partially_paid status, and increments patient outstanding", async () => {
+    const { service, mockRepo, mockBatchRepo, mockPatientsRepo, buildTx } = buildService();
+
+    // Invoice total is 112 (mocked); patient pays 50 → due = 62
+    const dto = {
+      patientId: "pat-1",
+      items: [{ medicineId: "med-otc", quantity: 2, discountPct: "0" }],
+      payments: [{ mode: "cash", amount: "50.00" }],
+    };
+    const tx = buildTx([
+      [{ id: "med-otc", name: "Paracetamol", scheduleClass: "OTC", requiresPrescription: false, taxPercent: "12", stripSize: 10, isActive: true }],
+      [{ id: "batch-1" }],
+    ]);
+    (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" }],
+    ]);
+
+    await service.create(dto as any, "staff-1", "branch-1");
+
+    // The invoice row that was persisted carries the partial-payment fields.
+    const invoiceArg = mockRepo.createInvoiceWithItems.mock.calls[0]![0];
+    expect(invoiceArg.totalAmount).toBe("112.00");
+    expect(invoiceArg.amountPaid).toBe("50.00");
+    expect(invoiceArg.amountDue).toBe("62.00");
+    expect(invoiceArg.status).toBe("partially_paid");
+
+    // The un-paid balance is added to the patient's dues in the same tx.
+    expect(mockPatientsRepo.addOutstanding).toHaveBeenCalledWith("pat-1", "62.00", tx);
+  });
+
+  it("rejects a walk-in partial payment", async () => {
+    const { service, mockBatchRepo, buildTx } = buildService();
+    const dto = {
+      // no patientId → walk-in
+      items: [{ medicineId: "med-otc", quantity: 2, discountPct: "0" }],
+      payments: [{ mode: "cash", amount: "50.00" }],
+    };
+    const tx = buildTx([
+      [{ id: "med-otc", name: "Paracetamol", scheduleClass: "OTC", requiresPrescription: false, taxPercent: "12", stripSize: 10, isActive: true }],
+      [{ id: "batch-1" }],
+    ]);
+    (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" }],
+    ]);
+
+    await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(/walk-in/i);
+  });
+
+  it("rejects an over-payment even for a registered patient", async () => {
+    const { service, mockBatchRepo, buildTx } = buildService();
+    const dto = {
+      patientId: "pat-1",
+      items: [{ medicineId: "med-otc", quantity: 2, discountPct: "0" }],
+      payments: [{ mode: "cash", amount: "200.00" }], // total is 112
+    };
+    const tx = buildTx([
+      [{ id: "med-otc", name: "Paracetamol", scheduleClass: "OTC", requiresPrescription: false, taxPercent: "12", stripSize: 10, isActive: true }],
+    ]);
+    (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" }],
+    ]);
+
+    await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(/exceeds/i);
+  });
+});
+
+// ─── RECORD-PAYMENT: settling a due ─────────────────────────────────────────
+
+describe("recordPayment — settling an outstanding due", () => {
+  function buildForRecord(inv: any) {
+    const s = buildService();
+    s.mockRepo.findById = vi.fn().mockResolvedValue(inv);
+    (s.mockRepo as any).recordPayment = vi.fn().mockResolvedValue({ id: "pay-1" });
+    (s.mockRepo as any).markInvoicePaid = vi.fn().mockResolvedValue(undefined);
+    (s.service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb({})) } };
+    return s;
+  }
+
+  it("accepts a partial settlement and decrements patient outstanding", async () => {
+    const s = buildForRecord({
+      id: "inv-1",
+      invoiceNo: "INV-1",
+      status: "partially_paid",
+      amountDue: "100.00",
+      patientId: "pat-1",
+    });
+    const res = await s.service.recordPayment(
+      { invoiceId: "inv-1", amount: "40.00", mode: "cash" },
+      "staff-1",
+    );
+    expect(res.message).toMatch(/recorded/i);
+    expect((s.mockRepo as any).markInvoicePaid).not.toHaveBeenCalled();
+    expect(s.mockPatientsRepo.deductOutstanding).toHaveBeenCalledWith("pat-1", "40.00", expect.anything());
+  });
+
+  it("clears the due and flips status to paid when the last rupee lands", async () => {
+    const s = buildForRecord({
+      id: "inv-1",
+      invoiceNo: "INV-1",
+      status: "partially_paid",
+      amountDue: "40.00",
+      patientId: "pat-1",
+    });
+    const res = await s.service.recordPayment(
+      { invoiceId: "inv-1", amount: "40.00", mode: "cash" },
+      "staff-1",
+    );
+    expect(res.message).toMatch(/fully paid/i);
+    expect((s.mockRepo as any).markInvoicePaid).toHaveBeenCalledWith("inv-1", expect.anything());
+    expect(s.mockPatientsRepo.deductOutstanding).toHaveBeenCalledWith("pat-1", "40.00", expect.anything());
+  });
+
+  it("rejects a payment on an already-paid invoice", async () => {
+    const s = buildForRecord({
+      id: "inv-1",
+      invoiceNo: "INV-1",
+      status: "paid",
+      amountDue: "0.00",
+      patientId: "pat-1",
+    });
+    await expect(
+      s.service.recordPayment({ invoiceId: "inv-1", amount: "10.00", mode: "cash" }, "staff-1"),
+    ).rejects.toThrow(/no outstanding due/i);
+  });
+
+  it("rejects over-payment on a partially-paid invoice", async () => {
+    const s = buildForRecord({
+      id: "inv-1",
+      invoiceNo: "INV-1",
+      status: "partially_paid",
+      amountDue: "50.00",
+      patientId: "pat-1",
+    });
+    await expect(
+      s.service.recordPayment({ invoiceId: "inv-1", amount: "100.00", mode: "cash" }, "staff-1"),
+    ).rejects.toThrow(/exceeds outstanding/i);
   });
 });
 

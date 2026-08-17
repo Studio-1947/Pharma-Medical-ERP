@@ -5,10 +5,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
-import { UserPlus, Search, Edit2, Trash2, Phone, Calendar, Star, Eye, FileText, ClipboardList, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { UserPlus, Search, Edit2, Trash2, Phone, Calendar, Star, Eye, FileText, ClipboardList, AlertTriangle, CheckCircle2, XCircle, IndianRupee } from "lucide-react";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
+import { SettleDueModal } from "@/components/modules/patients/settle-due-modal";
 
 interface Patient {
   id: string;
@@ -151,6 +152,19 @@ function PatientHistoryModal({ patient, onClose }: { patient: Patient | null; on
               <span className="text-slate-400 block font-semibold text-[10px] uppercase">Loyalty</span>
               <span className="font-bold text-amber-700">{patient.loyaltyPoints ?? 0} pts</span>
             </div>
+            {/* Outstanding due — shown only when non-zero so a clean-slate
+                patient isn't cluttered with a "₹0.00 due" card. The Collect
+                button is exposed one level up next to Edit for one-click
+                access from the profile header. */}
+            {Number(patient.outstandingBalance ?? "0") > 0 && (
+              <div className="bg-white p-2.5 rounded-xl border border-purple-200 shadow-2xs">
+                <span className="text-purple-500 block font-semibold text-[10px] uppercase">Outstanding</span>
+                <span className="font-black text-purple-700 flex items-center gap-0.5">
+                  <IndianRupee size={12} />
+                  {Number(patient.outstandingBalance).toFixed(2)}
+                </span>
+              </div>
+            )}
             {patient.address && (
               <div className="bg-white p-2.5 rounded-xl border border-slate-100 shadow-2xs col-span-2 sm:col-span-3 md:col-span-4">
                 <span className="text-slate-400 block font-semibold text-[10px] uppercase">Address</span>
@@ -512,6 +526,7 @@ export function PatientsClient() {
   const isDoctor = user?.role === "doctor";
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [historyTarget, setHistoryTarget] = useState<Patient | null>(null);
+  const [settleDueTarget, setSettleDueTarget] = useState<Patient | null>(null);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -763,6 +778,12 @@ export function PatientsClient() {
                       <div className="flex items-center gap-1 text-yellow-700 font-medium text-sm">
                         <Star className="w-3.5 h-3.5" />{patient.loyaltyPoints ?? 0}
                       </div>
+                      {Number(patient.outstandingBalance ?? "0") > 0 && (
+                        <div className="mt-1 inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md bg-purple-50 border border-purple-200 text-purple-700 text-[10px] font-black">
+                          <IndianRupee size={9} />
+                          {Number(patient.outstandingBalance).toFixed(2)} due
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 text-muted-foreground">
                       <div className="flex items-center gap-1.5">
@@ -772,6 +793,15 @@ export function PatientsClient() {
                     </td>
                     <td className="px-6 py-4 text-right">
                       <div className="flex items-center justify-end gap-1">
+                        {Number(patient.outstandingBalance ?? "0") > 0 && (
+                          <button
+                            onClick={() => setSettleDueTarget(patient)}
+                            className="px-2.5 py-1 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-[11px] font-bold transition-colors"
+                            title={`Collect ₹${Number(patient.outstandingBalance).toFixed(2)} outstanding`}
+                          >
+                            Collect
+                          </button>
+                        )}
                         <button
                           onClick={() => setHistoryTarget(patient)}
                           className="p-2 hover:bg-muted rounded-lg transition-colors text-muted-foreground hover:text-emerald-600"
@@ -1090,6 +1120,13 @@ export function PatientsClient() {
       </Modal>
 
       <PatientHistoryModal patient={historyTarget} onClose={() => setHistoryTarget(null)} />
+      <SettleDueModal
+        open={!!settleDueTarget}
+        patientId={settleDueTarget?.id ?? ""}
+        patientName={settleDueTarget?.name ?? ""}
+        outstandingBalance={settleDueTarget?.outstandingBalance ?? "0"}
+        onClose={() => setSettleDueTarget(null)}
+      />
     </div>
   );
 }

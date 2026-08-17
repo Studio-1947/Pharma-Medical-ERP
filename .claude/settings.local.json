@@ -98,7 +98,8 @@
       "Bash(powershell.exe *)",
       "Bash(curl -s -X POST http://localhost:4000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin@mederp.com\",\"password\":\"Admin@123\"}')",
       "Bash(curl -s -w \"\\\\nHTTP: %{http_code}\\\\n\" http://localhost:4000/docs)",
-      "Bash(curl -s -v -X POST http://localhost:4000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin@mederp.com\",\"password\":\"Admin@123\"}')"
+      "Bash(curl -s -v -X POST http://localhost:4000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin@mederp.com\",\"password\":\"Admin@123\"}')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4000/docs)"
     ]
   }
 }

@@ -1390,12 +1390,20 @@ export function PatientFirstBilling({
                     </div>
                   </div>
                 )}
-                {cartItems.map((item) => (
+                {cartItems.map((item) => {
+                  // Per-line discount context for the operator: shows what the
+                  // shopkeeper is knocking off this specific medicine before
+                  // GST is applied. Same math as pos-terminal.tsx.
+                  const unitPrice = item.saleUnit === "loose" ? item.unitPrice / (item.stripSize || 1) : item.unitPrice;
+                  const gross = unitPrice * item.quantity;
+                  const discAmt = (gross * (item.discountPct || 0)) / 100;
+                  return (
                   <div key={item.batchId} className="flex items-center justify-between gap-3 py-2">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-800 truncate">{item.name}</p>
                       <p className="text-xs text-slate-400 truncate">
                         {item.saleUnit === "loose" ? `${item.quantity} loose` : `${item.quantity} × ${item.saleUnit}`} · {item.taxPct > 0 ? `${item.taxPct}% GST` : "No GST"}
+                        {discAmt > 0 && <span className="text-purple-600 font-semibold"> · −₹{discAmt.toFixed(2)}</span>}
                       </p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
@@ -1416,6 +1424,17 @@ export function PatientFirstBilling({
                           <Plus size={11} />
                         </button>
                       </div>
+                      <div className="flex items-center gap-1 border border-slate-200 rounded-lg px-1.5 py-0.5" title="Discount % on this medicine — applied before GST">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={item.discountPct}
+                          onChange={(e) => cart.updateDiscountPct(item.medicineId, item.batchId, parseFloat(e.target.value) || 0)}
+                          className="w-10 text-xs font-mono font-bold text-center focus:outline-none bg-transparent"
+                        />
+                        <span className="text-[10px] text-slate-400 font-bold">%</span>
+                      </div>
                       <span className="text-sm font-bold text-slate-900 w-16 text-right">₹{item.lineTotal.toFixed(2)}</span>
                       <button
                         type="button"
@@ -1427,15 +1446,21 @@ export function PatientFirstBilling({
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/60">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-4 text-sm flex-wrap">
                     <span className="text-slate-500">
                       Subtotal <b className="text-slate-800">₹{totals.subtotal.toFixed(2)}</b>
                     </span>
+                    {totals.discount > 0 && (
+                      <span className="text-purple-600 font-semibold" title="Sum of all per-medicine discounts">
+                        Discount <b>−₹{totals.discount.toFixed(2)}</b>
+                      </span>
+                    )}
                     <span className="text-slate-500">
                       Tax <b className="text-slate-800">₹{totals.tax.toFixed(2)}</b>
                     </span>
