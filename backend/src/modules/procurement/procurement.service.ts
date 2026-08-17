@@ -4,6 +4,16 @@ import Decimal from "decimal.js";
 import { DrizzleService } from "../../database/drizzle.service";
 import { ProcurementRepository } from "./procurement.repository";
 import { calculateLine } from "./procurement.pricing";
+import {
+  addToBucket,
+  bucketBreakdown,
+  daysPastDue,
+  mergeBucketTotals,
+  newBucketTotals,
+  serializeBuckets,
+  sumBuckets,
+  sumOverdue,
+} from "../../common/utils/aging.util";
 import type {
   CreateSupplierDto,
   UpdateSupplierDto,
@@ -15,6 +25,7 @@ import type {
   CreateSupplierPaymentDto,
   QuerySupplierBillsDto,
   QuerySupplierLedgerDto,
+  QueryPayablesAgingDto,
   CreateSupplierReturnDto,
   ResolveReturnReplacementDto,
   ResolveReturnCreditNoteDto,
@@ -213,6 +224,10 @@ export class ProcurementService {
     bills: Array<ReturnType<ProcurementService["computeGrnBill"]> & { amountDue: string }>,
     payments: Awaited<ReturnType<ProcurementRepository["getPaymentsForSupplier"]>>,
     creditDays: number,
+    // Passed in rather than read per bill so every row in one response ages
+    // against the same instant — otherwise a list straddling midnight could
+    // report two different "today"s.
+    asOf: Date,
   ) {
     const directByGrn = new Map<string, Decimal>();
     let onAccountAvailable = new Decimal(0);
@@ -244,12 +259,17 @@ export class ProcurementService {
       const status: "paid" | "partial" | "unpaid" =
         balance.lessThanOrEqualTo(0) ? "paid" : paidAmount.greaterThan(0) ? "partial" : "unpaid";
 
+      // Settled bills never age: once the balance is zero the due date stops
+      // mattering, so a bill paid late does not sit in the overdue column.
+      const dueDate = addDays(new Date(bill.receivedAt), creditDays);
+      const daysOverdue = balance.greaterThan(0) ? daysPastDue(dueDate, asOf) : 0;
+
       return {
         grnId: bill.id,
         grnNumber: bill.grnNumber,
         poId: bill.poId,
         receivedAt: bill.receivedAt,
-        dueDate: addDays(new Date(bill.receivedAt), creditDays).toISOString(),
+        dueDate: dueDate.toISOString(),
         supplierInvoiceNo: bill.supplierInvoiceNo,
         items: bill.items,
         itemCount: bill.itemCount,
@@ -259,12 +279,14 @@ export class ProcurementService {
         paidAmount: paidAmount.toFixed(2),
         balance: balance.toFixed(2),
         status,
+        daysOverdue,
+        isOverdue: daysOverdue > 0,
       };
     });
   }
 
   /** Fetches + computes every bill for a supplier, oldest-first, with payments applied. */
-  private async getAllocatedBills(supplierId: string) {
+  private async getAllocatedBills(supplierId: string, asOf: Date = new Date()) {
     const supplier = await this.requireSupplier(supplierId);
     const [grns, payments] = await Promise.all([
       this.repo.getGRNsForSupplier(supplierId),
@@ -272,7 +294,7 @@ export class ProcurementService {
     ]);
 
     const computed = await this.attachConsignmentDue(grns.map((grn) => this.computeGrnBill(grn)));
-    const bills = this.allocatePaymentsToBills(computed, payments, supplier.creditDays);
+    const bills = this.allocatePaymentsToBills(computed, payments, supplier.creditDays, asOf);
 
     return { supplier, bills, payments };
   }
@@ -383,7 +405,11 @@ export class ProcurementService {
     // getAllocatedBills returns oldest-first (needed for FIFO settlement);
     // reverse for the newest-first list a bills screen expects.
     const ordered = [...bills].reverse();
-    const filtered = query.status ? ordered.filter((b) => b.status === query.status) : ordered;
+    // "overdue" is not one of the settlement statuses — it is the still-owing
+    // bills that have passed their due date, so it matches on isOverdue.
+    const filtered = query.status
+      ? ordered.filter((b) => (query.status === "overdue" ? b.isOverdue : b.status === query.status))
+      : ordered;
 
     const total = filtered.length;
     const start = (query.page - 1) * query.limit;
@@ -493,7 +519,130 @@ export class ProcurementService {
     };
   }
 
-  async recordSupplierPayment(supplierId: string, dto: CreateSupplierPaymentDto, paidBy: string) {
+  /**
+   * Cross-supplier payables position, banded by how far past due each unpaid
+   * balance is. Runs the same bill computation and FIFO payment allocation as
+   * the per-supplier ledger rather than a second parallel calculation, so a
+   * row here always reconciles with that supplier's statement when drilled
+   * into. Everything is fetched in three queries and grouped in memory —
+   * looping getAllocatedBills per supplier would be one round trip each.
+   */
+  async getPayablesAging(query: QueryPayablesAgingDto) {
+    const asOf = new Date();
+
+    const [suppliers, grns, payments] = await Promise.all([
+      this.repo.listSuppliersForAging(),
+      this.repo.getAllGRNsWithSupplier(query.branchId),
+      this.repo.getAllSupplierPayments(query.branchId),
+    ]);
+
+    // One batched sold-quantity lookup covering every consignment line on
+    // every bill, instead of one lookup per supplier.
+    const computed = await this.attachConsignmentDue(grns.map((grn) => this.computeGrnBill(grn)));
+
+    const billsBySupplier = new Map<string, any[]>();
+    for (const bill of computed) {
+      const supplierId = (bill as any).purchaseOrder?.supplierId;
+      if (!supplierId) continue;
+      const list = billsBySupplier.get(supplierId);
+      if (list) list.push(bill);
+      else billsBySupplier.set(supplierId, [bill]);
+    }
+
+    const paymentsBySupplier = new Map<string, typeof payments>();
+    for (const payment of payments) {
+      const list = paymentsBySupplier.get(payment.supplierId);
+      if (list) list.push(payment);
+      else paymentsBySupplier.set(payment.supplierId, [payment]);
+    }
+
+    const grandTotals = newBucketTotals();
+    let grandConsignment = new Decimal(0);
+    let grandOverdueBills = 0;
+
+    const rows = [];
+    for (const supplier of suppliers) {
+      const supplierBills = billsBySupplier.get(supplier.id);
+      if (!supplierBills?.length) continue;
+
+      const allocated = this.allocatePaymentsToBills(
+        supplierBills,
+        paymentsBySupplier.get(supplier.id) ?? [],
+        supplier.creditDays,
+        asOf,
+      );
+
+      const buckets = newBucketTotals();
+      let consignmentPayable = new Decimal(0);
+      let overdueBillCount = 0;
+      let openBillCount = 0;
+      let oldestDueDate: string | null = null;
+
+      for (const bill of allocated) {
+        const balance = new Decimal(bill.balance);
+        if (balance.lessThanOrEqualTo(0)) continue;
+
+        openBillCount += 1;
+        addToBucket(buckets, bill.daysOverdue, balance);
+
+        if (bill.items.some((item: any) => item.isConsignment)) {
+          consignmentPayable = consignmentPayable.plus(balance);
+        }
+        if (bill.isOverdue) {
+          overdueBillCount += 1;
+          if (!oldestDueDate || bill.dueDate < oldestDueDate) oldestDueDate = bill.dueDate;
+        }
+      }
+
+      const total = sumBuckets(buckets);
+      if (total.lessThanOrEqualTo(0)) continue;
+
+      mergeBucketTotals(grandTotals, buckets);
+      grandConsignment = grandConsignment.plus(consignmentPayable);
+      grandOverdueBills += overdueBillCount;
+
+      rows.push({
+        supplierId: supplier.id,
+        supplierName: supplier.name,
+        supplierCode: supplier.code,
+        creditDays: supplier.creditDays,
+        ...serializeBuckets(buckets),
+        overdue: sumOverdue(buckets).toFixed(2),
+        total: total.toFixed(2),
+        openBillCount,
+        overdueBillCount,
+        oldestDueDate,
+        // Consignment sits inside `total` but is called out separately: it is
+        // owed only as stock sells, so it is a softer liability than the rest.
+        consignmentPayable: consignmentPayable.toFixed(2),
+      });
+    }
+
+    // Largest exposure first — that is the order the money is worked in.
+    rows.sort((a, b) => Number(b.total) - Number(a.total));
+
+    return {
+      asOf: asOf.toISOString(),
+      branchId: query.branchId ?? null,
+      buckets: bucketBreakdown(grandTotals),
+      totals: {
+        ...serializeBuckets(grandTotals),
+        overdue: sumOverdue(grandTotals).toFixed(2),
+        total: sumBuckets(grandTotals).toFixed(2),
+        consignmentPayable: grandConsignment.toFixed(2),
+        supplierCount: rows.length,
+        overdueBillCount: grandOverdueBills,
+      },
+      suppliers: rows,
+    };
+  }
+
+  async recordSupplierPayment(
+    supplierId: string,
+    dto: CreateSupplierPaymentDto,
+    paidBy: string,
+    branchId: string,
+  ) {
     await this.requireSupplier(supplierId);
 
     let skipBalanceUpdate = false;
@@ -510,7 +659,11 @@ export class ProcurementService {
     }
 
     const payment = await this.drizzle.db.transaction((tx) =>
-      this.repo.createSupplierPayment({ ...dto, supplierId, paidBy, type: "payment" }, tx, skipBalanceUpdate),
+      this.repo.createSupplierPayment(
+        { ...dto, supplierId, branchId, paidBy, type: "payment" },
+        tx,
+        skipBalanceUpdate,
+      ),
     );
 
     return { data: payment, message: "Payment recorded" };
@@ -567,6 +720,10 @@ export class ProcurementService {
       const payment = await this.repo.createSupplierPayment(
         {
           supplierId,
+          // Unlike a cash payment, a credit note's branch IS derivable: the
+          // return row mirrors the returned batch's branch, so the credit
+          // lands against the branch that holds the stock.
+          branchId: ret.branchId,
           grnId: dto.grnId,
           amount: dto.amount,
           notes: dto.notes,

@@ -516,6 +516,52 @@ export class ProcurementRepository {
     });
   }
 
+  /**
+   * Suppliers that can carry a balance, with only the fields the payables
+   * aging roll-up needs. Deliberately unpaginated — an aging total that
+   * silently stopped at page 1 would understate what the business owes.
+   */
+  async listSuppliersForAging() {
+    return this.db
+      .select({
+        id: schema.suppliers.id,
+        name: schema.suppliers.name,
+        code: schema.suppliers.code,
+        creditDays: schema.suppliers.creditDays,
+      })
+      .from(schema.suppliers)
+      .where(isNull(schema.suppliers.deletedAt))
+      .orderBy(asc(schema.suppliers.name));
+  }
+
+  /**
+   * Every bill across every supplier, oldest first, tagged with the supplier
+   * that owns it — one query in place of a getGRNsForSupplier round trip per
+   * supplier. Medicine rows are deliberately not joined: the roll-up needs
+   * line amounts and the consignment flag, never product names.
+   */
+  async getAllGRNsWithSupplier(branchId?: string) {
+    return this.db.query.goodsReceivedNotes.findMany({
+      where: branchId ? eq(schema.goodsReceivedNotes.branchId, branchId) : undefined,
+      orderBy: [asc(schema.goodsReceivedNotes.receivedAt)],
+      with: {
+        items: { with: { poItem: true } },
+        purchaseOrder: { columns: { id: true, supplierId: true } },
+      },
+    });
+  }
+
+  /** Payments for every supplier, oldest first — the credit side of the same
+   *  roll-up. Branch filter mirrors getAllGRNsWithSupplier so a branch view
+   *  never settles one branch's bills with another branch's cash. */
+  async getAllSupplierPayments(branchId?: string) {
+    return this.db
+      .select()
+      .from(schema.supplierPayments)
+      .where(branchId ? eq(schema.supplierPayments.branchId, branchId) : undefined)
+      .orderBy(asc(schema.supplierPayments.paidAt));
+  }
+
   /** Single GRN (bill) with its parent PO, scoped for supplier-ownership checks. */
   async getGRNById(grnId: string) {
     return this.db.query.goodsReceivedNotes.findFirst({
@@ -552,6 +598,11 @@ export class ProcurementRepository {
   async createSupplierPayment(
     params: {
       supplierId: string;
+      // Required by the table since 0021_branch_separation: supplier balances
+      // roll up per branch, so a payment that cannot name one would drop out
+      // of every balance. It was previously omitted here, which made every
+      // insert fail the NOT NULL constraint.
+      branchId: string;
       grnId?: string | null;
       amount: string;
       method?: string;
@@ -570,6 +621,7 @@ export class ProcurementRepository {
       .insert(schema.supplierPayments)
       .values({
         supplierId: params.supplierId,
+        branchId: params.branchId,
         grnId: params.grnId,
         amount: params.amount,
         method: params.method,

@@ -15,6 +15,7 @@ import {
   IndianRupee, Package, CheckCircle, Clock,
 } from "lucide-react";
 import { apiClient } from "@/lib/api-client";
+import { ReceivablesAgingView } from "@/components/modules/billing/receivables-aging-view";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -37,7 +38,7 @@ const PO_STATUS_STYLE: Record<string, string> = {
   cancelled: "bg-red-100 text-red-700",
 };
 
-type Tab = "sales" | "purchase" | "compliance";
+type Tab = "sales" | "purchase" | "receivables" | "compliance";
 
 // ─── Sales Tab ────────────────────────────────────────────────────────────────
 
@@ -711,6 +712,7 @@ function ComplianceTab() {
 const TABS: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: "sales", label: "Sales", icon: TrendingUp },
   { id: "purchase", label: "Purchase", icon: Package },
+  { id: "receivables", label: "Receivables", icon: IndianRupee },
   { id: "compliance", label: "Compliance", icon: FileText },
 ];
 
@@ -746,6 +748,7 @@ export function ReportsClient() {
 
       {active === "sales" && <SalesTab />}
       {active === "purchase" && <PurchaseTab />}
+      {active === "receivables" && <ReceivablesAgingView />}
       {active === "compliance" && <ComplianceTab />}
     </div>
   );

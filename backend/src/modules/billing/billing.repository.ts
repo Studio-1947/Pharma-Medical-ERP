@@ -1,5 +1,5 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { and, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import Redis from "ioredis";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
@@ -128,6 +128,87 @@ export class BillingRepository {
         totalPages: Math.ceil((countRow?.count ?? 0) / params.limit),
       },
     };
+  }
+
+  /**
+   * Every customer invoice still carrying a due — the receivables book.
+   * Drafts and cancelled invoices are not debts, and a return invoice carries
+   * a negative total that can never leave a positive due, so all three are
+   * excluded. Unpaginated on purpose: an aging total that stopped at page 1
+   * would understate what is owed to the business.
+   */
+  async openReceivables(branchId?: string) {
+    const conditions: any[] = [
+      sql`${schema.salesInvoices.amountDue} > 0`,
+      sql`${schema.salesInvoices.status} NOT IN ('draft', 'cancelled')`,
+      eq(schema.salesInvoices.isReturn, false),
+    ];
+    if (branchId) conditions.push(eq(schema.salesInvoices.branchId, branchId));
+
+    return this.db
+      .select({
+        id: schema.salesInvoices.id,
+        invoiceNo: schema.salesInvoices.invoiceNo,
+        patientId: schema.salesInvoices.patientId,
+        patientName: schema.patients.name,
+        patientPhone: schema.patients.phone,
+        branchId: schema.salesInvoices.branchId,
+        totalAmount: schema.salesInvoices.totalAmount,
+        amountPaid: schema.salesInvoices.amountPaid,
+        amountDue: schema.salesInvoices.amountDue,
+        createdAt: schema.salesInvoices.createdAt,
+      })
+      .from(schema.salesInvoices)
+      .leftJoin(schema.patients, eq(schema.salesInvoices.patientId, schema.patients.id))
+      .where(and(...conditions))
+      .orderBy(asc(schema.salesInvoices.createdAt));
+  }
+
+  /**
+   * The two sides of one patient's account statement: invoices raised and
+   * payments collected, oldest first. Draft and cancelled invoices are left
+   * out along with their payments — neither is a real movement on the
+   * account, and including them would make the running balance disagree with
+   * the patient's stored outstanding.
+   */
+  async getPatientLedgerRows(patientId: string) {
+    const invoices = await this.db
+      .select({
+        id: schema.salesInvoices.id,
+        invoiceNo: schema.salesInvoices.invoiceNo,
+        isReturn: schema.salesInvoices.isReturn,
+        totalAmount: schema.salesInvoices.totalAmount,
+        amountDue: schema.salesInvoices.amountDue,
+        status: schema.salesInvoices.status,
+        createdAt: schema.salesInvoices.createdAt,
+      })
+      .from(schema.salesInvoices)
+      .where(
+        and(
+          eq(schema.salesInvoices.patientId, patientId),
+          sql`${schema.salesInvoices.status} NOT IN ('draft', 'cancelled')`,
+        ),
+      )
+      .orderBy(asc(schema.salesInvoices.createdAt));
+
+    if (invoices.length === 0) return { invoices, payments: [] as any[] };
+
+    const payments = await this.db
+      .select({
+        id: schema.payments.id,
+        invoiceId: schema.payments.invoiceId,
+        invoiceNo: schema.salesInvoices.invoiceNo,
+        amount: schema.payments.amount,
+        mode: schema.payments.mode,
+        referenceNo: schema.payments.referenceNo,
+        createdAt: schema.payments.createdAt,
+      })
+      .from(schema.payments)
+      .innerJoin(schema.salesInvoices, eq(schema.payments.invoiceId, schema.salesInvoices.id))
+      .where(inArray(schema.payments.invoiceId, invoices.map((i) => i.id)))
+      .orderBy(asc(schema.payments.createdAt));
+
+    return { invoices, payments };
   }
 
   async findById(id: string) {

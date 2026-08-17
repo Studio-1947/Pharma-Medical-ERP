@@ -7,7 +7,7 @@ import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
 import { Roles } from "../../common/decorators/roles.decorator";
 import { CurrentUser, JwtPayload } from "../../common/decorators/current-user.decorator";
-import { requireBranchScope } from "../../common/auth/branch-scope";
+import { requireBranchScope, resolveBranchScope } from "../../common/auth/branch-scope";
 import {
   createSupplierSchema,
   updateSupplierSchema,
@@ -19,6 +19,7 @@ import {
   createSupplierPaymentSchema,
   querySupplierBillsSchema,
   querySupplierLedgerSchema,
+  queryPayablesAgingSchema,
   createSupplierReturnSchema,
   resolveReturnReplacementSchema,
   resolveReturnCreditNoteSchema,
@@ -30,6 +31,47 @@ import {
 @Controller("procurement")
 export class ProcurementController {
   constructor(private readonly service: ProcurementService) {}
+
+  // ─── Payables ────────────────────────────────────────────────────────────────
+
+  @Get("payables/aging")
+  @Roles("admin", "shop_manager")
+  @ApiOperation({
+    summary: "Payables aging — unpaid supplier balances banded by days past due",
+  })
+  async getPayablesAging(@Query() q: unknown, @CurrentUser() user: JwtPayload, @Res() res: FastifyReply) {
+    const query = queryPayablesAgingSchema.parse(q);
+    // branchId arrives from the client, so it is resolved against the caller's
+    // own branch — otherwise a branch manager could read another branch's
+    // cash position by editing the query param.
+    const branchId = resolveBranchScope(user, query.branchId);
+    const aging = await this.service.getPayablesAging({ ...query, branchId });
+
+    if (query.format === "csv") {
+      const fields = [
+        "supplierCode",
+        "supplierName",
+        "creditDays",
+        "current",
+        "d1_30",
+        "d31_60",
+        "d61_90",
+        "d90plus",
+        "overdue",
+        "total",
+        "openBillCount",
+        "overdueBillCount",
+        "oldestDueDate",
+        "consignmentPayable",
+      ];
+      const csv = parse(aging.suppliers, { fields });
+      res.header("Content-Type", "text/csv");
+      res.header("Content-Disposition", `attachment; filename="payables-aging.csv"`);
+      return res.send(csv);
+    }
+
+    return res.send({ data: aging });
+  }
 
   // ─── Suppliers ───────────────────────────────────────────────────────────────
 
@@ -92,7 +134,12 @@ export class ProcurementController {
     @Body() body: unknown,
     @CurrentUser() user: JwtPayload,
   ) {
-    return this.service.recordSupplierPayment(id, createSupplierPaymentSchema.parse(body), user.sub);
+    const dto = createSupplierPaymentSchema.parse(body);
+    // The paying branch is resolved from the caller, never trusted from the
+    // body — supplier balances roll up per branch, so this decides whose cash
+    // position the payment moves.
+    const branchId = requireBranchScope(user, dto.branchId);
+    return this.service.recordSupplierPayment(id, dto, user.sub, branchId);
   }
 
   @Get("suppliers/:id/ledger")

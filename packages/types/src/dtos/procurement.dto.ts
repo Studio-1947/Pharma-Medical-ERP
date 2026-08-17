@@ -95,6 +95,10 @@ export const queryPurchaseOrderSchema = z.object({
 });
 
 export const createSupplierPaymentSchema = z.object({
+  // The branch whose cash this leaves. Not derivable from grnId, which is
+  // nullable for an "on account" payment. Optional in the body for the same
+  // reason as on a PO: branch users are pinned server-side, super_admin names one.
+  branchId: z.string().uuid().optional(),
   grnId: z.string().uuid().optional(),
   amount: z.string().regex(/^\d+(\.\d{1,2})?$/, "Must be a valid amount"),
   method: z.enum(["cash", "bank_transfer", "cheque", "upi", "other"]),
@@ -104,9 +108,20 @@ export const createSupplierPaymentSchema = z.object({
 });
 
 export const querySupplierBillsSchema = z.object({
-  status: z.enum(["paid", "partial", "unpaid"]).optional(),
+  // paid/partial/unpaid describe how much of the bill is settled; "overdue" is
+  // a separate axis (still owing AND past its due date) and is matched against
+  // the bill's isOverdue flag rather than its settlement status.
+  status: z.enum(["paid", "partial", "unpaid", "overdue"]).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const queryPayablesAgingSchema = z.object({
+  // Optional branch filter. It narrows bills and supplier payments together,
+  // so a branch view stays internally consistent; omitting it (super_admin
+  // only) gives the whole-business payables position.
+  branchId: z.string().uuid().optional(),
+  format: z.enum(["json", "csv"]).default("json"),
 });
 
 export const querySupplierLedgerSchema = z.object({
@@ -142,6 +157,7 @@ export type CreateGrnDto = z.infer<typeof createGrnSchema>;
 export type QueryPurchaseOrderDto = z.infer<typeof queryPurchaseOrderSchema>;
 export type CreateSupplierPaymentDto = z.infer<typeof createSupplierPaymentSchema>;
 export type QuerySupplierBillsDto = z.infer<typeof querySupplierBillsSchema>;
+export type QueryPayablesAgingDto = z.infer<typeof queryPayablesAgingSchema>;
 export type QuerySupplierLedgerDto = z.infer<typeof querySupplierLedgerSchema>;
 export type CreateSupplierReturnDto = z.infer<typeof createSupplierReturnSchema>;
 export type ResolveReturnReplacementDto = z.infer<typeof resolveReturnReplacementSchema>;

@@ -13,6 +13,23 @@ export const recordPaymentSchema = z.object({
 
 export type RecordPaymentDto = z.infer<typeof recordPaymentSchema>;
 
+const LEDGER_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+export const queryPatientLedgerSchema = z.object({
+  from: z.string().regex(LEDGER_DATE_RE, "Use YYYY-MM-DD").optional(),
+  to: z.string().regex(LEDGER_DATE_RE, "Use YYYY-MM-DD").optional(),
+  format: z.enum(["json", "csv"]).default("json"),
+});
+
+export type QueryPatientLedgerDto = z.infer<typeof queryPatientLedgerSchema>;
+
+export const queryReceivablesAgingSchema = z.object({
+  branchId: z.string().uuid().optional(),
+  format: z.enum(["json", "csv"]).default("json"),
+});
+
+export type QueryReceivablesAgingDto = z.infer<typeof queryReceivablesAgingSchema>;
+
 // ---------------------------------------------------------------------------
 // Response schemas
 // ---------------------------------------------------------------------------

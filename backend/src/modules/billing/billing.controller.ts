@@ -1,5 +1,7 @@
-import { Body, Controller, ForbiddenException, Get, Param, Post, Query, UseGuards } from "@nestjs/common";
+import { Body, Controller, ForbiddenException, Get, Param, Post, Query, Res, UseGuards } from "@nestjs/common";
 import { ApiBearerAuth, ApiOperation, ApiTags } from "@nestjs/swagger";
+import type { FastifyReply } from "fastify";
+import { parse } from "json2csv";
 import { BillingService } from "./billing.service";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { RolesGuard } from "../../common/guards/roles.guard";
@@ -11,7 +13,9 @@ import {
   queryInvoiceSchema,
   voidInvoiceSchema,
   returnInvoiceSchema,
-  recordPaymentSchema
+  recordPaymentSchema,
+  queryPatientLedgerSchema,
+  queryReceivablesAgingSchema
 } from "@pharmerp/types";
 
 @ApiTags("billing")
@@ -94,6 +98,58 @@ export class BillingController {
     const invoice = await this.service.findOne(id);
     assertBranchAccess(user, invoice.data.branchId);
     return this.service.getPdfUrl(id);
+  }
+
+  // ─── Receivables ─────────────────────────────────────────────────────────────
+
+  @Get("receivables/aging")
+  @Roles("admin", "shop_manager")
+  @ApiOperation({ summary: "Receivables aging — open customer dues banded by days outstanding" })
+  async receivablesAging(@Query() q: unknown, @CurrentUser() user: JwtPayload, @Res() res: FastifyReply) {
+    const query = queryReceivablesAgingSchema.parse(q);
+    const branchId = resolveBranchScope(user, query.branchId);
+    const aging = await this.service.getReceivablesAging({ ...query, branchId });
+
+    if (query.format === "csv") {
+      const fields = [
+        "patientName",
+        "patientPhone",
+        "current",
+        "d1_30",
+        "d31_60",
+        "d61_90",
+        "d90plus",
+        "overdue",
+        "total",
+        "invoiceCount",
+        "overdueInvoiceCount",
+        "oldestInvoiceDate",
+      ];
+      const csv = parse(aging.patients, { fields });
+      res.header("Content-Type", "text/csv");
+      res.header("Content-Disposition", `attachment; filename="receivables-aging.csv"`);
+      return res.send(csv);
+    }
+
+    return res.send({ data: aging });
+  }
+
+  @Get("patients/:id/ledger")
+  @Roles("admin", "shop_manager")
+  @ApiOperation({ summary: "Patient account statement — invoices and payments with running balance" })
+  async patientLedger(@Param("id") id: string, @Query() q: unknown, @Res() res: FastifyReply) {
+    const query = queryPatientLedgerSchema.parse(q);
+    const ledger = await this.service.getPatientLedger(id, query);
+
+    if (query.format === "csv") {
+      const fields = ["date", "type", "reference", "debit", "credit", "balance"];
+      const csv = parse(ledger.entries, { fields });
+      res.header("Content-Type", "text/csv");
+      res.header("Content-Disposition", `attachment; filename="patient-ledger-${id}.csv"`);
+      return res.send(csv);
+    }
+
+    return res.send({ data: ledger });
   }
 
   @Get("reports/end-of-day")
