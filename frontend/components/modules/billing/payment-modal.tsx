@@ -18,6 +18,10 @@ const QUICK_AMOUNTS = [20, 50, 100, 200, 500, 1000];
 interface Props {
   open: boolean;
   total: number;
+  /** True when a patient is selected — required to accept a partial payment.
+   *  Walk-ins have no account to owe against, so the modal keeps them locked
+   *  to a balanced total. */
+  hasPatient?: boolean;
   onConfirm: (mode: string, splits: { mode: string; amount: number; ref?: string }[]) => void;
   onClose: () => void;
   loading?: boolean;
@@ -26,7 +30,7 @@ interface Props {
   onOpenRxPicker?: () => void;
 }
 
-export function PaymentModal({ open, total, onConfirm, onClose, loading, needsRx, prescriptionId, onOpenRxPicker }: Props) {
+export function PaymentModal({ open, total, hasPatient, onConfirm, onClose, loading, needsRx, prescriptionId, onOpenRxPicker }: Props) {
   const [mode, setMode] = useState<string>("cash");
   const [splits, setSplits] = useState<{ mode: string; amount: string; ref: string }[]>([
     { mode: "cash", amount: "", ref: "" },
@@ -84,11 +88,22 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading, needsRx
     }
   };
 
+  // Under-payment is a legitimate "due" outcome for a registered patient. The
+  // over-payment case stays a hard block — a refund is a separate return flow,
+  // not an invoice with a negative balance.
+  const splitOver = splitGap < -0.01;
+  const splitDue = splitGap > 0.01;
+  const acceptedAsDue = isMulti && splitDue && !!hasPatient;
+
   const handleConfirm = () => {
     setError("");
     if (isMulti) {
-      if (Math.abs(totalAllocated - total) > 0.01) {
-        setError(`Split total ₹${totalAllocated.toFixed(2)} must equal ₹${total.toFixed(2)}.`);
+      if (splitOver) {
+        setError(`Split total ₹${totalAllocated.toFixed(2)} exceeds ₹${total.toFixed(2)}. Over-collection is a return, not a sale.`);
+        return;
+      }
+      if (splitDue && !hasPatient) {
+        setError(`Walk-in sales must be paid in full — register a patient to accept ₹${splitGap.toFixed(2)} as due.`);
         return;
       }
       onConfirm("mixed", splits.map((s) => ({ mode: s.mode, amount: parseFloat(s.amount) || 0, ref: s.ref })));
@@ -227,17 +242,29 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading, needsRx
                   <button type="button" onClick={addSplit} className="flex items-center gap-1 text-xs text-primary font-semibold hover:underline">
                     <Plus size={12} /> Add split
                   </button>
-                  <div className="text-xs font-semibold">
+                  <div className="text-xs font-semibold text-right">
                     {Math.abs(splitGap) < 0.01 ? (
                       <span className="text-green-600">Balanced</span>
-                    ) : splitGap > 0 ? (
-                      <span className="text-amber-600">₹{splitGap.toFixed(2)} remaining</span>
-                    ) : (
+                    ) : splitOver ? (
                       <span className="text-red-600">₹{Math.abs(splitGap).toFixed(2)} over</span>
+                    ) : hasPatient ? (
+                      <span className="text-purple-600">
+                        ₹{splitGap.toFixed(2)} will be added to dues
+                      </span>
+                    ) : (
+                      <span className="text-amber-600">
+                        ₹{splitGap.toFixed(2)} remaining — walk-in cannot owe
+                      </span>
                     )}
                   </div>
                 </div>
               </div>
+              {acceptedAsDue && (
+                <div className="rounded-xl border border-purple-200 bg-purple-50/70 px-3 py-2 text-[11px] text-purple-800 leading-snug">
+                  Recording this sale will leave ₹{splitGap.toFixed(2)} owing on the
+                  patient&apos;s account. Collect it later from their outstanding page.
+                </div>
+              )}
             </div>
 
           ) : mode === "cash" ? (
@@ -317,6 +344,8 @@ export function PaymentModal({ open, total, onConfirm, onClose, loading, needsRx
                 <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                 Processing...
               </span>
+            ) : acceptedAsDue ? (
+              `Confirm — ₹${totalAllocated.toFixed(2)} now, ₹${splitGap.toFixed(2)} due`
             ) : (
               `Confirm Payment  ₹${total.toFixed(2)}`
             )}

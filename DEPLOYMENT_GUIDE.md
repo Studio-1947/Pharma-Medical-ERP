@@ -200,14 +200,36 @@ gcloud artifacts repositories describe pharmerp --location=asia-south1
 
 To prevent schema drift and database migration mismatch errors (e.g. `Database schema mismatch`, missing columns like `prescriptions.branch_id` or `storage_locations.branch_id`):
 
-1. **Automatic Container Startup Migration**: The backend service automatically executes `runMigrations()` on startup using Drizzle ORM migrator, running all versioned migrations listed in `backend/drizzle/migrations/meta/_journal.json`.
-2. **Mandatory Schema Change Workflow**:
-   - Whenever editing TypeScript schemas in `backend/src/database/schema/*.ts`, run `pnpm db:generate` to produce the SQL migration file under `backend/drizzle/migrations/` and update `meta/_journal.json`.
+1. **Automatic Container Startup Migration**: The backend service automatically executes `runMigrations()` on startup using Drizzle ORM migrator, running all versioned migrations listed in `backend/drizzle/migrations/meta/_journal.json`. `backend/Dockerfile` copies `backend/drizzle/` into the runtime image, so the SQL files are present in every deployed container.
+2. **`RUN_MIGRATIONS_ON_BOOT` must be `true` on every environment**: boot migration is controlled by this variable (see `backend/src/main.ts`). It is already set in all four places, and a new environment needs it too:
+
+   | Environment | Where it is set |
+   |---|---|
+   | Any container (Cloud Run, VPS, local Docker) | `ENV RUN_MIGRATIONS_ON_BOOT=true` in `backend/Dockerfile` |
+   | GCP Cloud Run | `--set-env-vars` on `gcloud run deploy pharmerp-backend` (see `cloudinfra.md` §20.3 Step 6) |
+   | Hostinger VPS compose stack | `docker-compose.prod.yml` backend `environment:` and `.env.production` |
+   | Local development | `backend/.env` |
+
+   Production also defaults to migrating when `NODE_ENV=production`, but relying on that default is what let the database drift behind the code. Set the variable explicitly. To opt a deployment out, set it to `false` and apply migrations by hand before the release.
+3. **Mandatory Schema Change Workflow**:
+   - Whenever editing TypeScript schemas in `backend/src/database/schema/*.ts`, run `pnpm db:generate` **from the repo root** (the `db:*` scripts live in the root `package.json`, not `backend/package.json`) to produce the SQL migration file under `backend/drizzle/migrations/` and update `meta/_journal.json`.
    - Ensure the new `.sql` file and `_journal.json` are committed to git together with the schema TypeScript file.
-3. **Formal Drizzle SQL Migration Command**:
+4. **Which database is production**: GCP Cloud SQL instance `pharmerp-prod` (asia-south1, Postgres 16), defined in `infra/gcp/main.tf`. It is configured with `ipv4_enabled = false` and a private network, so **it has no public IP and cannot be reached from a developer machine or from CI**. The two ways in are:
+   - the backend container, which runs inside the VPC — this is why boot migration exists and is the normal path;
+   - the Cloud SQL Proxy (`cloud-sql-proxy.exe`, in the repo root) for manual inspection.
+
+   > **`DATABASE_URL_PROD` is not production.** It currently holds a Neon connection string left over from an earlier hosting evaluation. `pnpm db:migrate:prod` and `scripts/export-gcp-db.sh` both resolve to it (`drizzle.config.ts` switches on `DB_TARGET=prod`), so running either would touch the Neon database rather than Cloud SQL. Point `DATABASE_URL_PROD` at the Cloud SQL Proxy endpoint before using those commands, or delete it so they fail loudly instead of silently hitting the wrong database.
+
+5. **Formal Drizzle SQL Migration Command** (for applying migrations without a redeploy):
    ```bash
-   # Run schema migration for production database before/during deployment
+   # Local development database
+   pnpm db:migrate
+
+   # Cloud SQL, via the proxy — start it first, then point DATABASE_URL_PROD
+   # at 127.0.0.1 on the proxy's port:
+   #   ./cloud-sql-proxy radha-madhav-497409:asia-south1:pharmerp-prod --port 5433
    pnpm db:migrate:prod
    ```
-4. **Never rely on `db:push` or ad-hoc `ALTER TABLE` scripts in Production**: Always use versioned migrations in `backend/drizzle/migrations/` so `runMigrations()` and `drizzle-kit` track schema versions accurately.
+   Deploying the container and letting boot migration run is the preferred path; the proxy route is for inspection and recovery.
+6. **Never rely on `db:push` or ad-hoc `ALTER TABLE` scripts in Production**: Always use versioned migrations in `backend/drizzle/migrations/` so `runMigrations()` and `drizzle-kit` track schema versions accurately.
 

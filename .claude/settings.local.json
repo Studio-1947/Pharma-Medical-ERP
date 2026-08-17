@@ -94,7 +94,12 @@
       "Bash(curl -sL --max-time 30 \"https://docs.google.com/spreadsheets/d/1PeRvlpZCoBQ8PuXTN7RE0vy3-l7rthBXY5MpIK3GBO0/export?format=csv&gid=43138005\" -o \"C:/Users/soumi/AppData/Local/Temp/claude/c--Users-soumi-Desktop-Pharma-Medical-ERP/3bd7d14a-48f6-40c6-899f-edd6c2ac3697/scratchpad/inventory.csv\" -w \"HTTP:%{http_code}\\\\n\")",
       "Bash(node analyze.js)",
       "Bash(mkdir -p backups)",
-      "Bash(docker exec *)"
+      "Bash(docker exec *)",
+      "Bash(powershell.exe *)",
+      "Bash(curl -s -X POST http://localhost:4000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin@mederp.com\",\"password\":\"Admin@123\"}')",
+      "Bash(curl -s -w \"\\\\nHTTP: %{http_code}\\\\n\" http://localhost:4000/docs)",
+      "Bash(curl -s -v -X POST http://localhost:4000/api/v1/auth/login -H \"Content-Type: application/json\" -d '{\"email\":\"admin@mederp.com\",\"password\":\"Admin@123\"}')",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:4000/docs)"
     ]
   }
 }

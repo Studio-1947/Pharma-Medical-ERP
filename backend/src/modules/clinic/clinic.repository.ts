@@ -288,4 +288,288 @@ export class ClinicRepository {
       where: and(eq(schema.patients.id, id), isNull(schema.patients.deletedAt)),
     });
   }
+
+  // ── Doctor medicine list ───────────────────────────────────────────────────
+
+  /**
+   * A doctor's curated medicine list, joined to the catalogue and to live stock
+   * for whichever branch is asking.
+   *
+   * `branchId` only narrows the stock sum, never the list itself: the list
+   * belongs to the doctor, so a branch with no stock of a listed medicine still
+   * sees the row — with totalStock 0, which is exactly what the counter needs
+   * to know. Soft-deleted medicines are dropped; a store manager retiring a
+   * catalogue entry should remove it from every doctor's list at once.
+   */
+  async listDoctorMedicines(doctorId: string, branchId?: string) {
+    const stockConditions = [
+      eq(schema.medicines.id, schema.inventoryBatches.medicineId),
+      eq(schema.inventoryBatches.status, "active"),
+    ];
+    if (branchId) {
+      stockConditions.push(eq(schema.inventoryBatches.branchId, branchId));
+    }
+
+    return this.db
+      .select({
+        id: schema.doctorMedicines.id,
+        doctorId: schema.doctorMedicines.doctorId,
+        medicineId: schema.doctorMedicines.medicineId,
+        defaultDosage: schema.doctorMedicines.defaultDosage,
+        defaultFrequency: schema.doctorMedicines.defaultFrequency,
+        defaultDuration: schema.doctorMedicines.defaultDuration,
+        defaultQuantity: schema.doctorMedicines.defaultQuantity,
+        notes: schema.doctorMedicines.notes,
+        sortOrder: schema.doctorMedicines.sortOrder,
+        isActive: schema.doctorMedicines.isActive,
+        createdAt: schema.doctorMedicines.createdAt,
+        // Catalogue fields the counter desk needs to put a line on a bill
+        // without a second round trip.
+        name: schema.medicines.name,
+        brandName: schema.medicines.brandName,
+        genericName: schema.medicines.genericName,
+        strength: schema.medicines.strength,
+        dosageForm: schema.medicines.dosageForm,
+        sku: schema.medicines.sku,
+        manufacturer: schema.medicines.manufacturer,
+        unit: schema.medicines.unit,
+        stripSize: schema.medicines.stripSize,
+        priceMrp: schema.medicines.priceMrp,
+        taxPercent: schema.medicines.taxPercent,
+        requiresPrescription: schema.medicines.requiresPrescription,
+        isControlled: schema.medicines.isControlled,
+        scheduleClass: schema.medicines.scheduleClass,
+        drawerMapping: schema.medicines.drawerMapping,
+        medicineIsActive: schema.medicines.isActive,
+        totalStock: sql<number>`COALESCE(SUM(${schema.inventoryBatches.quantity}), 0)`,
+      })
+      .from(schema.doctorMedicines)
+      .innerJoin(
+        schema.medicines,
+        eq(schema.doctorMedicines.medicineId, schema.medicines.id),
+      )
+      .leftJoin(schema.inventoryBatches, and(...stockConditions))
+      .where(
+        and(
+          eq(schema.doctorMedicines.doctorId, doctorId),
+          isNull(schema.doctorMedicines.deletedAt),
+          isNull(schema.medicines.deletedAt),
+        ),
+      )
+      .groupBy(schema.doctorMedicines.id, schema.medicines.id)
+      .orderBy(asc(schema.doctorMedicines.sortOrder), asc(schema.medicines.name));
+  }
+
+  /** Live catalogue row — rejects adding a retired or soft-deleted medicine. */
+  async findLiveMedicine(id: string) {
+    return this.db.query.medicines.findFirst({
+      columns: { id: true, name: true, isActive: true },
+      where: and(eq(schema.medicines.id, id), isNull(schema.medicines.deletedAt)),
+    });
+  }
+
+  /** Existing row for this pair, tombstones included, so add can revive one. */
+  async findDoctorMedicinePair(doctorId: string, medicineId: string) {
+    return this.db.query.doctorMedicines.findFirst({
+      where: and(
+        eq(schema.doctorMedicines.doctorId, doctorId),
+        eq(schema.doctorMedicines.medicineId, medicineId),
+      ),
+    });
+  }
+
+  async findDoctorMedicine(id: string) {
+    return this.db.query.doctorMedicines.findFirst({
+      where: and(
+        eq(schema.doctorMedicines.id, id),
+        isNull(schema.doctorMedicines.deletedAt),
+      ),
+    });
+  }
+
+  /** Next free slot at the end of the list, so a new row lands last. */
+  async nextDoctorMedicineSortOrder(doctorId: string) {
+    const [row] = await this.db
+      .select({
+        next: sql<number>`COALESCE(MAX(${schema.doctorMedicines.sortOrder}), -1) + 1`,
+      })
+      .from(schema.doctorMedicines)
+      .where(
+        and(
+          eq(schema.doctorMedicines.doctorId, doctorId),
+          isNull(schema.doctorMedicines.deletedAt),
+        ),
+      );
+    return Number(row?.next ?? 0);
+  }
+
+  async addDoctorMedicine(data: {
+    doctorId: string;
+    medicineId: string;
+    defaultDosage?: string | null;
+    defaultFrequency?: string | null;
+    defaultDuration?: string | null;
+    defaultQuantity?: number | null;
+    notes?: string | null;
+    sortOrder: number;
+    createdBy?: string | null;
+  }) {
+    const [row] = await this.db
+      .insert(schema.doctorMedicines)
+      .values(data)
+      .returning();
+    return row!;
+  }
+
+  /**
+   * Revives a previously removed row rather than inserting a duplicate. The
+   * unique index is partial on deletedAt, so a plain insert would succeed and
+   * leave two rows for the same pair once the tombstone is counted.
+   */
+  async reviveDoctorMedicine(
+    id: string,
+    data: {
+      defaultDosage?: string | null;
+      defaultFrequency?: string | null;
+      defaultDuration?: string | null;
+      defaultQuantity?: number | null;
+      notes?: string | null;
+      sortOrder: number;
+      createdBy?: string | null;
+    },
+  ) {
+    const [row] = await this.db
+      .update(schema.doctorMedicines)
+      .set({ ...data, isActive: true, deletedAt: null, updatedAt: new Date() })
+      .where(eq(schema.doctorMedicines.id, id))
+      .returning();
+    return row!;
+  }
+
+  async updateDoctorMedicine(
+    id: string,
+    patch: Partial<{
+      defaultDosage: string | null;
+      defaultFrequency: string | null;
+      defaultDuration: string | null;
+      defaultQuantity: number | null;
+      notes: string | null;
+      sortOrder: number;
+      isActive: boolean;
+    }>,
+  ) {
+    const [row] = await this.db
+      .update(schema.doctorMedicines)
+      .set({ ...patch, updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.doctorMedicines.id, id),
+          isNull(schema.doctorMedicines.deletedAt),
+        ),
+      )
+      .returning();
+    return row ?? null;
+  }
+
+  async softDeleteDoctorMedicine(id: string) {
+    const [row] = await this.db
+      .update(schema.doctorMedicines)
+      .set({ deletedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          eq(schema.doctorMedicines.id, id),
+          isNull(schema.doctorMedicines.deletedAt),
+        ),
+      )
+      .returning({ id: schema.doctorMedicines.id });
+    return row ?? null;
+  }
+
+  /**
+   * Medicines this doctor has actually prescribed, most-prescribed first.
+   *
+   * Used to bootstrap an empty list — hand-curating one per doctor is work
+   * nobody will do, and the prescription history already knows the answer.
+   *
+   * Routed through clinic_tokens rather than prescriptions: a prescription
+   * records only a free-text `doctor_name`, so the sole trustworthy link from a
+   * prescription back to a doctor *user* is the token that produced it
+   * (clinic_tokens.doctor_id + clinic_tokens.prescription_id). Matching on the
+   * name string instead would silently merge two doctors who share a surname.
+   * The consequence is that only in-house consultations count — an outside
+   * doctor's scanned prescription has no token and cannot be attributed.
+   *
+   * Free-text prescription lines (medicineId null, written before the medicine
+   * reached the catalogue) are skipped because there is nothing to point at.
+   */
+  async findMostPrescribedMedicineIds(doctorId: string, limit: number) {
+    const rows = await this.db
+      .select({
+        medicineId: schema.prescriptionItems.medicineId,
+        timesPrescribed: sql<number>`COUNT(*)`,
+        lastDosage: sql<string | null>`MAX(${schema.prescriptionItems.dosage})`,
+        lastFrequency: sql<string | null>`MAX(${schema.prescriptionItems.frequency})`,
+        lastDuration: sql<string | null>`MAX(${schema.prescriptionItems.duration})`,
+      })
+      .from(schema.prescriptionItems)
+      .innerJoin(
+        schema.clinicTokens,
+        eq(
+          schema.clinicTokens.prescriptionId,
+          schema.prescriptionItems.prescriptionId,
+        ),
+      )
+      .innerJoin(
+        schema.prescriptions,
+        eq(schema.prescriptionItems.prescriptionId, schema.prescriptions.id),
+      )
+      .innerJoin(
+        schema.medicines,
+        eq(schema.prescriptionItems.medicineId, schema.medicines.id),
+      )
+      .where(
+        and(
+          eq(schema.clinicTokens.doctorId, doctorId),
+          isNotNull(schema.prescriptionItems.medicineId),
+          isNull(schema.prescriptions.deletedAt),
+          isNull(schema.medicines.deletedAt),
+          eq(schema.medicines.isActive, true),
+        ),
+      )
+      .groupBy(schema.prescriptionItems.medicineId)
+      .orderBy(sql`COUNT(*) DESC`)
+      .limit(limit);
+    return rows;
+  }
+
+  /** Pairs already on the list, so an import can skip them without N queries. */
+  async findExistingDoctorMedicineIds(doctorId: string, medicineIds: string[]) {
+    if (medicineIds.length === 0) return [];
+    const rows = await this.db
+      .select({ medicineId: schema.doctorMedicines.medicineId })
+      .from(schema.doctorMedicines)
+      .where(
+        and(
+          eq(schema.doctorMedicines.doctorId, doctorId),
+          inArray(schema.doctorMedicines.medicineId, medicineIds),
+          isNull(schema.doctorMedicines.deletedAt),
+        ),
+      );
+    return rows.map((r) => r.medicineId);
+  }
+
+  async addDoctorMedicinesBulk(
+    rows: {
+      doctorId: string;
+      medicineId: string;
+      defaultDosage?: string | null;
+      defaultFrequency?: string | null;
+      defaultDuration?: string | null;
+      sortOrder: number;
+      createdBy?: string | null;
+    }[],
+  ) {
+    if (rows.length === 0) return [];
+    return this.db.insert(schema.doctorMedicines).values(rows).returning();
+  }
 }

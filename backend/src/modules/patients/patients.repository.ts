@@ -159,4 +159,31 @@ export class PatientsRepository {
       .set({ loyaltyPoints: sql`${schema.patients.loyaltyPoints} - ${points}` })
       .where(eq(schema.patients.id, id));
   }
+
+  /** Called when an invoice is created with a partial payment: the un-paid
+   *  balance becomes an amount the patient owes the pharmacy. Kept in sync
+   *  with the same-transaction inserts on salesInvoices.amountDue so a rolled
+   *  back invoice never leaves a phantom balance behind. */
+  async addOutstanding(id: string, amount: string, tx?: any) {
+    const db = tx ?? this.db;
+    await db.update(schema.patients)
+      .set({
+        outstandingBalance: sql`${schema.patients.outstandingBalance} + ${amount}`,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.patients.id, id));
+  }
+
+  /** Called when a later payment settles part or all of a prior due. Clamped
+   *  at zero so a stray double-collection never drives the total negative
+   *  (that would be a refund path, not a balance decrement). */
+  async deductOutstanding(id: string, amount: string, tx?: any) {
+    const db = tx ?? this.db;
+    await db.update(schema.patients)
+      .set({
+        outstandingBalance: sql`GREATEST(${schema.patients.outstandingBalance} - ${amount}, 0)`,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.patients.id, id));
+  }
 }

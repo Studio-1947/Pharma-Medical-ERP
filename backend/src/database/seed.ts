@@ -85,10 +85,60 @@ async function seed() {
       lastName: "Rao",
       role: "doctor" as const,
       branchId: brn01.id,
+      doctorProfile: {
+        specialty: "General Medicine",
+        consultationFee: 400,
+        opdRoom: "OPD-1",
+      },
+    },
+    {
+      email: "vikram.singh@mederp.com",
+      passwordHash: doctorHash,
+      firstName: "Vikram",
+      lastName: "Singh",
+      role: "doctor" as const,
+      branchId: brn01.id,
+      doctorProfile: {
+        specialty: "Cardiology",
+        consultationFee: 700,
+        opdRoom: "OPD-2",
+      },
+    },
+    {
+      email: "priya.menon@mederp.com",
+      passwordHash: doctorHash,
+      firstName: "Priya",
+      lastName: "Menon",
+      role: "doctor" as const,
+      branchId: brn01.id,
+      doctorProfile: {
+        specialty: "Pediatrics",
+        consultationFee: 500,
+        opdRoom: "OPD-3",
+      },
     },
   ];
 
   await db.insert(schema.users).values(usersData).onConflictDoNothing();
+
+  // Backfill doctorProfile on existing rows in case seed ran previously
+  // without profiles. onConflictDoNothing above only inserts new rows.
+  const doctorRows = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.role, "doctor"));
+  for (const doc of doctorRows) {
+    if (doc.doctorProfile) continue;
+    const seeded = usersData.find(
+      (u) => u.email === doc.email && u.role === "doctor",
+    ) as { doctorProfile?: Record<string, unknown> } | undefined;
+    if (seeded?.doctorProfile) {
+      await db
+        .update(schema.users)
+        .set({ doctorProfile: seeded.doctorProfile })
+        .where(eq(schema.users.id, doc.id));
+    }
+  }
 
   // 4. Medicine categories
   console.log("Inserting categories...");
@@ -164,6 +214,74 @@ async function seed() {
   ];
 
   await db.insert(schema.suppliers).values(suppliersData).onConflictDoNothing();
+
+  // 7. Doctor medicines — each doctor's preferred formulary.
+  // Uses SKUs seeded above (MED-001..MED-020) to keep the mapping declarative.
+  console.log("Inserting doctor medicines...");
+  const allMedicines = await db.select().from(schema.medicines);
+  const medBySku = new Map(allMedicines.map((m) => [m.sku, m]));
+
+  const allDoctors = await db
+    .select()
+    .from(schema.users)
+    .where(eq(schema.users.role, "doctor"));
+  const doctorByEmail = new Map(allDoctors.map((d) => [d.email, d]));
+
+  const preferredBySpecialty: Record<
+    string,
+    Array<{ sku: string; dosage?: string; frequency?: string; duration?: string; qty?: number }>
+  > = {
+    "doctor@mederp.com": [
+      // General Medicine — everyday complaints
+      { sku: "MED-001", dosage: "500mg", frequency: "1-0-1", duration: "3 days", qty: 6 },
+      { sku: "MED-003", dosage: "10mg", frequency: "0-0-1", duration: "5 days", qty: 5 },
+      { sku: "MED-004", dosage: "10ml", frequency: "1-1-1", duration: "5 days", qty: 1 },
+      { sku: "MED-008", dosage: "500mg", frequency: "1-0-1", duration: "5 days", qty: 10 },
+      { sku: "MED-012", dosage: "20mg", frequency: "1-0-0", duration: "7 days", qty: 7 },
+    ],
+    "vikram.singh@mederp.com": [
+      // Cardiology
+      { sku: "MED-010", dosage: "500mg", frequency: "1-0-1", duration: "30 days", qty: 30 },
+      { sku: "MED-011", dosage: "50mg", frequency: "1-0-0", duration: "30 days", qty: 30 },
+      { sku: "MED-012", dosage: "20mg", frequency: "1-0-0", duration: "30 days", qty: 30 },
+      { sku: "MED-005", dosage: "500mg", frequency: "0-1-0", duration: "30 days", qty: 30 },
+    ],
+    "priya.menon@mederp.com": [
+      // Pediatrics
+      { sku: "MED-001", dosage: "125mg", frequency: "1-1-1", duration: "3 days", qty: 3 },
+      { sku: "MED-003", dosage: "5mg", frequency: "0-0-1", duration: "5 days", qty: 5 },
+      { sku: "MED-004", dosage: "5ml", frequency: "1-1-1", duration: "5 days", qty: 1 },
+      { sku: "MED-006", dosage: "400IU", frequency: "1-0-0", duration: "30 days", qty: 30 },
+      { sku: "MED-007", dosage: "250mg", frequency: "1-0-1", duration: "30 days", qty: 30 },
+    ],
+  };
+
+  const doctorMedRows: Array<typeof schema.doctorMedicines.$inferInsert> = [];
+  for (const [email, meds] of Object.entries(preferredBySpecialty)) {
+    const doc = doctorByEmail.get(email);
+    if (!doc) continue;
+    meds.forEach((m, index) => {
+      const med = medBySku.get(m.sku);
+      if (!med) return;
+      doctorMedRows.push({
+        doctorId: doc.id,
+        medicineId: med.id,
+        defaultDosage: m.dosage,
+        defaultFrequency: m.frequency,
+        defaultDuration: m.duration,
+        defaultQuantity: m.qty ?? null,
+        sortOrder: index,
+        createdBy: doc.id,
+      });
+    });
+  }
+
+  if (doctorMedRows.length > 0) {
+    await db
+      .insert(schema.doctorMedicines)
+      .values(doctorMedRows)
+      .onConflictDoNothing();
+  }
 
   console.log("Seed complete.");
 }

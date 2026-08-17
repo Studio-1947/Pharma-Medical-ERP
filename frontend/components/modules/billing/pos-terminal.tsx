@@ -917,6 +917,7 @@ export function PosTerminal({
         <PaymentModal
           open={payOpen}
           total={finalTotal}
+          hasPatient={!!patientId}
           onClose={() => setPayOpen(false)}
           onConfirm={handlePayConfirm}
           loading={createMutation.isPending}
@@ -1902,6 +1903,7 @@ export function PosTerminal({
       <PaymentModal
         open={payOpen}
         total={finalTotal}
+        hasPatient={!!patientId}
         onClose={() => setPayOpen(false)}
         onConfirm={handlePayConfirm}
         loading={createMutation.isPending}

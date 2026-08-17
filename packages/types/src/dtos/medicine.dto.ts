@@ -37,7 +37,10 @@ export const createMedicineSchema = z.object({
   strength: z.string().optional(),
   dosageForm: z.string().max(50).optional(),
   packSize: z.string().max(50).optional(),
-  sku: z.string().min(1).max(100),
+  // Optional on input — when left blank the backend mints a sequential
+  // MEDNNNNN id. Manual entry is still accepted for imports and legacy stock
+  // that carries a supplier / GS1 code the shop wants preserved.
+  sku: z.string().max(100).optional(),
   barcode: barcodeSchema,
   categoryId: z.string().uuid().optional(),
   therapeuticClass: z.string().max(100).optional(),

@@ -29,5 +29,12 @@ COPY --from=build /deploy .
 COPY --from=build /app/backend/drizzle ./drizzle
 COPY --from=build /app/backend/scripts ./scripts
 ENV NODE_ENV=production
+# Migrate on boot in every containerised environment — Cloud Run, the VPS
+# compose stack, anywhere this image runs. NODE_ENV=production above already
+# implies it, but stating it explicitly means the schema still gets applied if
+# a platform overrides NODE_ENV. runMigrations() is idempotent and takes a
+# Postgres advisory lock, so a multi-instance cold start cannot race.
+# Set RUN_MIGRATIONS_ON_BOOT=false on the service to opt a deployment out.
+ENV RUN_MIGRATIONS_ON_BOOT=true
 EXPOSE 4000
 CMD ["node", "dist/main"]

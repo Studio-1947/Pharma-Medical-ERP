@@ -38,7 +38,9 @@ import {
   Sparkles,
   Edit,
   Building2,
+  Pill,
 } from "lucide-react";
+import { DoctorMedicineManager } from "@/components/modules/clinic/doctor-medicine-manager";
 import { useBranches, rowsOf } from "@/queries/admin.queries";
 import { QuickPatientForm } from "@/components/modules/patients/quick-patient-form";
 import { formatClockTime, formatDuration, durationMinutes } from "@/lib/consultation-time";
@@ -1091,11 +1093,20 @@ export function ClinicQueue() {
   const [searchFilter, setSearchFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
+  // Whose medicine list the roster is showing. Reachable without starting a
+  // sale, unlike the counter desk's copy, which needs a patient in the cart.
+  const [medicinesForDoctor, setMedicinesForDoctor] = useState<Doctor | null>(null);
   const [preselectedDoctorId, setPreselectedDoctorId] = useState<string | undefined>(undefined);
   const [activeTab, setActiveTab] = useState<"overview" | "roster" | "queue">("overview");
 
   const { data: doctorsRes } = useClinicDoctors();
   const doctors: Doctor[] = (doctorsRes as any)?.data ?? [];
+
+  // A doctor opening a colleague's list from the roster gets a read-only view —
+  // the API refuses the write anyway, so showing the controls would only
+  // produce a 403 on click. Their own list is editable from the doctor panel.
+  const { user: currentUser } = useAuthStore();
+  const canCurateDoctorLists = currentUser?.role !== "doctor";
 
   const params = { date, doctorId: doctorFilter || undefined, limit: 100 };
   const { data: tokensRes, isLoading, isError: tokensError, refetch: refetchTokens } = useClinicTokens(params);
@@ -1452,6 +1463,13 @@ export function ClinicQueue() {
                     </div>
                     <div className="flex items-center gap-1.5">
                       <button
+                        onClick={() => setMedicinesForDoctor(doc)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all border border-slate-200"
+                        title="Medicines this doctor prescribes"
+                      >
+                        <Pill size={12} /> Medicines
+                      </button>
+                      <button
                         onClick={() => setEditingDoctor(doc)}
                         className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all border border-slate-200"
                         title="Edit Doctor Profile & OPD Timings"
@@ -1693,6 +1711,19 @@ export function ClinicQueue() {
         onClose={() => setEditingDoctor(null)}
         doctor={editingDoctor}
       />
+
+      {/* Medicines this doctor prescribes. Admins and shop managers may curate
+          it from here; the API rejects a doctor editing a colleague's list. */}
+      {medicinesForDoctor && (
+        <DoctorMedicineManager
+          open
+          onClose={() => setMedicinesForDoctor(null)}
+          doctorId={medicinesForDoctor.id}
+          doctorName={doctorName(medicinesForDoctor)}
+          branchId={(medicinesForDoctor as any).branchId ?? undefined}
+          canEdit={canCurateDoctorLists}
+        />
+      )}
     </div>
   );
 }

@@ -1941,10 +1941,28 @@ JWT_PRIVATE_KEY=JWT_PRIVATE_KEY:latest,\
 JWT_PUBLIC_KEY=JWT_PUBLIC_KEY:latest \
   --set-env-vars=\
 NODE_ENV=production,\
+RUN_MIGRATIONS_ON_BOOT=true,\
 PORT=4000,\
 S3_ENDPOINT=https://storage.googleapis.com,\
 S3_REGION=asia-south1,\
 S3_BUCKET=pharmerp-prod-files
+```
+
+`RUN_MIGRATIONS_ON_BOOT=true` makes the container apply every pending Drizzle
+migration before it starts serving. Cloud Run is the only place with network
+access to the private Cloud SQL instance, so this is where migrations have to
+run — no external CI runner can reach the database. `runMigrations()` takes a
+Postgres advisory lock and skips migrations already recorded in
+`__drizzle_migrations`, so a scale-up burst of cold starts cannot race or
+double-apply. Set it to `false` only if you intend to apply migrations by hand.
+
+Note that migrations run *before* `app.listen()`. Keep the startup probe
+generous enough to cover the slowest migration in the backlog:
+
+```bash
+gcloud run services update pharmerp-backend \
+  --region=asia-south1 \
+  --update-env-vars=RUN_MIGRATIONS_ON_BOOT=true
 ```
 
 #### Step 7 — Firebase Hosting: Frontend

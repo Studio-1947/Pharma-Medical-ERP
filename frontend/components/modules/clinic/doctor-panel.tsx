@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
-import { useClinicTokens, useClinicToken, useUpdateClinicToken, useClinicDoctors } from "@/queries/clinic.queries";
+import { useClinicTokens, useClinicToken, useUpdateClinicToken, useClinicDoctors, useDoctorMedicines } from "@/queries/clinic.queries";
 import { EditDoctorProfileModal, doctorName } from "./clinic-queue";
 import { localDateString } from "@/lib/date";
 import {
@@ -15,6 +15,7 @@ import {
   elapsedSince,
 } from "@/lib/consultation-time";
 import { PrescriptionScanUpload } from "@/components/modules/prescriptions/prescription-scan-upload";
+import { DoctorMedicineManager } from "@/components/modules/clinic/doctor-medicine-manager";
 import { MedicineAutocomplete, type MedicineOption } from "@/components/modules/prescriptions/medicine-autocomplete";
 import { PrescriptionDetailModal } from "@/components/modules/prescriptions/prescription-detail-modal";
 import {
@@ -292,6 +293,21 @@ function ConsultationWorkspace({
   const token = (tokenRes as any)?.data;
   const updateMutation = useUpdateClinicToken(tokenId);
 
+  // The doctor's own medicine list, offered as one-tap quick-pick while
+  // prescribing. Same list the counter desk reads, so what a doctor curates
+  // once serves both screens.
+  const consultingDoctorId: string | null = token?.doctor?.id ?? null;
+  const { data: quickPickRaw } = useDoctorMedicines(
+    consultingDoctorId,
+    doctorBranchId ?? token?.doctor?.branchId ?? undefined,
+  );
+  const quickPicks: any[] = (() => {
+    const r = quickPickRaw as any;
+    if (Array.isArray(r?.data)) return r.data;
+    if (Array.isArray(r?.data?.data)) return r.data.data;
+    return [];
+  })();
+
   const [activeTab, setActiveTab] = useState<"history" | "prescribe" | "scan">("history");
   const [items, setItems] = useState<RxItem[]>([blankItem()]);
   const [isControlled, setIsControlled] = useState(false);
@@ -464,6 +480,34 @@ function ConsultationWorkspace({
 
   function addItem() { setItems((prev) => [...prev, blankItem()]); }
   function removeItem(idx: number) { setItems((prev) => prev.filter((_, i) => i !== idx)); }
+
+  /**
+   * Drops a medicine from the doctor's own list straight into the prescription,
+   * carrying the dosage they normally write for it.
+   *
+   * Fills the first still-blank row rather than always appending, so the empty
+   * row the form starts with is used up instead of being left stranded above
+   * the picked medicines.
+   */
+  function applyQuickPick(m: any) {
+    setItems((prev) => {
+      const filled: RxItem = {
+        medicineId: m.medicineId,
+        medicineName: m.name,
+        dosage: m.defaultDosage || m.strength || "",
+        frequency: m.defaultFrequency || "",
+        duration: m.defaultDuration || "",
+        quantityPrescribed: m.defaultQuantity ?? "",
+      };
+      const blankIdx = prev.findIndex(
+        (it) => !it.medicineId && !it.medicineName.trim(),
+      );
+      if (blankIdx === -1) return [...prev, filled, blankItem()];
+      const next = prev.map((it, i) => (i === blankIdx ? filled : it));
+      // Keep a spare row ready so prescribing stays one continuous pass.
+      return blankIdx === prev.length - 1 ? [...next, blankItem()] : next;
+    });
+  }
 
   async function callPatient() {
     await updateMutation.mutateAsync({ status: "called" });
@@ -936,6 +980,41 @@ function ConsultationWorkspace({
               </div>
             )}
 
+            {!isFollowUp && quickPicks.length > 0 && (
+              <div className="rounded-xl border border-emerald-200/70 bg-emerald-50/40 px-3 py-2.5">
+                <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 flex items-center gap-1.5 mb-2">
+                  <Pill size={12} /> My medicine list
+                  <span className="font-medium normal-case tracking-normal text-emerald-700/70">
+                    — tap to add with your usual dosage
+                  </span>
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {quickPicks.map((m: any) => {
+                    const already = items.some((it) => it.medicineId === m.medicineId);
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => applyQuickPick(m)}
+                        disabled={already}
+                        title={
+                          already
+                            ? "Already on this prescription"
+                            : [m.defaultDosage, m.defaultFrequency, m.defaultDuration]
+                                .filter(Boolean)
+                                .join(" · ") || "Add to the prescription"
+                        }
+                        className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-white border border-emerald-200 text-emerald-800 hover:bg-emerald-100 hover:border-emerald-300 disabled:opacity-40 disabled:hover:bg-white transition-colors"
+                      >
+                        {already ? <CheckCircle2 size={12} /> : <Plus size={12} />}
+                        <span className="truncate max-w-[180px]">{m.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {!isFollowUp && (
             <>
             <div className="rounded-xl border border-slate-200 overflow-x-auto shadow-2xs bg-white">
@@ -1157,6 +1236,7 @@ export function DoctorPanel() {
   const [date] = useState(localDateString());
   const [selectedTokenId, setSelectedTokenId] = useState<string | null>(null);
   const [editingSelf, setEditingSelf] = useState(false);
+  const [managingMedicines, setManagingMedicines] = useState(false);
 
   const { data: doctorsRes } = useClinicDoctors();
   const doctors: any[] = (doctorsRes as any)?.data ?? [];
@@ -1255,14 +1335,31 @@ export function DoctorPanel() {
           </div>
         </div>
 
-        {/* Doctor Self Edit Button */}
-        <button
-          onClick={() => setEditingSelf(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition-all shrink-0 hover:scale-105 active:scale-95 self-start md:self-center"
-        >
-          <Edit size={14} /> Edit My OPD Profile & Timings
-        </button>
+        {/* Doctor self-service actions */}
+        <div className="flex items-center gap-2 shrink-0 self-start md:self-center flex-wrap">
+          <button
+            onClick={() => setManagingMedicines(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 font-bold text-xs rounded-xl shadow-md transition-all hover:scale-105 active:scale-95"
+          >
+            <Pill size={14} /> My Medicine List
+          </button>
+          <button
+            onClick={() => setEditingSelf(true)}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-xl shadow-md transition-all hover:scale-105 active:scale-95"
+          >
+            <Edit size={14} /> Edit My OPD Profile & Timings
+          </button>
+        </div>
       </div>
+
+      {/* The list the counter desk reads when it opens this doctor. */}
+      <DoctorMedicineManager
+        open={managingMedicines}
+        onClose={() => setManagingMedicines(false)}
+        doctorId={me.id}
+        doctorName={displayName}
+        branchId={me.branchId ?? undefined}
+      />
 
       <div className="flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 min-h-0 border rounded-xl bg-card shadow-sm overflow-hidden">
         {/* Queue list */}

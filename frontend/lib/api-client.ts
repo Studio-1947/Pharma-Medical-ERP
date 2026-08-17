@@ -251,5 +251,11 @@ export const queryKeys = {
     list: (params: object) => ["clinic-tokens", "list", params] as const,
     detail: (id: string) => ["clinic-tokens", id] as const,
     doctors: () => ["clinic-doctors"] as const,
+    // A doctor's curated medicine list. Keyed by branch as well because the
+    // stock figure on each row is branch-specific.
+    doctorMedicines: (doctorId: string, branchId?: string) =>
+      ["clinic-doctors", doctorId, "medicines", branchId ?? "all"] as const,
+    doctorMedicinesAll: (doctorId: string) =>
+      ["clinic-doctors", doctorId, "medicines"] as const,
   },
 };

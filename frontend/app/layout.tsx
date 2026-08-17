@@ -5,6 +5,12 @@ import { Providers } from "./providers";
 import { PwaRegister } from "@/components/shared/pwa-register";
 import { PwaInstallPrompt } from "@/components/shared/pwa-install-prompt";
 
+// Everything in this app is client-rendered, auth-gated UI — there is nothing
+// to statically prerender. Forcing dynamic rendering also sidesteps a Next
+// 15.0.0 prerender bug where the shared Providers chunk resolves React to
+// null, which made `next build` fail on a shifting set of pages.
+export const dynamic = "force-dynamic";
+
 const inter = Inter({ subsets: ["latin"] });
 
 export const viewport: Viewport = {

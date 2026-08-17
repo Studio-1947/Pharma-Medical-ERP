@@ -33,6 +33,8 @@ import { useActiveBranchId } from "@/hooks/use-branch";
 import { localDateString } from "@/lib/date";
 import { QuickPatientForm, QuickPatient } from "@/components/modules/patients/quick-patient-form";
 import { CounterDeskModals, DeskModalView } from "@/components/modules/billing/counter-desk-modals";
+import { DoctorMedicinesPanel } from "@/components/modules/billing/doctor-medicines-panel";
+import { DoctorsOverview } from "@/components/modules/billing/doctors-overview";
 import { OtcSupplyModal } from "@/components/modules/billing/otc-supply-modal";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
 import { useToast } from "@/components/ui/toast";
@@ -320,6 +322,9 @@ export function PatientFirstBilling({
       toastWarning("Select a patient first", "Search or create the patient before starting a path.");
       return;
     }
+    // Leaving and re-entering the doctor path should land on the doctor grid,
+    // not on whichever doctor's medicine list was open last time.
+    setMedsForDoctor(null);
     setPath(p);
   };
 
@@ -429,10 +434,11 @@ export function PatientFirstBilling({
   };
 
   // ── Doctor path: in-store doctors ──────────────────────────────────────────
+  // Fetched unconditionally because the doctors-overview strip above the path
+  // picker also renders these — previously the query was gated on path=doctor.
   const { data: doctorsRaw } = useQuery({
     queryKey: ["counter-doctors"],
     queryFn: () => apiClient.get("/clinic/doctors") as any,
-    enabled: path === "doctor",
   });
   const doctors: any[] = (() => {
     const raw = doctorsRaw as any;
@@ -440,6 +446,15 @@ export function PatientFirstBilling({
     if (Array.isArray(raw?.data?.data)) return raw.data.data;
     return [];
   })();
+
+  // Which doctor's medicine list is open. Null = the doctor grid is showing.
+  // Kept separate from `path` so closing the list returns to the grid rather
+  // than dropping the counter staff back to the path chooser.
+  const [medsForDoctor, setMedsForDoctor] = useState<any | null>(null);
+  // Overview-triggered browsing: reachable without picking a patient first.
+  // Rendered as a modal so it can appear from the top-of-page overview strip
+  // without needing the path picker to be visible.
+  const [browsingDoctor, setBrowsingDoctor] = useState<any | null>(null);
 
   const bookDoctor = async (doc: any) => {
     const dp = doc?.doctorProfile;
@@ -536,6 +551,35 @@ export function PatientFirstBilling({
     } finally {
       setMedLoadingId(null);
     }
+  };
+
+  /**
+   * Adds a row from a doctor's medicine list to the bill.
+   *
+   * Deliberately routed through the same `addMedicineToCart` the OTC search
+   * uses — batch resolution, out-of-stock handling and the Schedule H flags on
+   * the cart line all stay identical, so a doctor's list is a shortcut to the
+   * medicine and never a second way of selling it.
+   */
+  const addDoctorMedicineToCart = (row: { medicineId: string } & Record<string, any>) =>
+    addMedicineToCart({ ...row, id: row.medicineId });
+
+  /**
+   * Chip click from the overview strip. The strip renders before a patient is
+   * chosen, so guard on cart.patientId here — otherwise a chip click would
+   * silently add a line item that couldn't be finalised.
+   */
+  const addDoctorMedicineFromOverview = (
+    row: { medicineId: string } & Record<string, any>,
+  ) => {
+    if (!cart.patientId) {
+      toastWarning(
+        "Select a patient first",
+        "Pick or register the patient, then add the doctor's medicine.",
+      );
+      return;
+    }
+    return addDoctorMedicineToCart(row);
   };
 
   const totals = cart.totals();
@@ -787,41 +831,67 @@ export function PatientFirstBilling({
                   </div>
                 </form>
 
-                {/* Recently served today — pick up a returning customer */}
-                {!showResults && !searchActive && !registering && servedToday.length > 0 && (
-                  <div className="mt-4">
-                    <p className="px-1 mb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                      <Clock size={11} /> Recently served today
-                    </p>
-                    <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white">
-                      {servedToday.map((inv: any) => {
-                        const servedPatientId = inv?.patientId;
-                        const servedName = inv?.patientName ?? "Walk-in";
-                        return (
-                          <button
-                            key={inv.id}
-                            type="button"
-                            disabled={!servedPatientId}
-                            onClick={() => servedPatientId && selectPatient(servedPatientId, servedName)}
-                            className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-orange-50/60 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 shrink-0 border border-slate-200">
-                                {servedName.slice(0, 1).toUpperCase()}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-[13px] font-bold text-slate-800 truncate">{servedName}</p>
-                                <p className="text-[11px] text-slate-400 font-mono truncate">{inv?.invoiceNo}</p>
-                              </div>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className="text-xs font-bold text-slate-700">₹{Number(inv?.totalAmount ?? 0).toFixed(2)}</p>
-                              <p className="text-[10px] text-slate-400">{formatTime(inv?.createdAt)}</p>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                {/* Idle-state briefing: doctors + their usual meds on the
+                    left, the day's billings on the right. Two columns on wide
+                    screens so both stay visible without pushing the search UI
+                    down; single column and stacked on tablet/mobile. Each
+                    panel scrolls internally so the outer card keeps a bounded
+                    height regardless of doctor count or served-today count. */}
+                {!showResults && !searchActive && !registering && (doctors.length > 0 || servedToday.length > 0) && (
+                  <div
+                    className={`mt-4 grid gap-4 ${
+                      doctors.length > 0 && servedToday.length > 0
+                        ? "lg:grid-cols-3"
+                        : "grid-cols-1"
+                    }`}
+                  >
+                    {doctors.length > 0 && (
+                      <div className={servedToday.length > 0 ? "lg:col-span-2" : ""}>
+                        <DoctorsOverview
+                          doctors={doctors}
+                          branchId={activeBranchId}
+                          onAddMedicine={addDoctorMedicineFromOverview}
+                          addingId={medLoadingId}
+                          onOpenDoctor={(doc) => setBrowsingDoctor(doc)}
+                        />
+                      </div>
+                    )}
+                    {servedToday.length > 0 && (
+                      <div className={doctors.length > 0 ? "lg:col-span-1" : ""}>
+                        <p className="px-1 mb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                          <Clock size={11} /> Today&apos;s billings ({servedToday.length})
+                        </p>
+                        <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white max-h-[440px] overflow-y-auto">
+                          {servedToday.map((inv: any) => {
+                            const servedPatientId = inv?.patientId;
+                            const servedName = inv?.patientName ?? "Walk-in";
+                            return (
+                              <button
+                                key={inv.id}
+                                type="button"
+                                disabled={!servedPatientId}
+                                onClick={() => servedPatientId && selectPatient(servedPatientId, servedName)}
+                                className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-orange-50/60 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 shrink-0 border border-slate-200">
+                                    {servedName.slice(0, 1).toUpperCase()}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-[13px] font-bold text-slate-800 truncate">{servedName}</p>
+                                    <p className="text-[11px] text-slate-400 font-mono truncate">{inv?.invoiceNo}</p>
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <p className="text-xs font-bold text-slate-700">₹{Number(inv?.totalAmount ?? 0).toFixed(2)}</p>
+                                  <p className="text-[10px] text-slate-400">{formatTime(inv?.createdAt)}</p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1096,15 +1166,27 @@ export function PatientFirstBilling({
               </div>
             )}
 
-            {/* Step 2 content — doctor path */}
-            {path === "doctor" && (
+            {/* Step 2 content — doctor path. Two things live here: booking a
+                consultation, and looking at what a doctor prescribes. The
+                medicine list takes over the panel when a doctor is opened. */}
+            {path === "doctor" && medsForDoctor && (
+              <DoctorMedicinesPanel
+                doctor={medsForDoctor}
+                branchId={activeBranchId}
+                onAdd={addDoctorMedicineToCart}
+                addingId={medLoadingId}
+                onBack={() => setMedsForDoctor(null)}
+              />
+            )}
+
+            {path === "doctor" && !medsForDoctor && (
               <div className="mt-5">
                 <div className="flex items-center justify-between gap-2 mb-3">
                   <div className="flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-[11px] font-black flex items-center justify-center">2</span>
                     <div>
                       <p className="text-sm font-bold text-slate-800">Book a doctor</p>
-                      <p className="text-xs text-slate-400">Consultation fee is added to the bill</p>
+                      <p className="text-xs text-slate-400">Consultation fee is added to the bill, or open a doctor to see what they prescribe</p>
                     </div>
                   </div>
                   <button
@@ -1129,12 +1211,11 @@ export function PatientFirstBilling({
                       const fee = Number(dp?.consultationFee ?? 400);
                       const name = [doc.firstName, doc.lastName].filter(Boolean).join(" ") || doc.email || "Doctor";
                       return (
-                        <button
+                        // A card, not a button: it carries two independent
+                        // actions and nesting buttons is invalid markup.
+                        <div
                           key={doc.id}
-                          type="button"
-                          disabled={tokenLoadingId === doc.id}
-                          onClick={() => bookDoctor(doc)}
-                          className="rounded-2xl border border-slate-200 bg-white p-4 text-left hover:border-purple-400 hover:bg-purple-50/40 transition-all disabled:opacity-60"
+                          className="rounded-2xl border border-slate-200 bg-white p-4 hover:border-purple-400 transition-all"
                         >
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-black text-sm shrink-0">
@@ -1149,19 +1230,33 @@ export function PatientFirstBilling({
                             <span className="text-xs text-slate-500 font-medium">{dp?.opdRoom ?? "OPD"}</span>
                             <span className="text-sm font-black text-slate-900">₹{fee.toFixed(0)}</span>
                           </div>
-                          <span className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-purple-600">
-                            {tokenLoadingId === doc.id ? (
-                              <span className="flex items-center gap-1.5">
-                                <span className="w-3 h-3 border-2 border-purple-300 border-t-purple-700 rounded-full animate-spin" />
-                                Issuing token…
-                              </span>
-                            ) : (
-                              <>
-                                Book & issue token <ArrowRight size={13} />
-                              </>
-                            )}
-                          </span>
-                        </button>
+                          <div className="mt-3 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setMedsForDoctor(doc)}
+                              className="flex-1 inline-flex items-center justify-center gap-1 text-xs font-bold px-2.5 py-2 rounded-lg border border-purple-200 text-purple-700 hover:bg-purple-50 transition-colors"
+                            >
+                              <Pill size={13} /> Medicines
+                            </button>
+                            <button
+                              type="button"
+                              disabled={tokenLoadingId === doc.id}
+                              onClick={() => bookDoctor(doc)}
+                              className="flex-1 inline-flex items-center justify-center gap-1 text-xs font-bold px-2.5 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60 transition-colors"
+                            >
+                              {tokenLoadingId === doc.id ? (
+                                <>
+                                  <span className="w-3 h-3 border-2 border-purple-300 border-t-white rounded-full animate-spin" />
+                                  Issuing…
+                                </>
+                              ) : (
+                                <>
+                                  Book <ArrowRight size={13} />
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
@@ -1295,12 +1390,20 @@ export function PatientFirstBilling({
                     </div>
                   </div>
                 )}
-                {cartItems.map((item) => (
+                {cartItems.map((item) => {
+                  // Per-line discount context for the operator: shows what the
+                  // shopkeeper is knocking off this specific medicine before
+                  // GST is applied. Same math as pos-terminal.tsx.
+                  const unitPrice = item.saleUnit === "loose" ? item.unitPrice / (item.stripSize || 1) : item.unitPrice;
+                  const gross = unitPrice * item.quantity;
+                  const discAmt = (gross * (item.discountPct || 0)) / 100;
+                  return (
                   <div key={item.batchId} className="flex items-center justify-between gap-3 py-2">
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-slate-800 truncate">{item.name}</p>
                       <p className="text-xs text-slate-400 truncate">
                         {item.saleUnit === "loose" ? `${item.quantity} loose` : `${item.quantity} × ${item.saleUnit}`} · {item.taxPct > 0 ? `${item.taxPct}% GST` : "No GST"}
+                        {discAmt > 0 && <span className="text-purple-600 font-semibold"> · −₹{discAmt.toFixed(2)}</span>}
                       </p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
@@ -1321,6 +1424,17 @@ export function PatientFirstBilling({
                           <Plus size={11} />
                         </button>
                       </div>
+                      <div className="flex items-center gap-1 border border-slate-200 rounded-lg px-1.5 py-0.5" title="Discount % on this medicine — applied before GST">
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          value={item.discountPct}
+                          onChange={(e) => cart.updateDiscountPct(item.medicineId, item.batchId, parseFloat(e.target.value) || 0)}
+                          className="w-10 text-xs font-mono font-bold text-center focus:outline-none bg-transparent"
+                        />
+                        <span className="text-[10px] text-slate-400 font-bold">%</span>
+                      </div>
                       <span className="text-sm font-bold text-slate-900 w-16 text-right">₹{item.lineTotal.toFixed(2)}</span>
                       <button
                         type="button"
@@ -1332,15 +1446,21 @@ export function PatientFirstBilling({
                       </button>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/60">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center gap-4 text-sm">
+                  <div className="flex items-center gap-4 text-sm flex-wrap">
                     <span className="text-slate-500">
                       Subtotal <b className="text-slate-800">₹{totals.subtotal.toFixed(2)}</b>
                     </span>
+                    {totals.discount > 0 && (
+                      <span className="text-purple-600 font-semibold" title="Sum of all per-medicine discounts">
+                        Discount <b>−₹{totals.discount.toFixed(2)}</b>
+                      </span>
+                    )}
                     <span className="text-slate-500">
                       Tax <b className="text-slate-800">₹{totals.tax.toFixed(2)}</b>
                     </span>
@@ -1374,6 +1494,26 @@ export function PatientFirstBilling({
         medicine={otcSupplyTarget}
         onClose={() => setOtcSupplyTarget(null)}
       />
+
+      {/* Browse a doctor's full list from the top-of-page overview. Deliberately
+          patient-free: an operator can eyeball the list before deciding whether
+          to register the patient. addDoctorMedicineFromOverview still guards
+          the actual add, so opening never leaks into an orphan cart. */}
+      {browsingDoctor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-5">
+              <DoctorMedicinesPanel
+                doctor={browsingDoctor}
+                branchId={activeBranchId}
+                onAdd={addDoctorMedicineFromOverview}
+                addingId={medLoadingId}
+                onBack={() => setBrowsingDoctor(null)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
