@@ -34,6 +34,7 @@ import { localDateString } from "@/lib/date";
 import { QuickPatientForm, QuickPatient } from "@/components/modules/patients/quick-patient-form";
 import { CounterDeskModals, DeskModalView } from "@/components/modules/billing/counter-desk-modals";
 import { DoctorMedicinesPanel } from "@/components/modules/billing/doctor-medicines-panel";
+import { DoctorsOverview } from "@/components/modules/billing/doctors-overview";
 import { OtcSupplyModal } from "@/components/modules/billing/otc-supply-modal";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
 import { useToast } from "@/components/ui/toast";
@@ -433,10 +434,11 @@ export function PatientFirstBilling({
   };
 
   // ── Doctor path: in-store doctors ──────────────────────────────────────────
+  // Fetched unconditionally because the doctors-overview strip above the path
+  // picker also renders these — previously the query was gated on path=doctor.
   const { data: doctorsRaw } = useQuery({
     queryKey: ["counter-doctors"],
     queryFn: () => apiClient.get("/clinic/doctors") as any,
-    enabled: path === "doctor",
   });
   const doctors: any[] = (() => {
     const raw = doctorsRaw as any;
@@ -449,6 +451,10 @@ export function PatientFirstBilling({
   // Kept separate from `path` so closing the list returns to the grid rather
   // than dropping the counter staff back to the path chooser.
   const [medsForDoctor, setMedsForDoctor] = useState<any | null>(null);
+  // Overview-triggered browsing: reachable without picking a patient first.
+  // Rendered as a modal so it can appear from the top-of-page overview strip
+  // without needing the path picker to be visible.
+  const [browsingDoctor, setBrowsingDoctor] = useState<any | null>(null);
 
   const bookDoctor = async (doc: any) => {
     const dp = doc?.doctorProfile;
@@ -557,6 +563,24 @@ export function PatientFirstBilling({
    */
   const addDoctorMedicineToCart = (row: { medicineId: string } & Record<string, any>) =>
     addMedicineToCart({ ...row, id: row.medicineId });
+
+  /**
+   * Chip click from the overview strip. The strip renders before a patient is
+   * chosen, so guard on cart.patientId here — otherwise a chip click would
+   * silently add a line item that couldn't be finalised.
+   */
+  const addDoctorMedicineFromOverview = (
+    row: { medicineId: string } & Record<string, any>,
+  ) => {
+    if (!cart.patientId) {
+      toastWarning(
+        "Select a patient first",
+        "Pick or register the patient, then add the doctor's medicine.",
+      );
+      return;
+    }
+    return addDoctorMedicineToCart(row);
+  };
 
   const totals = cart.totals();
   const cartItems = cart.items;
@@ -807,41 +831,67 @@ export function PatientFirstBilling({
                   </div>
                 </form>
 
-                {/* Recently served today — pick up a returning customer */}
-                {!showResults && !searchActive && !registering && servedToday.length > 0 && (
-                  <div className="mt-4">
-                    <p className="px-1 mb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-                      <Clock size={11} /> Recently served today
-                    </p>
-                    <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white">
-                      {servedToday.map((inv: any) => {
-                        const servedPatientId = inv?.patientId;
-                        const servedName = inv?.patientName ?? "Walk-in";
-                        return (
-                          <button
-                            key={inv.id}
-                            type="button"
-                            disabled={!servedPatientId}
-                            onClick={() => servedPatientId && selectPatient(servedPatientId, servedName)}
-                            className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-orange-50/60 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 shrink-0 border border-slate-200">
-                                {servedName.slice(0, 1).toUpperCase()}
-                              </div>
-                              <div className="min-w-0">
-                                <p className="text-[13px] font-bold text-slate-800 truncate">{servedName}</p>
-                                <p className="text-[11px] text-slate-400 font-mono truncate">{inv?.invoiceNo}</p>
-                              </div>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <p className="text-xs font-bold text-slate-700">₹{Number(inv?.totalAmount ?? 0).toFixed(2)}</p>
-                              <p className="text-[10px] text-slate-400">{formatTime(inv?.createdAt)}</p>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                {/* Idle-state briefing: doctors + their usual meds on the
+                    left, the day's billings on the right. Two columns on wide
+                    screens so both stay visible without pushing the search UI
+                    down; single column and stacked on tablet/mobile. Each
+                    panel scrolls internally so the outer card keeps a bounded
+                    height regardless of doctor count or served-today count. */}
+                {!showResults && !searchActive && !registering && (doctors.length > 0 || servedToday.length > 0) && (
+                  <div
+                    className={`mt-4 grid gap-4 ${
+                      doctors.length > 0 && servedToday.length > 0
+                        ? "lg:grid-cols-3"
+                        : "grid-cols-1"
+                    }`}
+                  >
+                    {doctors.length > 0 && (
+                      <div className={servedToday.length > 0 ? "lg:col-span-2" : ""}>
+                        <DoctorsOverview
+                          doctors={doctors}
+                          branchId={activeBranchId}
+                          onAddMedicine={addDoctorMedicineFromOverview}
+                          addingId={medLoadingId}
+                          onOpenDoctor={(doc) => setBrowsingDoctor(doc)}
+                        />
+                      </div>
+                    )}
+                    {servedToday.length > 0 && (
+                      <div className={doctors.length > 0 ? "lg:col-span-1" : ""}>
+                        <p className="px-1 mb-1.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
+                          <Clock size={11} /> Today&apos;s billings ({servedToday.length})
+                        </p>
+                        <div className="divide-y divide-slate-100 border border-slate-200 rounded-xl overflow-hidden bg-white max-h-[440px] overflow-y-auto">
+                          {servedToday.map((inv: any) => {
+                            const servedPatientId = inv?.patientId;
+                            const servedName = inv?.patientName ?? "Walk-in";
+                            return (
+                              <button
+                                key={inv.id}
+                                type="button"
+                                disabled={!servedPatientId}
+                                onClick={() => servedPatientId && selectPatient(servedPatientId, servedName)}
+                                className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-orange-50/60 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                              >
+                                <div className="flex items-center gap-2.5 min-w-0">
+                                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 shrink-0 border border-slate-200">
+                                    {servedName.slice(0, 1).toUpperCase()}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <p className="text-[13px] font-bold text-slate-800 truncate">{servedName}</p>
+                                    <p className="text-[11px] text-slate-400 font-mono truncate">{inv?.invoiceNo}</p>
+                                  </div>
+                                </div>
+                                <div className="text-right shrink-0">
+                                  <p className="text-xs font-bold text-slate-700">₹{Number(inv?.totalAmount ?? 0).toFixed(2)}</p>
+                                  <p className="text-[10px] text-slate-400">{formatTime(inv?.createdAt)}</p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 
@@ -1419,6 +1469,26 @@ export function PatientFirstBilling({
         medicine={otcSupplyTarget}
         onClose={() => setOtcSupplyTarget(null)}
       />
+
+      {/* Browse a doctor's full list from the top-of-page overview. Deliberately
+          patient-free: an operator can eyeball the list before deciding whether
+          to register the patient. addDoctorMedicineFromOverview still guards
+          the actual add, so opening never leaks into an orphan cart. */}
+      {browsingDoctor && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div className="p-5">
+              <DoctorMedicinesPanel
+                doctor={browsingDoctor}
+                branchId={activeBranchId}
+                onAdd={addDoctorMedicineFromOverview}
+                addingId={medLoadingId}
+                onBack={() => setBrowsingDoctor(null)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
