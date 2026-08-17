@@ -239,6 +239,13 @@
       "when": 1786697050000,
       "tag": "0033_mushy_red_wolf",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1786951906638,
+      "tag": "0034_misty_lady_mastermind",
+      "breakpoints": true
     }
   ]
 }

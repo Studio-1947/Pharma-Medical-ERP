@@ -258,4 +258,202 @@ export class ClinicService {
       throw new UnprocessableEntityException("Cannot generate a token for a past date");
     }
   }
+
+  // ── Doctor medicine list ───────────────────────────────────────────────────
+
+  /**
+   * A doctor may curate only their own list. Admins and shop managers curate
+   * anyone's — the counter side already owns the medicine catalogue, so it also
+   * gets to help a doctor set their list up.
+   *
+   * Reads are deliberately not restricted this way: the whole point of the
+   * feature is that a shop manager can open any doctor and see what they work
+   * with, so `listDoctorMedicines` performs no ownership check.
+   */
+  private assertCanCurate(user: JwtPayload, doctorId: string) {
+    if (user.role === "doctor" && user.sub !== doctorId) {
+      throw new ForbiddenException(
+        "You can only change your own medicine list",
+      );
+    }
+  }
+
+  private async assertDoctorExists(doctorId: string) {
+    const doctor = await this.repo.findActiveDoctor(doctorId);
+    if (!doctor) throw new NotFoundException(`Doctor ${doctorId} not found`);
+    return doctor;
+  }
+
+  async listDoctorMedicines(doctorId: string, branchId?: string) {
+    await this.assertDoctorExists(doctorId);
+    const data = await this.repo.listDoctorMedicines(doctorId, branchId);
+    return { data };
+  }
+
+  async addDoctorMedicine(
+    doctorId: string,
+    body: {
+      medicineId: string;
+      defaultDosage?: string | null;
+      defaultFrequency?: string | null;
+      defaultDuration?: string | null;
+      defaultQuantity?: number | null;
+      notes?: string | null;
+    },
+    user: JwtPayload,
+  ) {
+    this.assertCanCurate(user, doctorId);
+    await this.assertDoctorExists(doctorId);
+
+    // Nothing here may invent a catalogue entry: the medicine has to already
+    // exist, seeded by a store manager through Inventory.
+    const medicine = await this.repo.findLiveMedicine(body.medicineId);
+    if (!medicine) {
+      throw new NotFoundException(`Medicine ${body.medicineId} not found`);
+    }
+    if (!medicine.isActive) {
+      throw new UnprocessableEntityException(
+        `"${medicine.name}" is retired and cannot be added to a doctor's list`,
+      );
+    }
+
+    const defaults = {
+      defaultDosage: body.defaultDosage ?? null,
+      defaultFrequency: body.defaultFrequency ?? null,
+      defaultDuration: body.defaultDuration ?? null,
+      defaultQuantity: body.defaultQuantity ?? null,
+      notes: body.notes ?? null,
+    };
+
+    // A medicine removed earlier leaves a tombstone the partial unique index
+    // ignores, so adding it back has to revive that row instead of inserting a
+    // second one for the same pair.
+    const existing = await this.repo.findDoctorMedicinePair(
+      doctorId,
+      body.medicineId,
+    );
+    if (existing && !existing.deletedAt) {
+      throw new UnprocessableEntityException(
+        `"${medicine.name}" is already on this doctor's list`,
+      );
+    }
+
+    const sortOrder = await this.repo.nextDoctorMedicineSortOrder(doctorId);
+    const row = existing
+      ? await this.repo.reviveDoctorMedicine(existing.id, {
+          ...defaults,
+          sortOrder,
+          createdBy: user.sub,
+        })
+      : await this.repo.addDoctorMedicine({
+          doctorId,
+          medicineId: body.medicineId,
+          ...defaults,
+          sortOrder,
+          createdBy: user.sub,
+        });
+
+    return { data: row, message: `"${medicine.name}" added to the list` };
+  }
+
+  async updateDoctorMedicine(
+    doctorId: string,
+    itemId: string,
+    patch: Record<string, any>,
+    user: JwtPayload,
+  ) {
+    this.assertCanCurate(user, doctorId);
+
+    const existing = await this.repo.findDoctorMedicine(itemId);
+    if (!existing) throw new NotFoundException(`List entry ${itemId} not found`);
+    // The id is unique on its own, but a mismatched pair means the caller is
+    // editing someone else's entry through their own doctor's URL.
+    if (existing.doctorId !== doctorId) {
+      throw new NotFoundException(`List entry ${itemId} not found`);
+    }
+
+    const row = await this.repo.updateDoctorMedicine(itemId, patch);
+    if (!row) throw new NotFoundException(`List entry ${itemId} not found`);
+    return { data: row, message: "List entry updated" };
+  }
+
+  async removeDoctorMedicine(doctorId: string, itemId: string, user: JwtPayload) {
+    this.assertCanCurate(user, doctorId);
+
+    const existing = await this.repo.findDoctorMedicine(itemId);
+    if (!existing || existing.doctorId !== doctorId) {
+      throw new NotFoundException(`List entry ${itemId} not found`);
+    }
+
+    await this.repo.softDeleteDoctorMedicine(itemId);
+    return { data: { id: itemId }, message: "Removed from the list" };
+  }
+
+  /**
+   * Bootstraps the list from what the doctor has actually prescribed.
+   *
+   * Additive and idempotent: medicines already on the list are skipped, so
+   * running it twice imports nothing the second time and never disturbs
+   * dosages the doctor has since edited by hand.
+   */
+  async importDoctorMedicinesFromHistory(
+    doctorId: string,
+    limit: number,
+    user: JwtPayload,
+  ) {
+    this.assertCanCurate(user, doctorId);
+    await this.assertDoctorExists(doctorId);
+
+    const history = await this.repo.findMostPrescribedMedicineIds(
+      doctorId,
+      limit,
+    );
+    const candidateIds = history
+      .map((h) => h.medicineId)
+      .filter((id): id is string => !!id);
+
+    if (candidateIds.length === 0) {
+      return {
+        data: { imported: 0, skipped: 0 },
+        message:
+          "No prescription history found for this doctor yet. Add medicines manually for now.",
+      };
+    }
+
+    const alreadyListed = new Set(
+      await this.repo.findExistingDoctorMedicineIds(doctorId, candidateIds),
+    );
+    const fresh = history.filter(
+      (h) => h.medicineId && !alreadyListed.has(h.medicineId),
+    );
+
+    if (fresh.length === 0) {
+      return {
+        data: { imported: 0, skipped: candidateIds.length },
+        message: "Everything from the prescription history is already listed",
+      };
+    }
+
+    const startOrder = await this.repo.nextDoctorMedicineSortOrder(doctorId);
+    // History comes back most-prescribed first, so the index preserves that
+    // ranking as the list order.
+    const rows = fresh.map((h, i) => ({
+      doctorId,
+      medicineId: h.medicineId!,
+      defaultDosage: h.lastDosage ?? null,
+      defaultFrequency: h.lastFrequency ?? null,
+      defaultDuration: h.lastDuration ?? null,
+      sortOrder: startOrder + i,
+      createdBy: user.sub,
+    }));
+
+    const inserted = await this.repo.addDoctorMedicinesBulk(rows);
+    return {
+      data: {
+        imported: inserted.length,
+        skipped: candidateIds.length - fresh.length,
+      },
+      message: `Imported ${inserted.length} medicine${inserted.length === 1 ? "" : "s"} from prescription history`,
+    };
+  }
 }

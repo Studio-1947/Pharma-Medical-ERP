@@ -6,6 +6,7 @@ import {
   text,
   date,
   varchar,
+  boolean,
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -14,6 +15,7 @@ import { tokenStatusEnum } from "./enums";
 import { patients } from "./billing";
 import { branches } from "./branches";
 import { users } from "./auth";
+import { medicines } from "./inventory";
 import { prescriptions } from "./prescriptions";
 
 export const clinicTokens = pgTable(
@@ -89,5 +91,83 @@ export const clinicTokensRelations = relations(clinicTokens, ({ one }) => ({
   prescription: one(prescriptions, {
     fields: [clinicTokens.prescriptionId],
     references: [prescriptions.id],
+  }),
+}));
+
+/**
+ * The medicines a doctor keeps on their own list — the set they routinely
+ * prescribe, with the dosage they normally write for each.
+ *
+ * This is a curated shortlist, not a catalogue: every row points at a
+ * `medicines` row a store manager already seeded, and nothing here can create
+ * catalogue entries. The counter desk reads it to jump straight to what a
+ * given doctor works with instead of searching the whole formulary, and the
+ * doctor panel uses it as quick-pick when writing a prescription.
+ *
+ * It carries no branch of its own. A doctor already belongs to a branch via
+ * `users.branch_id`, so scoping flows through the doctor; stock is the only
+ * branch-dependent part and that is joined from `inventory_batches` at read
+ * time against whichever branch is asking.
+ *
+ * Being on this list is NOT a prescription. Schedule H/H1/X medicines still
+ * need a verified prescription before they can be dispensed — the list only
+ * makes them faster to find.
+ */
+export const doctorMedicines = pgTable(
+  "doctor_medicines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    doctorId: uuid("doctor_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    medicineId: uuid("medicine_id")
+      .notNull()
+      .references(() => medicines.id, { onDelete: "cascade" }),
+    // How this doctor normally writes the medicine. All optional — a list can
+    // be a bare set of medicines — but when present the doctor panel pre-fills
+    // the prescription line from them.
+    defaultDosage: varchar("default_dosage", { length: 100 }),
+    defaultFrequency: varchar("default_frequency", { length: 100 }),
+    defaultDuration: varchar("default_duration", { length: 100 }),
+    defaultQuantity: integer("default_quantity"),
+    notes: text("notes"),
+    // Manual ordering so a doctor can pin what they reach for most to the top.
+    sortOrder: integer("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    createdBy: uuid("created_by").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => ({
+    // One row per medicine per doctor. Partial on deletedAt so removing a
+    // medicine and adding it back later is allowed rather than a constraint
+    // violation against the tombstone.
+    doctorMedicineUniq: uniqueIndex("doctor_medicines_doctor_medicine_uniq")
+      .on(t.doctorId, t.medicineId)
+      .where(sql`${t.deletedAt} IS NULL`),
+    // Drives the list read: every lookup is "this doctor's list, in order".
+    doctorSortIdx: index("doctor_medicines_doctor_sort_idx").on(
+      t.doctorId,
+      t.sortOrder,
+    ),
+    medicineIdx: index("doctor_medicines_medicine_idx").on(t.medicineId),
+  }),
+);
+
+export const doctorMedicinesRelations = relations(doctorMedicines, ({ one }) => ({
+  doctor: one(users, {
+    fields: [doctorMedicines.doctorId],
+    references: [users.id],
+  }),
+  medicine: one(medicines, {
+    fields: [doctorMedicines.medicineId],
+    references: [medicines.id],
   }),
 }));

@@ -33,6 +33,7 @@ import { useActiveBranchId } from "@/hooks/use-branch";
 import { localDateString } from "@/lib/date";
 import { QuickPatientForm, QuickPatient } from "@/components/modules/patients/quick-patient-form";
 import { CounterDeskModals, DeskModalView } from "@/components/modules/billing/counter-desk-modals";
+import { DoctorMedicinesPanel } from "@/components/modules/billing/doctor-medicines-panel";
 import { OtcSupplyModal } from "@/components/modules/billing/otc-supply-modal";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
 import { useToast } from "@/components/ui/toast";
@@ -320,6 +321,9 @@ export function PatientFirstBilling({
       toastWarning("Select a patient first", "Search or create the patient before starting a path.");
       return;
     }
+    // Leaving and re-entering the doctor path should land on the doctor grid,
+    // not on whichever doctor's medicine list was open last time.
+    setMedsForDoctor(null);
     setPath(p);
   };
 
@@ -441,6 +445,11 @@ export function PatientFirstBilling({
     return [];
   })();
 
+  // Which doctor's medicine list is open. Null = the doctor grid is showing.
+  // Kept separate from `path` so closing the list returns to the grid rather
+  // than dropping the counter staff back to the path chooser.
+  const [medsForDoctor, setMedsForDoctor] = useState<any | null>(null);
+
   const bookDoctor = async (doc: any) => {
     const dp = doc?.doctorProfile;
     const fee = Number(dp?.consultationFee ?? 400);
@@ -537,6 +546,17 @@ export function PatientFirstBilling({
       setMedLoadingId(null);
     }
   };
+
+  /**
+   * Adds a row from a doctor's medicine list to the bill.
+   *
+   * Deliberately routed through the same `addMedicineToCart` the OTC search
+   * uses — batch resolution, out-of-stock handling and the Schedule H flags on
+   * the cart line all stay identical, so a doctor's list is a shortcut to the
+   * medicine and never a second way of selling it.
+   */
+  const addDoctorMedicineToCart = (row: { medicineId: string } & Record<string, any>) =>
+    addMedicineToCart({ ...row, id: row.medicineId });
 
   const totals = cart.totals();
   const cartItems = cart.items;
@@ -1096,15 +1116,27 @@ export function PatientFirstBilling({
               </div>
             )}
 
-            {/* Step 2 content — doctor path */}
-            {path === "doctor" && (
+            {/* Step 2 content — doctor path. Two things live here: booking a
+                consultation, and looking at what a doctor prescribes. The
+                medicine list takes over the panel when a doctor is opened. */}
+            {path === "doctor" && medsForDoctor && (
+              <DoctorMedicinesPanel
+                doctor={medsForDoctor}
+                branchId={activeBranchId}
+                onAdd={addDoctorMedicineToCart}
+                addingId={medLoadingId}
+                onBack={() => setMedsForDoctor(null)}
+              />
+            )}
+
+            {path === "doctor" && !medsForDoctor && (
               <div className="mt-5">
                 <div className="flex items-center justify-between gap-2 mb-3">
                   <div className="flex items-center gap-2">
                     <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-700 text-[11px] font-black flex items-center justify-center">2</span>
                     <div>
                       <p className="text-sm font-bold text-slate-800">Book a doctor</p>
-                      <p className="text-xs text-slate-400">Consultation fee is added to the bill</p>
+                      <p className="text-xs text-slate-400">Consultation fee is added to the bill, or open a doctor to see what they prescribe</p>
                     </div>
                   </div>
                   <button
@@ -1129,12 +1161,11 @@ export function PatientFirstBilling({
                       const fee = Number(dp?.consultationFee ?? 400);
                       const name = [doc.firstName, doc.lastName].filter(Boolean).join(" ") || doc.email || "Doctor";
                       return (
-                        <button
+                        // A card, not a button: it carries two independent
+                        // actions and nesting buttons is invalid markup.
+                        <div
                           key={doc.id}
-                          type="button"
-                          disabled={tokenLoadingId === doc.id}
-                          onClick={() => bookDoctor(doc)}
-                          className="rounded-2xl border border-slate-200 bg-white p-4 text-left hover:border-purple-400 hover:bg-purple-50/40 transition-all disabled:opacity-60"
+                          className="rounded-2xl border border-slate-200 bg-white p-4 hover:border-purple-400 transition-all"
                         >
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-black text-sm shrink-0">
@@ -1149,19 +1180,33 @@ export function PatientFirstBilling({
                             <span className="text-xs text-slate-500 font-medium">{dp?.opdRoom ?? "OPD"}</span>
                             <span className="text-sm font-black text-slate-900">₹{fee.toFixed(0)}</span>
                           </div>
-                          <span className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-purple-600">
-                            {tokenLoadingId === doc.id ? (
-                              <span className="flex items-center gap-1.5">
-                                <span className="w-3 h-3 border-2 border-purple-300 border-t-purple-700 rounded-full animate-spin" />
-                                Issuing token…
-                              </span>
-                            ) : (
-                              <>
-                                Book & issue token <ArrowRight size={13} />
-                              </>
-                            )}
-                          </span>
-                        </button>
+                          <div className="mt-3 flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setMedsForDoctor(doc)}
+                              className="flex-1 inline-flex items-center justify-center gap-1 text-xs font-bold px-2.5 py-2 rounded-lg border border-purple-200 text-purple-700 hover:bg-purple-50 transition-colors"
+                            >
+                              <Pill size={13} /> Medicines
+                            </button>
+                            <button
+                              type="button"
+                              disabled={tokenLoadingId === doc.id}
+                              onClick={() => bookDoctor(doc)}
+                              className="flex-1 inline-flex items-center justify-center gap-1 text-xs font-bold px-2.5 py-2 rounded-lg bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-60 transition-colors"
+                            >
+                              {tokenLoadingId === doc.id ? (
+                                <>
+                                  <span className="w-3 h-3 border-2 border-purple-300 border-t-white rounded-full animate-spin" />
+                                  Issuing…
+                                </>
+                              ) : (
+                                <>
+                                  Book <ArrowRight size={13} />
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
                       );
                     })}
                   </div>
