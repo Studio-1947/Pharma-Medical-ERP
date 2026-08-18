@@ -1,6 +1,6 @@
 {
-  "id": "ac116587-c3ca-44fb-a994-cc5dde567107",
-  "prevId": "0df659db-99f1-46cd-803d-6b3996de1945",
+  "id": "0df659db-99f1-46cd-803d-6b3996de1945",
+  "prevId": "a21d370e-9f26-441f-832e-5e97ab09c33d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2043,12 +2043,6 @@
           "notNull": true,
           "default": 0
         },
-        "client_ref": {
-          "name": "client_ref",
-          "type": "varchar(64)",
-          "primaryKey": false,
-          "notNull": false
-        },
         "customer_gstin": {
           "name": "customer_gstin",
           "type": "varchar(15)",
@@ -2154,22 +2148,6 @@
             }
           ],
           "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "invoices_client_ref_uniq": {
-          "name": "invoices_client_ref_uniq",
-          "columns": [
-            {
-              "expression": "client_ref",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "where": "\"sales_invoices\".\"client_ref\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
