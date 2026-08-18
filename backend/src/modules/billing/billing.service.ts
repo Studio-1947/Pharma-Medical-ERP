@@ -88,7 +88,10 @@ export class BillingService {
   async findOne(id: string) {
     const inv = await this.repo.findById(id);
     if (!inv) throw new NotFoundException(`Invoice ${id} not found`);
-    return { data: inv };
+    // Printed documents show the clinic queue token above the header, so it has
+    // to travel with the invoice. Null for walk-in sales, which have no token.
+    const tokenNo = await this.repo.findTokenNoByPrescription(inv.prescriptionId);
+    return { data: { ...inv, tokenNo } };
   }
 
   /**
@@ -510,7 +513,16 @@ export class BillingService {
       });
     }
 
-    return { invoice: result.invoice, items: result.items };
+    // The POS prints the receipt straight from this response, so the queue
+    // token has to be present here rather than only on a later detail fetch.
+    const tokenNo = await this.repo.findTokenNoByPrescription(
+      result.invoice.prescriptionId,
+    );
+
+    return {
+      invoice: { ...result.invoice, tokenNo },
+      items: result.items,
+    };
   }
 
   async voidInvoice(id: string, dto: VoidInvoiceDto, userId: string) {

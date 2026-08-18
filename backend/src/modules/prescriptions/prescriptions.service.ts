@@ -35,11 +35,15 @@ export class PrescriptionsService {
       }
     }
 
-    return { 
-      data: { 
-        ...prescription, 
-        displayUrl: signedUrl ?? prescription.fileUrl 
-      } 
+    // Printed prescriptions show the queue token above the header.
+    const tokenNo = await this.repo.findTokenNo(id);
+
+    return {
+      data: {
+        ...prescription,
+        displayUrl: signedUrl ?? prescription.fileUrl,
+        tokenNo,
+      },
     };
   }
 

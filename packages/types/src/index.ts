@@ -1,4 +1,5 @@
 export * from "./enums";
+export * from "./pharmacy";
 export * from "./dtos/auth.dto";
 export * from "./dtos/medicine.dto";
 export * from "./dtos/patient.dto";

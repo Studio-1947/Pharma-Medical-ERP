@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
+import { PHARMACY_PRINT_DETAILS, formatTokenNo } from "@pharmerp/types";
+import { buildReceiptHeaderHtml, RECEIPT_HEADER_STYLES } from "@/lib/receipt-header";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera, ShieldAlert, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, LayoutGrid, Table, Percent, Edit3, SlidersHorizontal, CheckCircle2 } from "lucide-react";
@@ -294,15 +296,14 @@ export function PosTerminal({
   .text-right { text-align:right; }
   .text-center { text-align:center; }
   .text-green { color:#16a34a; }
-  .brand { text-align:center; margin-bottom:6px; }
-  .brand img { height:54px; width:auto; }
+  ${RECEIPT_HEADER_STYLES}
 </style>
 </head><body>
-  <div class="brand">
-    <img id="brand-logo" src="${window.location.origin}/logo-full.svg" alt="Radha Madhav Medical Hall"/>
-  </div>
-  <p class="subtitle">Tax Invoice / Bill of Supply</p>
-  <hr class="divider-solid"/>
+${buildReceiptHeaderHtml({
+    tokenNo: lastInvoice.tokenNo,
+    origin: window.location.origin,
+    subtitle: "Tax Invoice / Bill of Supply",
+  })}  <hr class="divider-solid"/>
 
   <div class="meta">
     <div>
@@ -2134,18 +2135,40 @@ export function PosTerminal({
             {/* Scrollable receipt body */}
             <div id="invoice-print-area" className="overflow-y-auto flex-1 px-6 py-5 space-y-4 print:overflow-visible print:p-6">
 
-              {/* Store header. The lockup already carries the pharmacy name, so
-                  the heading is kept for assistive tech and search only. */}
+              {/* Queue token, above everything else so the patient can match the
+                  bill to the number they were called by. Clinic visits only. */}
+              {formatTokenNo(lastInvoice.tokenNo) && (
+                <div className="text-center">
+                  <div className="inline-block rounded-lg border-2 border-gray-900 px-4 py-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-gray-500">
+                      Token No.
+                    </p>
+                    <p className="text-2xl font-black tracking-[0.2em] text-gray-900 leading-tight">
+                      {formatTokenNo(lastInvoice.tokenNo)}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Store header. The lockup carries the trading name, so the legal
+                  name is printed as text beneath it alongside the address. */}
               <div className="text-center space-y-1">
                 <Image
                   src="/logo-full.svg"
-                  alt="Radha Madhav Medical Hall"
+                  alt={PHARMACY_PRINT_DETAILS.legalName}
                   width={129}
                   height={68}
                   className="mx-auto h-12 w-auto"
                   priority
                 />
-                <h2 className="sr-only">Radha Madhav Medical Hall</h2>
+                <h2 className="text-base font-extrabold tracking-tight text-gray-900">
+                  {PHARMACY_PRINT_DETAILS.legalName}
+                </h2>
+                <p className="text-[11px] leading-snug text-gray-500">
+                  {PHARMACY_PRINT_DETAILS.addressLine}
+                  <br />
+                  Ph: {PHARMACY_PRINT_DETAILS.phone}
+                </p>
                 <p className="text-xs text-gray-500">Tax Invoice / Bill of Supply</p>
               </div>
 

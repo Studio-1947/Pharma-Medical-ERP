@@ -105,6 +105,21 @@ export class PrescriptionsRepository {
     });
   }
 
+  /**
+   * Clinic queue token this prescription was written under, or null.
+   *
+   * The link points from the token to the prescription, so this is a reverse
+   * lookup. A prescription created outside the clinic queue (uploaded scan,
+   * counter entry) legitimately has no token.
+   */
+  async findTokenNo(prescriptionId: string): Promise<number | null> {
+    const row = await this.db.query.clinicTokens.findFirst({
+      where: eq(schema.clinicTokens.prescriptionId, prescriptionId),
+      columns: { tokenNo: true },
+    });
+    return row?.tokenNo ?? null;
+  }
+
   /** Name of the signed-in prescriber, for attributing a prescription to them. */
   async findUserDisplayName(id: string) {
     const user = await this.db.query.users.findFirst({

@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
 import { Printer, FileText } from "lucide-react";
+import { PHARMACY_PRINT_DETAILS, formatTokenNo } from "@pharmerp/types";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Official prescription layout.
@@ -37,6 +38,8 @@ export interface PrescriptionTemplateItem {
 export interface PrescriptionTemplateData {
   id: string;
   prescriptionNumber?: string | null;
+  /** Clinic queue token. Null when the prescription did not come from the queue. */
+  tokenNo?: number | string | null;
   issuedDate?: string | null;
   expiryDate?: string | null;
   doctorName?: string | null;
@@ -53,7 +56,7 @@ export interface PrescriptionTemplateData {
   items: PrescriptionTemplateItem[];
 }
 
-const BRAND = "Radha Madhav Medical Hall";
+const BRAND = PHARMACY_PRINT_DETAILS.legalName;
 const TEAL = "#00807A";
 const INK = "#344B4A";
 
@@ -71,6 +74,7 @@ export function toPrescriptionTemplateData(raw: unknown): PrescriptionTemplateDa
   return {
     id: rx?.id ?? "",
     prescriptionNumber: rx?.prescriptionNumber ?? null,
+    tokenNo: rx?.tokenNo ?? null,
     issuedDate: rx?.issuedDate ?? rx?.createdAt ?? null,
     expiryDate: rx?.expiryDate ?? null,
     doctorName: rx?.doctorName ?? null,
@@ -229,6 +233,31 @@ export function PrescriptionTemplate({
               {s}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Queue token, in the clear band under the letterhead logo. Rendered only
+          for prescriptions written from the clinic queue; uploaded scans and
+          counter entries have no token and the box is omitted. */}
+      {formatTokenNo(rx.tokenNo) && (
+        <div
+          style={{
+            position: "absolute",
+            right: 36,
+            top: 110,
+            border: `1.5px solid ${TEAL}`,
+            borderRadius: 6,
+            padding: "3px 10px",
+            textAlign: "center",
+            background: "#FFFFFF",
+          }}
+        >
+          <div style={{ fontSize: 6.5, letterSpacing: 1.2, color: "#5A6E6B", fontWeight: 700 }}>
+            TOKEN NO.
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 900, color: TEAL, letterSpacing: 2, lineHeight: 1.1 }}>
+            {formatTokenNo(rx.tokenNo)}
+          </div>
         </div>
       )}
 

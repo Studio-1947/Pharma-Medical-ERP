@@ -22,6 +22,8 @@ import { UnprocessableEntityException } from "@nestjs/common";
 function buildService() {
   const mockRepo = {
     nextInvoiceNumber: vi.fn().mockResolvedValue("INV-20240115-0001"),
+    // Walk-in by default: no clinic token, so the printed token row is omitted.
+    findTokenNoByPrescription: vi.fn().mockResolvedValue(null),
     createInvoiceWithItems: vi.fn().mockResolvedValue({
       invoice: { id: "inv-1", invoiceNo: "INV-20240115-0001" },
       items: [],
@@ -111,6 +113,51 @@ function buildService() {
 
   return { service, mockRepo, mockBatchRepo, mockMovementRepo, mockTaxService, mockPatientsRepo, mockClickHouse, mockPdfService, buildTx };
 }
+
+// ─── CHECKOUT-TOKEN: clinic queue token on the printed receipt ──────────────
+//
+// Quantities mirror CHECKOUT-01: MRP 560.00 per strip of 10 makes the unit
+// price 56.00, so 2 units are paid in full with 112.00. A short payment would
+// trip the walk-in "must be paid in full" guard instead of testing the token.
+
+describe("CHECKOUT-TOKEN — clinic queue token surfaces on the invoice", () => {
+  function runCheckout(service: any, mockBatchRepo: any, buildTx: any) {
+    const tx = buildTx([
+      [{ id: "med-otc", name: "Paracetamol", scheduleClass: "OTC", requiresPrescription: false, taxPercent: "12", stripSize: 10, isActive: true }],
+      [{ id: "batch-1" }],
+    ]);
+    service.drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" }],
+    ]);
+    return service.create(
+      {
+        items: [{ medicineId: "med-otc", quantity: 2, discountPct: "0" }],
+        payments: [{ mode: "cash", amount: "112.00" }],
+      } as any,
+      "staff-1",
+      "branch-1",
+    );
+  }
+
+  it("returns the queue token so the POS can print it above the receipt", async () => {
+    const { service, mockRepo, mockBatchRepo, buildTx } = buildService();
+    mockRepo.findTokenNoByPrescription.mockResolvedValue(42);
+
+    const result = await runCheckout(service, mockBatchRepo, buildTx);
+
+    expect((result.invoice as any).tokenNo).toBe(42);
+  });
+
+  it("returns null for a walk-in sale so the token row is omitted", async () => {
+    const { service, mockRepo, mockBatchRepo, buildTx } = buildService();
+    mockRepo.findTokenNoByPrescription.mockResolvedValue(null);
+
+    const result = await runCheckout(service, mockBatchRepo, buildTx);
+
+    expect((result.invoice as any).tokenNo).toBeNull();
+  });
+});
 
 // ─── CHECKOUT-01: OTC happy path ────────────────────────────────────────────
 

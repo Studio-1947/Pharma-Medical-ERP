@@ -9,6 +9,7 @@ import {
   Building2, Phone, Download, Share2, Receipt, ShieldCheck
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { PHARMACY_PRINT_DETAILS, formatTokenNo } from "@pharmerp/types";
 
 export default function PublicPatientPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
@@ -66,14 +67,32 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
               carries its own white ground so it stays legible on this header. */}
           <Image
             src="/logo.svg"
-            alt="Radha Madhav Medical Hall"
+            alt={PHARMACY_PRINT_DETAILS.legalName}
             width={56}
             height={56}
             className="inline-block w-14 h-14 rounded-2xl mb-3 shadow-lg"
             priority
           />
-          <h1 className="text-lg font-black tracking-tight">Radha Madhav Medical Hall</h1>
-          <p className="text-xs text-emerald-200 font-medium mt-0.5">Digital Patient Healthcare Record</p>
+          <h1 className="text-lg font-black tracking-tight">{PHARMACY_PRINT_DETAILS.legalName}</h1>
+          <p className="text-[11px] text-emerald-100/90 mt-1 leading-snug">
+            {PHARMACY_PRINT_DETAILS.addressLine}
+            <br />
+            Ph: {PHARMACY_PRINT_DETAILS.phone}
+          </p>
+          <p className="text-xs text-emerald-200 font-medium mt-1">Digital Patient Healthcare Record</p>
+
+          {/* Queue token, for patients matching this record to the number they
+              were called by. Clinic visits only. */}
+          {formatTokenNo(record?.tokenNo) && (
+            <div className="mt-3 inline-block rounded-xl bg-white/15 border border-white/25 px-4 py-1.5 backdrop-blur-sm">
+              <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-100">
+                Token No.
+              </p>
+              <p className="text-xl font-black tracking-[0.2em] leading-tight">
+                {formatTokenNo(record?.tokenNo)}
+              </p>
+            </div>
+          )}
 
           <div className="absolute top-4 right-4">
             <Badge variant="emerald" size="sm" dot>

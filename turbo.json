@@ -16,6 +16,9 @@
       "outputs": []
     },
     "test": {
+      // Both suites import @pharmerp/types, which resolves to its dist build.
+      // Without this a clean checkout fails to collect any test file.
+      "dependsOn": ["^build"],
       "outputs": ["coverage/**"],
       "cache": false
     }

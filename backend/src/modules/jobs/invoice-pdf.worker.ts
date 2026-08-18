@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 import { S3Service } from "../../common/s3/s3.service";
+import { PHARMACY_PRINT_DETAILS, formatTokenNo } from "@pharmerp/types";
 
 interface GeneratePdfJobData {
   invoiceId: string;
@@ -59,8 +60,20 @@ export class InvoicePdfWorker {
       ? await db.select().from(schema.branches).where(eq(schema.branches.id, invoice.branchId))
       : [];
 
+    // Clinic queue token, printed above the memo title. Reached through the
+    // prescription because invoices carry no token of their own.
+    const token = invoice.prescriptionId
+      ? await db.query.clinicTokens.findFirst({
+          where: eq(schema.clinicTokens.prescriptionId, invoice.prescriptionId),
+          columns: { tokenNo: true },
+        })
+      : null;
+
     try {
-      const pdfBuffer = await this.buildPdf(invoice, branch ?? null);
+      const pdfBuffer = await this.buildPdf(
+        { ...invoice, tokenNo: token?.tokenNo ?? null },
+        branch ?? null,
+      );
 
       const key = `invoices/${invoice.invoiceNo}-${Date.now()}.pdf`;
       await this.s3Service.upload(pdfBuffer, key, "application/pdf");
@@ -90,7 +103,7 @@ export class InvoicePdfWorker {
         bufferPages: true,
         info: {
           Title: `Cash Memo ${invoice.invoiceNo}`,
-          Author: branch?.name ?? "Radha Madhav Medical Hall",
+          Author: PHARMACY_PRINT_DETAILS.legalName,
         },
       });
 
@@ -120,7 +133,7 @@ export class InvoicePdfWorker {
       let y = 32;
 
       doc.font("Helvetica-Bold").fontSize(16).fillColor(TXT)
-        .text(branch?.name ?? "RADHA MADHAV MEDICAL HALL", ML, y, {
+        .text(PHARMACY_PRINT_DETAILS.legalName.toUpperCase(), ML, y, {
           width: PW, align: "center", lineBreak: false,
         });
       y += 20;
@@ -131,29 +144,35 @@ export class InvoicePdfWorker {
         });
       y += 13;
 
-      const addressParts = [branch?.address, branch?.state].filter(Boolean).join(", ");
-      if (addressParts) {
-        doc.font("Helvetica").fontSize(8).fillColor(TXT)
-          .text(addressParts, ML, y, {
-            width: PW, align: "center", lineBreak: false,
-          });
-        y += 12;
-      }
+      doc.font("Helvetica").fontSize(8).fillColor(TXT)
+        .text(PHARMACY_PRINT_DETAILS.addressLine, ML, y, {
+          width: PW, align: "center", lineBreak: false,
+        });
+      y += 12;
 
-      const contactParts = [branch?.phone, branch?.email].filter(Boolean).join("  |  ");
-      if (contactParts) {
-        doc.font("Helvetica").fontSize(7.5).fillColor(LABEL)
-          .text(contactParts, ML, y, {
-            width: PW, align: "center", lineBreak: false,
-          });
-        y += 11;
-      }
+      doc.font("Helvetica").fontSize(7.5).fillColor(LABEL)
+        .text(`Ph: ${PHARMACY_PRINT_DETAILS.phone}`, ML, y, {
+          width: PW, align: "center", lineBreak: false,
+        });
+      y += 11;
 
       // Divider
       y += 2;
       doc.moveTo(ML + 8, y).lineTo(ML + PW - 8, y)
         .strokeColor(BORDER).lineWidth(1).stroke();
       y += 6;
+
+      // ── Queue token, above the document title ──
+      // Only clinic visits carry one; a walk-in memo skips the row entirely so
+      // the surrounding spacing is unchanged.
+      const tokenLabel = formatTokenNo(invoice.tokenNo);
+      if (tokenLabel) {
+        doc.font("Helvetica-Bold").fontSize(11).fillColor(TXT)
+          .text(`TOKEN NO. ${tokenLabel}`, ML, y, {
+            width: PW, align: "center", lineBreak: false,
+          });
+        y += 16;
+      }
 
       // ── CASH MEMO title ──
       doc.font("Helvetica-Bold").fontSize(12).fillColor(TXT)
