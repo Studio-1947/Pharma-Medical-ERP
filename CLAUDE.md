@@ -23,12 +23,19 @@ Do not guess APIs, versions, flags, commit SHAs, or package names. Verify by rea
   3. **Missing Drizzle Snapshots**: Hand-writing SQL files without generating `meta/XXXX_snapshot.json` files, causing Drizzle Kit CLI to lose track of database state and prompt interactively on subsequent runs.
   4. **Dev vs Prod Environment Drift (`db:push` vs `db:migrate`)**: Relying on `pnpm db:push` in local development. `db:push` updates local Postgres directly without creating migration files; when deployed to production, `db:migrate` runs and finds no migrations, causing `column "xyz" does not exist` runtime crashes.
   5. **Misplaced Migration Files**: Placing migration SQL files loose in `backend/drizzle/` instead of `backend/drizzle/migrations/`.
+  6. **Rewritten or Under-cut `when` Timestamps (the worst one — it is silent and permanent)**: Drizzle does NOT record which migrations ran. `migrate()` reads the single most recent row of `__drizzle_migrations` and applies only entries whose journal `when` is strictly greater than that row's `created_at`. Therefore:
+     - A new entry whose `when` is at or below the highest already-applied `when` is skipped on every existing database, on every boot, **for ever**. Redeploying cannot fix it — the comparison is identical each time.
+     - Lowering the `when` of an already-released entry does nothing to databases that already ran it, but it moves the apparent high-water mark and causes the entries appended after it to land underneath the real one.
+     - This happened: PR #48 shipped `0030_user_roles_shrink` at `when=1786800100000`; PR #49 lowered `0028`-`0030` and appended `0031`-`0033` at `1786697030000`-`1786697050000`. All three were skipped in production, `app_settings` was never created, and the billing-flow switch returned Postgres `42P01`. Repaired by `0036_repair_skipped_0031_0033.sql`, which replays them idempotently under a fresh timestamp.
 - **Mandatory Step-by-Step Schema Change Procedure**:
   1. Edit schema in `backend/src/database/schema/*.ts`.
   2. Run `pnpm db:generate` (or `pnpm --filter backend drizzle-kit generate`) to create the versioned SQL migration and update `meta/_journal.json`.
   3. Verify that the generated `.sql` file lives inside `backend/drizzle/migrations/` and is properly registered in `_journal.json`.
   4. Test the migration locally with `pnpm db:migrate`.
   5. ALWAYS commit both `backend/src/database/schema/*.ts` AND `backend/drizzle/migrations/*` (including `meta/_journal.json`) together in git before deploying to production.
+  6. NEVER hand-edit the `when` value of an existing `_journal.json` entry. It is already written into every deployed database's `__drizzle_migrations`; changing it here changes nothing there.
+  7. A hand-written migration's `when` MUST be greater than every existing entry's `when` — use a real `Date.now()`, not a rounded-off literal. `backend/src/database/__tests__/migration-journal.spec.ts` enforces this in CI (strict monotonicity, sql-to-journal pairing, no rewritten `when`, and no new entry at or below `origin/main`'s high-water mark).
+  8. To repair a migration that was already skipped in production, do NOT bump its `when` — write a NEW migration that replays its statements idempotently (`IF NOT EXISTS`, `duplicate_object` guard, `ON CONFLICT DO NOTHING`). Bumping is a no-op for the databases that already applied it and still loses to the high-water mark elsewhere.
 - **Never bypass migrations**: Do not use ad-hoc `ALTER TABLE` scripts or `db:push` as a substitute for versioned Drizzle migrations in production pipelines.
 
 # MedERP — Pharmacy ERP System: Claude Code Implementation Guide
