@@ -6,6 +6,7 @@ import { Modal } from "@/components/ui/modal";
 import { format } from "date-fns";
 import { Receipt, AlertTriangle, Loader2 } from "lucide-react";
 import { formatTokenNo } from "@pharmerp/types";
+import { ShareRecordButton } from "@/components/shared/share-record-button";
 
 /**
  * Read-only view of a past invoice: what was dispensed, from which batch, and
@@ -78,6 +79,10 @@ export function InvoiceDetailModal({
               </span>
             </div>
           )}
+
+          {/* Patient-facing link. Revocable and expiring, so a bill sent to the
+              wrong number can be killed. */}
+          <ShareRecordButton type="invoice" recordId={inv.id} label="Share bill with patient" />
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
             <div>

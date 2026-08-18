@@ -10,3 +10,4 @@ export * from "./distribution";
 export * from "./notifications";
 export * from "./clinic";
 export * from "./settings";
+export * from "./sharing";
