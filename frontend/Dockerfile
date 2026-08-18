@@ -29,5 +29,20 @@ COPY --from=build /app/frontend/.next/standalone ./
 COPY --from=build /app/frontend/.next/static ./frontend/.next/static
 COPY --from=build /app/frontend/public ./frontend/public
 
+# Immutable copy of exactly this build's assets. The entrypoint restores older
+# builds' assets into .next/static so this container can serve them, which means
+# .next/static is no longer a trustworthy record of what this build shipped.
+# Publishing from this pristine copy instead keeps retention honest: restored
+# assets are never re-published, so they still age out on schedule.
+COPY --from=build /app/frontend/.next/static ./frontend/.next/static-pristine
+
+# Merges this build's hashed assets into the retention volume before the server
+# starts, so clients still running a previous build can resolve their chunks.
+# chmod is applied here rather than relying on the committed file mode, because
+# the repo is authored on Windows where the executable bit is not preserved.
+COPY frontend/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 EXPOSE 3000
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["node", "frontend/server.js"]

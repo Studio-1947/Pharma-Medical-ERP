@@ -2,8 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 
 const PUBLIC_PATHS = ["/login", "/p"];
 
+// Reachable in every auth state. The service worker precaches /offline, so it
+// must return the page itself rather than a redirect -- a redirected response
+// is not cacheable, and a cached /login under this URL would be worse still.
+const UNGUARDED_PATHS = ["/offline"];
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (UNGUARDED_PATHS.includes(pathname)) {
+    return NextResponse.next();
+  }
 
   const isPublic = PUBLIC_PATHS.some(
     (p) => pathname === p || pathname.startsWith(p + "/"),

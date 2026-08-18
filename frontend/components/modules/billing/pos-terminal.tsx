@@ -969,7 +969,15 @@ export function PosTerminal({
   }
 
   return (
-    <div className="flex flex-col gap-3 lg:h-[calc(100vh-7.5rem)]">
+    <div
+      className="flex flex-col gap-3 lg:h-[calc(100vh-7.5rem)]"
+      // Suppresses the background auto-reload used to apply a new app version
+      // while a sale is in progress. PwaRegister looks for this attribute; the
+      // user still gets the explicit "Update" prompt.
+      data-pharmerp-unsaved={
+        items.length > 0 || consultationFee ? "pos-cart" : undefined
+      }
+    >
       {/* Top bar & quick hotkeys */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 bg-slate-900 text-white p-3 rounded-2xl shadow-md border border-slate-800">
         <div className="flex items-center gap-3">

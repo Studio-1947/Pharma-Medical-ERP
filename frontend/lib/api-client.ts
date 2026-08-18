@@ -154,15 +154,25 @@ apiClient.interceptors.response.use(
 );
 
 // Exported so the session bootstrap can call a token refresh explicitly
-export async function bootstrapSession(): Promise<boolean> {
+/**
+ * Outcome of a session bootstrap.
+ *
+ * `unreachable` exists so a transport failure is never mistaken for a rejected
+ * session. During a deploy the API container restarts and this call fails with
+ * a network error or a 502 from nginx; treating that as "signed out" logs every
+ * open client out mid-shift. Only an explicit auth rejection ends the session.
+ */
+export type BootstrapResult = "ok" | "unauthorized" | "unreachable";
+
+export async function bootstrapSession(): Promise<BootstrapResult> {
   const refreshToken = getStoredToken("pharmerp_refresh_token");
-  if (!refreshToken) return false;
+  if (!refreshToken) return "unauthorized";
   try {
     const res: any = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken });
     const newAccess: string = res.data?.accessToken ?? res.data?.data?.accessToken;
     const newRefresh: string = res.data?.refreshToken ?? res.data?.data?.refreshToken;
 
-    if (!newAccess) return false;
+    if (!newAccess) return "unauthorized";
 
     localStorage.setItem("pharmerp_access_token", newAccess);
     if (newRefresh) localStorage.setItem("pharmerp_refresh_token", newRefresh);
@@ -182,9 +192,16 @@ export async function bootstrapSession(): Promise<boolean> {
       document.cookie = "pharmerp_session=1; path=/; max-age=604800; SameSite=Lax";
     }
 
-    return true;
-  } catch {
-    return false;
+    return "ok";
+  } catch (err) {
+    const status = (err as AxiosError)?.response?.status;
+
+    // No response at all, or a gateway/5xx from a restarting backend: the
+    // session may well still be valid, so keep it and let the caller retry.
+    if (status === undefined || status >= 500) return "unreachable";
+
+    // 401/403 (and a 400 from a consumed refresh token) are real rejections.
+    return "unauthorized";
   }
 }
 

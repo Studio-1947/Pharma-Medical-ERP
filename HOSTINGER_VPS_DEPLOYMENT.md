@@ -366,3 +366,121 @@ cd /opt/pharmerp
 
 
 
+
+---
+
+## 12. PWA Updates & Static Asset Retention (portable across VPS and GCP)
+
+The installed PWA used to break on every deploy, showing a blank screen or
+"not connected" until it was manually refreshed or reinstalled. Two independent
+mechanisms fix that. Both are automatic and neither is specific to this VPS.
+
+### A. Service worker versioning
+
+`frontend/public/sw.js` is generated at build time from
+`frontend/scripts/sw.template.js` and stamped with a unique `SW_VERSION`
+(`frontend/scripts/generate-sw.mjs`, wired into the frontend `build` script).
+
+* HTML is fetched network-first, so a deploy is picked up on the next navigation.
+* Every cache name carries the build stamp and the worker deletes all
+  non-current caches on activate, so stale HTML cannot survive a deploy.
+* Open clients check for a new build every 60s and show an "Update" prompt. A
+  backgrounded tab applies it automatically after 60s. The POS screen suppresses
+  that automatic reload while a cart is open.
+
+Set `SW_VERSION` or `GIT_SHA` in the build environment to pin the stamp to a
+commit instead of a timestamp.
+
+### B. Static asset retention
+
+Each deploy builds a fresh image, so the previous build's `/_next/static/*`
+files would otherwise vanish when the new container starts. A browser still
+running the old build then requests a chunk that no longer exists and dies with
+`ChunkLoadError`. Note this failure mode has nothing to do with service workers;
+it breaks a plain browser tab too.
+
+Chunk filenames are content-hashed, so builds can coexist. Given any directory
+that outlives the container, `frontend/docker-entrypoint.sh` on each start:
+
+1. **publishes** this build's assets into the archive (adds, never deletes),
+2. **restores** older builds' assets into `.next/static` so this container can
+   serve them, without ever overwriting what this build ships,
+3. **prunes** assets that no deploy has shipped for `NEXT_STATIC_RETENTION_DAYS`.
+
+Step 2 is what makes this host-agnostic: the Next.js server itself serves the
+retained assets, so nothing depends on a particular proxy or volume driver.
+
+**Safety.** This is a resilience feature and must never be why the app is down:
+
+* Inactive unless the archive directory exists, so an unconfigured host is a
+  strict no-op. Set `NEXT_STATIC_ARCHIVE=` to disable it outright.
+* A read-only archive still serves restores; only publish and prune are skipped.
+* Every step is best-effort; the server is exec'd unconditionally.
+* `NEXT_STATIC_MAX_FILES` (default 20000) refuses to restore a runaway archive
+  rather than slowing every start.
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `NEXT_STATIC_ARCHIVE` | `/var/www/next-static-root` | Archive path; empty disables |
+| `NEXT_STATIC_RETENTION_DAYS` | `30` | How long an unused asset is kept |
+| `NEXT_STATIC_MAX_FILES` | `20000` | Refuse to restore beyond this size |
+
+### C. VPS setup (already wired)
+
+`docker-compose.prod.yml` mounts the `next_static_archive` volume read-write on
+`frontend` and read-only on `nginx`. `nginx.conf` additionally serves
+`/_next/static/` straight from that volume with immutable caching as a fast
+path, falling back to the frontend container on any miss. That fast path is an
+optimisation only; correctness does not depend on it.
+
+`scripts/deploy.sh` needs no changes. The volume is created on the first
+`docker compose up -d --build`.
+
+* Inspect the archive:
+  ```bash
+  docker compose -f docker-compose.prod.yml exec frontend \
+    find /var/www/next-static-root/_next/static -type f | wc -l
+  ```
+
+* Reset it. Safe: it rebuilds on the next start, and the only cost is that
+  already-open older clients must reload before resolving chunks again:
+  ```bash
+  docker compose -f docker-compose.prod.yml down
+  docker volume rm pharma-medical-erp_next_static_archive
+  docker compose -f docker-compose.prod.yml up -d
+  ```
+
+* Note `docker compose down -v` removes this volume **and the database
+  volumes**. Prefer the targeted `docker volume rm` above.
+
+### D. GCP / Cloud Run setup
+
+Cloud Run has no nginx and no Docker volumes, so only part B applies, which is
+exactly why the restore step exists. Mount a Cloud Storage bucket at the archive
+path and the identical mechanism works.
+
+Volume mounts require the second generation execution environment, which
+Cloud Run selects automatically unless told otherwise.
+
+```bash
+gcloud run deploy pharmerp-frontend \
+  --image REGION-docker.pkg.dev/PROJECT/REPO/frontend:TAG \
+  --add-volume mount-path=/var/www/next-static-root,type=cloud-storage,bucket=BUCKET_NAME,readonly=false \
+  --set-env-vars NEXT_STATIC_RETENTION_DAYS=7
+```
+
+Cloud Run specifics worth knowing:
+
+* **Use a shorter retention.** Every cold start walks the archive, so keeping it
+  small matters more here than on the VPS. Seven days is a reasonable start.
+* **Concurrent starts are safe.** Publish only writes files that are missing,
+  and content-hashed names mean an existing file already holds the right bytes.
+* **A read-only bucket still works** (`readonly=true`) if you would rather
+  populate it from CI than from the running service.
+* **The alternative** is the GCP-native route: point `assetPrefix` at a bucket
+  or CDN and upload each build's static output there from CI, never deleting.
+  That avoids the FUSE walk entirely and is worth it at high traffic, at the
+  cost of a CI step and CORS configuration.
+
+If the frontend is deployed to **Vercel** instead, nothing is needed. Vercel
+keeps previous deployments' assets served indefinitely.
