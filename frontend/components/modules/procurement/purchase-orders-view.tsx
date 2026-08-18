@@ -9,10 +9,14 @@ import { Plus, Search, FileText, CheckCircle, XCircle, Send, PlusCircle, Package
 import { Modal } from "@/components/ui/modal";
 import { BranchSelect } from "@/components/shared/branch-select";
 import { useActiveBranchId } from "@/hooks/use-branch";
+import { MedicineCombobox } from "@/components/shared/medicine-combobox";
+import { Pagination, readPageMeta } from "@/components/shared/pagination";
 
 interface POItem {
   id: string;
   medicineId: string;
+  /** Display name for the picker; the API only ever receives medicineId. */
+  medicineName?: string;
   orderedQty: number;
   unitCost: string;
   taxPct: string;
@@ -266,27 +270,59 @@ export function PurchaseOrdersView() {
   const [grnPO, setGrnPO] = useState<{ id: string; poNumber: string } | null>(null);
 
   // For Create PO Modal
-  const [form, setForm] = useState({
+  interface POFormItem {
+    medicineId: string;
+    /** Display name for the search box; only medicineId is sent to the API. */
+    medicineName: string;
+    orderedQty: number;
+    unitCost: string;
+    taxPct: string;
+    schemeFreeQty: number;
+    discountPct: string;
+    isConsignment: boolean;
+  }
+  const blankItem = (): POFormItem => ({
+    medicineId: "",
+    medicineName: "",
+    orderedQty: 1,
+    unitCost: "0",
+    taxPct: "0",
+    schemeFreeQty: 0,
+    discountPct: "0",
+    isConsignment: false,
+  });
+
+  const [form, setForm] = useState<{
+    supplierId: string;
+    branchId: string;
+    expectedDelivery: string;
+    notes: string;
+    items: POFormItem[];
+  }>({
     supplierId: "",
     branchId: "",
     expectedDelivery: "",
     notes: "",
-    items: [{ medicineId: "", orderedQty: 1, unitCost: "0", taxPct: "0", schemeFreeQty: 0, discountPct: "0", isConsignment: false }],
+    items: [blankItem()],
   });
+  // The medicine field is a search box now, not a <select required>, so the
+  // browser no longer blocks an empty one — this drives the highlight.
+  const [submitAttempted, setSubmitAttempted] = useState(false);
 
+  const [poPage, setPoPage] = useState(1);
   const { data: rawPOs, isLoading } = useQuery({
-    queryKey: ["purchase-orders"],
-    queryFn: () => apiClient.get("/procurement/purchase-orders"),
+    // Was fetched with no page at all, so the list silently stopped at the
+    // server default of 20 and older orders became unreachable.
+    queryKey: ["purchase-orders", poPage],
+    queryFn: () => apiClient.get("/procurement/purchase-orders", { params: { page: poPage, limit: 20 } }),
   });
+  const poMeta = readPageMeta(rawPOs);
 
   const { data: rawSuppliers } = useQuery({
-    queryKey: ["suppliers"],
-    queryFn: () => apiClient.get("/procurement/suppliers"),
-  });
-
-  const { data: rawMedicines } = useQuery({
-    queryKey: ["medicines"],
-    queryFn: () => apiClient.get("/inventory/medicines"),
+    // This one fills a <select>, so it must be the whole list — the server
+    // default of 100 would quietly hide supplier 101 onwards.
+    queryKey: ["suppliers", "all"],
+    queryFn: () => apiClient.get("/procurement/suppliers", { params: { limit: 1000 } }),
   });
 
   // Branch options come from the shared BranchSelect below.
@@ -302,15 +338,6 @@ export function PurchaseOrdersView() {
 
   const suppliers = (() => {
     const d = rawSuppliers as any;
-    if (Array.isArray(d)) return d;
-    if (Array.isArray(d?.data)) return d.data;
-    if (Array.isArray(d?.data?.data)) return d.data.data;
-    if (Array.isArray(d?.rows)) return d.rows;
-    return [];
-  })();
-
-  const medicines = (() => {
-    const d = rawMedicines as any;
     if (Array.isArray(d)) return d;
     if (Array.isArray(d?.data)) return d.data;
     if (Array.isArray(d?.data?.data)) return d.data.data;
@@ -401,7 +428,7 @@ export function PurchaseOrdersView() {
       branchId: activeBranchId ?? "",
       expectedDelivery: "",
       notes: "",
-      items: [{ medicineId: medicines[0]?.id || "", orderedQty: 1, unitCost: "0", taxPct: "0", schemeFreeQty: 0, discountPct: "0", isConsignment: false }],
+      items: [blankItem()],
     });
     setIsOpen(true);
   }
@@ -416,6 +443,7 @@ export function PurchaseOrdersView() {
       items: po.items?.length
         ? po.items.map((i) => ({
             medicineId: i.medicineId,
+            medicineName: (i as any).medicineName ?? (i as any).medicine?.name ?? "",
             orderedQty: i.orderedQty,
             unitCost: i.unitCost,
             taxPct: i.taxPct,
@@ -423,12 +451,13 @@ export function PurchaseOrdersView() {
             discountPct: i.discountPct ?? "0",
             isConsignment: i.isConsignment ?? false,
           }))
-        : [{ medicineId: medicines[0]?.id || "", orderedQty: 1, unitCost: "0", taxPct: "0", schemeFreeQty: 0, discountPct: "0", isConsignment: false }],
+        : [blankItem()],
     });
     setIsOpen(true);
   }
 
   function handleClose() {
+    setSubmitAttempted(false);
     setIsOpen(false);
     setEditingPO(null);
   }
@@ -436,7 +465,7 @@ export function PurchaseOrdersView() {
   function handleAddItem() {
     setForm({
       ...form,
-      items: [...form.items, { medicineId: medicines[0]?.id || "", orderedQty: 1, unitCost: "0", taxPct: "0", schemeFreeQty: 0, discountPct: "0", isConsignment: false }],
+      items: [...form.items, blankItem()],
     });
   }
 
@@ -450,8 +479,29 @@ export function PurchaseOrdersView() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.supplierId || !form.branchId || form.items.some((i) => !i.medicineId || i.orderedQty <= 0)) {
-      toastWarning("Incomplete order", "All fields are required and each item quantity must be greater than 0.");
+    setSubmitAttempted(true);
+
+    // Named one at a time rather than "all fields are required": on an order
+    // with eight lines, that message left the operator hunting for which one.
+    if (!form.supplierId) {
+      toastWarning("Supplier missing", "Choose which supplier this order goes to.");
+      return;
+    }
+    if (!form.branchId) {
+      toastWarning("Branch missing", "Choose which branch the stock is being ordered for.");
+      return;
+    }
+    const blank = form.items.findIndex((i) => !i.medicineId);
+    if (blank !== -1) {
+      toastWarning(
+        "Medicine not selected",
+        `Item ${blank + 1} has no medicine. Type at least two letters and pick one from the list.`,
+      );
+      return;
+    }
+    const badQty = form.items.findIndex((i) => i.orderedQty <= 0);
+    if (badQty !== -1) {
+      toastWarning("Quantity missing", `Item ${badQty + 1} needs a quantity greater than 0.`);
       return;
     }
 
@@ -629,6 +679,8 @@ export function PurchaseOrdersView() {
               </tbody>
             </table>
           </div>
+
+          <Pagination meta={poMeta} onPageChange={setPoPage} noun="purchase orders" />
         </div>
       )}
 
@@ -718,22 +770,23 @@ export function PurchaseOrdersView() {
                 <div key={idx} className="flex gap-3 items-end">
                   <div className="flex-1">
                     <label className="text-[10px] text-muted-foreground uppercase">Medicine</label>
-                    <select
-                      required
+                    {/* Was a <select> filled from an unparameterised
+                        /inventory/medicines call, which returns 20 rows by
+                        default — so only 20 of the 5,000+ catalogue could ever
+                        be ordered, with nothing on screen saying so. */}
+                    <MedicineCombobox
                       value={item.medicineId}
-                      onChange={(e) => {
+                      valueName={item.medicineName ?? ""}
+                      onSelect={(id, name) => {
                         const n = [...form.items];
-                        if (n[idx]) n[idx].medicineId = e.target.value;
+                        if (n[idx]) {
+                          n[idx].medicineId = id;
+                          n[idx].medicineName = name;
+                        }
                         setForm({ ...form, items: n });
                       }}
-                      className="w-full border rounded-lg px-2 py-1.5 text-xs bg-background"
-                    >
-                      {medicines.map((m: any) => (
-                        <option key={m.id} value={m.id}>
-                          {m.name} ({m.sku})
-                        </option>
-                      ))}
-                    </select>
+                      error={submitAttempted && !item.medicineId}
+                    />
                   </div>
                   <div className="w-20">
                     <label className="text-[10px] text-muted-foreground uppercase">Qty</label>
