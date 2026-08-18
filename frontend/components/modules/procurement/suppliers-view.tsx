@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
+import { Pagination, readPageMeta } from "@/components/shared/pagination";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
 import { Plus, Search, Edit2, Phone, Mail, FileText, Trash2, BookOpen } from "lucide-react";
@@ -58,10 +59,21 @@ export function SuppliersView() {
   const [form, setForm] = useState(emptyForm);
   const [formError, setFormError] = useState("");
 
+  const [page, setPage] = useState(1);
+
+  // Narrowing the search shortens the list, so a page number carried over from
+  // the previous result can land past the end and show nothing.
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
   const { data: rawSuppliers, isLoading } = useQuery({
-    queryKey: ["suppliers", { search }],
-    queryFn: () => apiClient.get("/procurement/suppliers", { params: { search } }),
+    // Was fetched with no page: the list stopped at the server default of 100
+    // with nothing on screen saying there were more.
+    queryKey: ["suppliers", { search, page }],
+    queryFn: () => apiClient.get("/procurement/suppliers", { params: { search, page, limit: 24 } }),
   });
+  const meta = readPageMeta(rawSuppliers);
 
   const suppliers: Supplier[] = (() => {
     const d = rawSuppliers as any;
@@ -337,6 +349,8 @@ export function SuppliersView() {
           ))}
         </div>
       )}
+
+      <Pagination meta={meta} onPageChange={setPage} noun="suppliers" />
 
       {/* Supplier Modal */}
       <Modal
