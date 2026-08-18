@@ -57,7 +57,14 @@ export function useReturnInvoice() {
   return useMutation({
     mutationFn: ({ id, ...body }: { id: string } & ReturnInvoiceDto) =>
       apiClient.post(`/billing/invoices/${id}/return`, body) as Promise<{
-        data: { invoice: InvoiceResponseDto; items: InvoiceResponseDto["items"] };
+        data: {
+          invoice: InvoiceResponseDto;
+          items: InvoiceResponseDto["items"];
+          /** Money that actually leaves the till. Zero on an unpaid credit sale. */
+          cashRefund: string;
+          /** Part of the credit that cancelled the patient's outstanding balance. */
+          creditAgainstDue: string;
+        };
         message: string;
       }>,
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.invoices.all() }),

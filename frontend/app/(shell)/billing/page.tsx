@@ -9,6 +9,8 @@ import { ShoppingCart, XCircle, RotateCcw, AlertCircle, Download, Search, BarCha
 import { Modal } from "@/components/ui/modal";
 import { PatientFirstBilling } from "@/components/modules/billing/patient-first-billing";
 import { PosTerminal } from "@/components/modules/billing/pos-terminal";
+import { StuckSalesBanner } from "@/components/modules/billing/stuck-sales-banner";
+import { errorText } from "@/lib/error-message";
 
 // ─── PDF download button (polls until ready) ─────────────────────────────────
 
@@ -101,7 +103,7 @@ function VoidModal({
       onClose();
     },
     onError: (err: any) =>
-      setError(err?.response?.data?.message ?? "Failed to void invoice."),
+      setError(errorText(err)),
   });
 
   if (!invoice) return null;
@@ -176,6 +178,11 @@ function ReturnModal({
   const [reason, setReason] = useState("");
   const [returnQtys, setReturnQtys] = useState<Record<string, number>>({});
   const [error, setError] = useState<string | null>(null);
+  // A return against an unpaid credit sale moves no cash — it cancels what the
+  // patient still owes. Closing straight to the list would leave the operator
+  // guessing how much to take out of the till, so the outcome is shown and
+  // has to be acknowledged.
+  const [result, setResult] = useState<{ cashRefund: string; creditAgainstDue: string } | null>(null);
 
   const { data: detailRaw, isLoading: loadingDetail } = useQuery({
     queryKey: ["invoice-detail", invoice?.id],
@@ -187,15 +194,20 @@ function ReturnModal({
 
   const mutation = useMutation({
     mutationFn: ({ id, body }: { id: string; body: object }) =>
-      apiClient.post(`/billing/invoices/${id}/return`, body),
-    onSuccess: () => {
+      apiClient.post(`/billing/invoices/${id}/return`, body) as Promise<{
+        data: { cashRefund?: string; creditAgainstDue?: string };
+      }>,
+    onSuccess: (res) => {
       qc.invalidateQueries({ queryKey: queryKeys.invoices.all() });
       setReason("");
       setReturnQtys({});
-      onClose();
+      setResult({
+        cashRefund: res?.data?.cashRefund ?? "0.00",
+        creditAgainstDue: res?.data?.creditAgainstDue ?? "0.00",
+      });
     },
     onError: (err: any) =>
-      setError(err?.response?.data?.message ?? "Failed to create return."),
+      setError(errorText(err)),
   });
 
   if (!invoice) return null;
@@ -220,7 +232,43 @@ function ReturnModal({
       size="lg"
     >
       <div className="px-6 py-5 space-y-4">
-        {loadingDetail ? (
+        {result ? (
+          <div className="space-y-4">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <p className="text-sm font-semibold text-emerald-800">Return recorded</p>
+              <p className="text-xs text-emerald-700 mt-0.5">Stock has been added back to the batch.</p>
+            </div>
+
+            <dl className="rounded-lg border divide-y text-sm">
+              <div className="flex items-center justify-between px-4 py-2.5">
+                <dt className="text-muted-foreground">Cash to refund</dt>
+                <dd className="font-semibold tabular-nums">₹{result.cashRefund}</dd>
+              </div>
+              {Number(result.creditAgainstDue) > 0 && (
+                <div className="flex items-center justify-between px-4 py-2.5">
+                  <dt className="text-muted-foreground">Cancelled from outstanding</dt>
+                  <dd className="font-semibold tabular-nums">₹{result.creditAgainstDue}</dd>
+                </div>
+              )}
+            </dl>
+
+            {Number(result.cashRefund) === 0 && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                This invoice was unpaid, so the return reduced what the patient owes.
+                Do not take anything out of the till.
+              </p>
+            )}
+
+            <div className="flex justify-end pt-1">
+              <button
+                onClick={() => { setResult(null); onClose(); }}
+                className="px-5 py-2 bg-slate-800 text-white text-sm font-semibold rounded-lg hover:bg-slate-900 transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        ) : loadingDetail ? (
           <div className="text-center py-8 text-muted-foreground text-sm">Loading invoice details...</div>
         ) : (
           <>
@@ -473,6 +521,9 @@ export default function BillingPage() {
 
   return (
     <div>
+      {/* Shown on both billing entry points: whichever screen the counter is
+          on, an unrecorded sale is the most urgent thing there is. */}
+      <StuckSalesBanner />
       {newFlowActive && (
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs text-slate-500">

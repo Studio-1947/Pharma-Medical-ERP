@@ -1,39 +1,79 @@
-import { Inject, Injectable } from "@nestjs/common";
+import { Injectable } from "@nestjs/common";
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, or, sql } from "drizzle-orm";
-import Redis from "ioredis";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
-import { REDIS_CLIENT } from "../../common/redis/redis.module";
 import type { QueryInvoiceDto } from "@pharmerp/types";
 
 @Injectable()
 export class BillingRepository {
-  constructor(
-    private readonly drizzle: DrizzleService,
-    @Inject(REDIS_CLIENT) private readonly redis: Redis,
-  ) {}
+  constructor(private readonly drizzle: DrizzleService) {}
   private get db() {
     return this.drizzle.db;
   }
 
-  async nextInvoiceNumber(branchId?: string, branchCode?: string): Promise<string> {
+  /**
+   * Allocates the next invoice number for a branch, inside the caller's
+   * transaction.
+   *
+   * Must be given the transaction handle. The number has to be allocated by the
+   * same transaction that writes the invoice, so that a sale which fails after
+   * this point gives the number back instead of burning it — GST requires the
+   * series to be consecutive, and a gap left by a rolled-back sale cannot be
+   * explained later because nothing recorded it. It previously came from a
+   * Redis INCR outside the transaction, which both leaked numbers on rollback
+   * and re-issued them from 1 whenever the key was lost.
+   *
+   * The upsert takes a row lock, so concurrent checkouts at one branch queue
+   * behind each other for the rest of the transaction. That is inherent to a
+   * gapless series and the transaction is short; different branches never
+   * contend, because the lock is per branch and day.
+   */
+  async nextInvoiceNumber(branchId: string, tx: any): Promise<string> {
+    if (!branchId) {
+      throw new Error("branchId is required to allocate an invoice number");
+    }
+    if (!tx) {
+      throw new Error(
+        "nextInvoiceNumber must run inside the transaction that writes the invoice",
+      );
+    }
+
     const today = new Date().toISOString().split("T")[0]!; // YYYY-MM-DD
-    let prefix = branchCode;
-    if (!prefix && branchId) {
-      const [b] = await this.db
-        .select({ code: schema.branches.code })
-        .from(schema.branches)
-        .where(eq(schema.branches.id, branchId))
-        .limit(1);
-      prefix = b?.code;
-    }
-    const codePrefix = (prefix || "BRN01").toUpperCase();
-    const key = branchId ? `invoice_seq:${branchId}:${today}` : `invoice_seq:${today}`;
-    const seq = await this.redis.incr(key);
-    if (seq === 1) {
-      await this.redis.expire(key, 86400 * 2);
-    }
+
+    const [branch] = await tx
+      .select({ code: schema.branches.code })
+      .from(schema.branches)
+      .where(eq(schema.branches.id, branchId))
+      .limit(1);
+    const codePrefix = (branch?.code || "BRN01").toUpperCase();
+
+    const [row] = await tx
+      .insert(schema.invoiceSequences)
+      .values({ branchId, seqDate: today, lastSeq: 1 })
+      .onConflictDoUpdate({
+        target: [schema.invoiceSequences.branchId, schema.invoiceSequences.seqDate],
+        set: {
+          lastSeq: sql`${schema.invoiceSequences.lastSeq} + 1`,
+          updatedAt: new Date(),
+        },
+      })
+      .returning({ lastSeq: schema.invoiceSequences.lastSeq });
+
+    const seq = row?.lastSeq ?? 1;
     return `${codePrefix}-${today.replace(/-/g, "")}-${String(seq).padStart(5, "0")}`;
+  }
+
+  /**
+   * The invoice a given idempotency key already produced, if any.
+   *
+   * Loaded with items and payments so a replayed checkout can be answered with
+   * the same shape as a fresh one — the POS reprints from this response.
+   */
+  async findByClientRef(clientRef: string) {
+    return this.db.query.salesInvoices.findFirst({
+      where: eq(schema.salesInvoices.clientRef, clientRef),
+      with: { items: true, payments: true },
+    });
   }
 
   async createInvoiceWithItems(

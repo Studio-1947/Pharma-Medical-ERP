@@ -81,6 +81,7 @@ function buildService() {
       taxAmount: 12,
       breakdown: { cgst: 6, sgst: 6, igst: 0, taxableAmount: 100 },
     }),
+    apportionDiscountAcrossLines: vi.fn().mockReturnValue([]),
     aggregateInvoiceTotals: vi.fn().mockReturnValue({
       subtotal: 100,
       taxAmount: 12,
@@ -189,7 +190,9 @@ describe("CHECKOUT-01 — OTC drug, single cash payment, no patient", () => {
     // The selling branch is passed through to FEFO: a till may only allocate
     // packs on its own shelves, never another branch's stock.
     expect(mockBatchRepo.selectBatchesForDispenseMulti).toHaveBeenCalledWith(
-      [{ medicineId: "med-otc", needed: 2 }],
+      // medicineName rides along so an out-of-stock failure can name the
+      // product on the counter screen instead of printing its id.
+      [expect.objectContaining({ medicineId: "med-otc", needed: 2 })],
       "branch-1",
       tx,
     );
@@ -274,7 +277,15 @@ describe("CHECKOUT-03 — Loyalty points accrual", () => {
   it("accrues 1 point per ₹100 of final total", async () => {
     const { service, mockBatchRepo, mockPatientsRepo, buildTx, mockTaxService } = buildService();
 
+    // The invoice tax is summed from the lines so that per-line CGST/SGST and
+    // the invoice total always agree — GSTR-1 reconciles on that. The line stub
+    // therefore has to match the aggregate rather than contradict it.
     mockTaxService.aggregateInvoiceTotals.mockReturnValue({ subtotal: 450, taxAmount: 50, totalAmount: 500 });
+    mockTaxService.calculateLineTax.mockReturnValue({
+      lineTotal: 500,
+      taxAmount: 50,
+      breakdown: { cgst: 25, sgst: 25, igst: 0, taxableAmount: 450 },
+    });
 
     const dto = {
       patientId: "patient-1",
@@ -305,6 +316,11 @@ describe("CHECKOUT-04 — Loyalty points redemption lowers final total", () => {
     const { service, mockBatchRepo, mockPatientsRepo, buildTx, mockTaxService, mockRepo } = buildService();
 
     mockTaxService.aggregateInvoiceTotals.mockReturnValue({ subtotal: 200, taxAmount: 20, totalAmount: 220 });
+    mockTaxService.calculateLineTax.mockReturnValue({
+      lineTotal: 220,
+      taxAmount: 20,
+      breakdown: { cgst: 10, sgst: 10, igst: 0, taxableAmount: 200 },
+    });
 
     const dto = {
       patientId: "patient-1",
@@ -329,6 +345,138 @@ describe("CHECKOUT-04 — Loyalty points redemption lowers final total", () => {
     const invoiceArg = mockRepo.createInvoiceWithItems.mock.calls[0]![0];
     expect(parseFloat(invoiceArg.discountAmount)).toBe(20);
     expect(parseFloat(invoiceArg.totalAmount)).toBe(200);
+  });
+});
+
+// ─── CHECKOUT-01b: the stock ledger names the invoice ───────────────────────
+
+describe("CHECKOUT-01b — sale movements are traceable to their invoice", () => {
+  it("stamps the invoice id on every sale movement", async () => {
+    const { service, mockRepo, mockBatchRepo, mockMovementRepo, buildTx } = buildService();
+
+    mockRepo.createInvoiceWithItems.mockResolvedValue({
+      invoice: { id: "inv-42", invoiceNo: "BRN01-1" },
+      items: [],
+    });
+
+    const dto = {
+      items: [{ medicineId: "med-otc", quantity: 2, discountPct: "0" }],
+      payments: [{ mode: "cash", amount: "112.00" }],
+    };
+
+    const tx = buildTx([
+      [{ id: "med-otc", name: "Vitamins", scheduleClass: "OTC", requiresPrescription: false, taxPercent: "12", stripSize: 10, isActive: true }],
+      [{ id: "batch-1" }],
+    ]);
+    (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "1000.00" }],
+    ]);
+
+    await service.create(dto as any, "staff-1", "branch-1");
+
+    // Movements used to say referenceType "invoice" with a null referenceId —
+    // the ledger recorded that a sale happened but not which one, so a recall
+    // or a billing dispute could not be traced back from the batch.
+    const rows = mockMovementRepo.logMany.mock.calls[0]![0];
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      batchId: "batch-1",
+      movementType: "sale",
+      quantity: -2,
+      referenceType: "invoice",
+      referenceId: "inv-42",
+    });
+  });
+});
+
+// ─── CHECKOUT-04b: redemption is consideration, not a price cut ─────────────
+
+describe("CHECKOUT-04b — redeeming points does not change the tax", () => {
+  it("leaves the taxable value and GST untouched, lowering only the cash due", async () => {
+    const { service, mockBatchRepo, buildTx, mockTaxService, mockRepo } = buildService();
+
+    mockTaxService.aggregateInvoiceTotals.mockReturnValue({ subtotal: 200, taxAmount: 20, totalAmount: 220 });
+    mockTaxService.calculateLineTax.mockReturnValue({
+      lineTotal: 220,
+      taxAmount: 20,
+      breakdown: { cgst: 10, sgst: 10, igst: 0, taxableAmount: 200 },
+    });
+
+    const dto = {
+      patientId: "patient-1",
+      loyaltyPointsToRedeem: 500, // ₹50 off the cash due
+      items: [{ medicineId: "med-otc", quantity: 2, discountPct: "0" }],
+      payments: [{ mode: "cash", amount: "170.00" }],
+    };
+
+    const tx = buildTx([
+      [{ id: "med-otc", name: "Vitamins", scheduleClass: "OTC", requiresPrescription: false, taxPercent: "12", stripSize: 10, isActive: true }],
+      [{ id: "batch-1" }],
+    ]);
+    (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "1100.00" }],
+    ]);
+
+    await service.create(dto as any, "staff-1", "branch-1");
+
+    const invoiceArg = mockRepo.createInvoiceWithItems.mock.calls[0]![0];
+    // Points are consideration handed over, not a reduction in the price of the
+    // goods, so the GST is unchanged. Apportioning them would also drop the
+    // server total below the figure the POS quoted, and the over-payment guard
+    // would then reject every checkout that redeemed points.
+    expect(parseFloat(invoiceArg.taxAmount)).toBe(20);
+    expect(parseFloat(invoiceArg.totalAmount)).toBe(170);
+    expect(mockTaxService.apportionDiscountAcrossLines).not.toHaveBeenCalled();
+  });
+});
+
+// ─── CHECKOUT-04c: a manual discount does reduce the taxable value ──────────
+
+describe("CHECKOUT-04c — a price discount is taxed correctly", () => {
+  it("re-taxes the lines on the discounted value", async () => {
+    const { service, mockBatchRepo, buildTx, mockTaxService, mockRepo } = buildService();
+
+    mockTaxService.aggregateInvoiceTotals.mockReturnValue({ subtotal: 1000, taxAmount: 120, totalAmount: 1120 });
+    mockTaxService.calculateLineTax.mockReturnValue({
+      lineTotal: 1120,
+      taxAmount: 120,
+      breakdown: { cgst: 60, sgst: 60, igst: 0, taxableAmount: 1000 },
+    });
+    // 100.00 off 1000.00 taxable at 12% => 900.00 taxable, 108.00 tax.
+    mockTaxService.apportionDiscountAcrossLines.mockReturnValue([
+      {
+        discountShare: 100,
+        taxableAmount: 900,
+        taxAmount: 108,
+        lineTotal: 1008,
+        breakdown: { cgst: 54, sgst: 54, igst: 0, taxableAmount: 900 },
+      },
+    ]);
+
+    const dto = {
+      items: [{ medicineId: "med-otc", quantity: 1, discountPct: "0" }],
+      discountAmount: "100",
+      payments: [{ mode: "cash", amount: "1008.00" }],
+    };
+
+    const tx = buildTx([
+      [{ id: "med-otc", name: "Vitamins", scheduleClass: "OTC", requiresPrescription: false, taxPercent: "12", stripSize: 1, isActive: true }],
+      [{ id: "batch-1" }],
+    ]);
+    (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
+    mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
+      [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 1, mrpAtEntry: "1000.00" }],
+    ]);
+
+    await service.create(dto as any, "staff-1", "branch-1");
+
+    const invoiceArg = mockRepo.createInvoiceWithItems.mock.calls[0]![0];
+    // GST on 900, not on 1000 — that difference was the overstatement.
+    expect(parseFloat(invoiceArg.taxAmount)).toBe(108);
+    // subtotal 1000 − discount 100 + tax 108
+    expect(parseFloat(invoiceArg.totalAmount)).toBe(1008);
   });
 });
 
@@ -425,7 +573,13 @@ describe("CHECKOUT-08 — Concurrent batch depletion guard", () => {
       [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" }],
     ]);
 
-    await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(/Concurrent depletion/i);
+    // The message must name the medicine and tell the cashier what to do; the
+    // old wording ("Concurrent depletion") described the race, not the fix.
+    // One call only: the mocks are single-use, so a second create() would take
+    // a different path. Both properties are asserted in one pattern.
+    await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(
+      /sold at another till[\s\S]*try again/i,
+    );
   });
 });
 

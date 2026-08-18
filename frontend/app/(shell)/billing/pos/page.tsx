@@ -4,6 +4,7 @@ import { Suspense, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { PosTerminal } from "@/components/modules/billing/pos-terminal";
+import { StuckSalesBanner } from "@/components/modules/billing/stuck-sales-banner";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 
@@ -59,6 +60,9 @@ export default function PosPage() {
 
   return (
     <div className="w-full">
+      {/* Offline sales the server has refused have nowhere else to appear, and
+          money may already have been taken for them. */}
+      <StuckSalesBanner />
       <Suspense
         fallback={
           <div className="p-8 text-sm text-slate-500 animate-pulse">Loading Point of Sale…</div>

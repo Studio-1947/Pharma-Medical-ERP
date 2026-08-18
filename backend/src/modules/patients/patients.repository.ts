@@ -168,6 +168,24 @@ export class PatientsRepository {
       .where(eq(schema.patients.id, id));
   }
 
+  /**
+   * Takes back points a now-cancelled sale awarded, without ever refusing.
+   *
+   * deductLoyaltyPoints throws when the balance is short, which is right for a
+   * redemption — a patient cannot spend points they do not have. It is wrong
+   * for a void: if the patient has already spent the points elsewhere, refusing
+   * here would abort the whole void and leave the sale standing. Clawing back
+   * what remains and flooring at zero is the recoverable outcome.
+   */
+  async clawBackLoyaltyPoints(id: string, points: number, tx?: any) {
+    const db = tx ?? this.db;
+    await db.update(schema.patients)
+      .set({
+        loyaltyPoints: sql`GREATEST(${schema.patients.loyaltyPoints} - ${points}, 0)`,
+      })
+      .where(eq(schema.patients.id, id));
+  }
+
   /** Called when an invoice is created with a partial payment: the un-paid
    *  balance becomes an amount the patient owes the pharmacy. Kept in sync
    *  with the same-transaction inserts on salesInvoices.amountDue so a rolled

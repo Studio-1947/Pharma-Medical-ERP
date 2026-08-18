@@ -7,10 +7,10 @@ import { InvoicePdfService } from "./invoice-pdf.service";
 import { BatchRepository } from "../inventory/batch.repository";
 import { StockMovementRepository } from "../inventory/stock-movement.repository";
 import { PatientsRepository } from "../patients/patients.repository";
-import { RedisModule } from "../../common/redis/redis.module";
 
 @Module({
-  imports: [RedisModule],
+  // No Redis: the invoice series moved to Postgres so it could roll back with
+  // the sale that failed, and nothing else in billing needed the client.
   controllers: [BillingController],
   providers: [
     BillingService,

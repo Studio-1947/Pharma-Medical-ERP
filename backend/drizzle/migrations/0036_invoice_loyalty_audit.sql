@@ -1,0 +1,2 @@
+ALTER TABLE "sales_invoices" ADD COLUMN "loyalty_points_earned" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "sales_invoices" ADD COLUMN "loyalty_points_redeemed" integer DEFAULT 0 NOT NULL;

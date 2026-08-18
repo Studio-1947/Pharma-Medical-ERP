@@ -9,7 +9,7 @@ import { BillingRepository } from "../billing.repository";
  */
 describe("BillingRepository.findTokenNoByPrescription", () => {
   function buildRepo(findFirst: any) {
-    const repo = new BillingRepository({} as any, {} as any);
+    const repo = new BillingRepository({} as any);
     // The repository reads `this.drizzle.db` through a getter, so the fake db is
     // installed on the injected service rather than on the repo itself.
     (repo as any).drizzle = {

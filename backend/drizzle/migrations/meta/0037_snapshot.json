@@ -1,6 +1,6 @@
 {
-  "id": "a21d370e-9f26-441f-832e-5e97ab09c33d",
-  "prevId": "07500d94-7731-48b4-a06e-6cf181d8d731",
+  "id": "0df659db-99f1-46cd-803d-6b3996de1945",
+  "prevId": "a21d370e-9f26-441f-832e-5e97ab09c33d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1442,6 +1442,64 @@
         }
       },
       "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "public.invoice_sequences": {
+      "name": "invoice_sequences",
+      "schema": "",
+      "columns": {
+        "branch_id": {
+          "name": "branch_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seq_date": {
+          "name": "seq_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_seq": {
+          "name": "last_seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "invoice_sequences_branch_id_branches_id_fk": {
+          "name": "invoice_sequences_branch_id_branches_id_fk",
+          "tableFrom": "invoice_sequences",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branch_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "invoice_sequences_branch_id_seq_date_pk": {
+          "name": "invoice_sequences_branch_id_seq_date_pk",
+          "columns": [
+            "branch_id",
+            "seq_date"
+          ]
+        }
+      },
       "uniqueConstraints": {}
     },
     "public.patients": {

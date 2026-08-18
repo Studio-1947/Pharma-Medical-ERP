@@ -15,6 +15,8 @@ import type {
   OtcSupplyBatchDto,
 } from "@pharmerp/types";
 import { BarcodeService } from "./barcode.service";
+import { assertBranchAccess } from "../../common/auth/branch-scope";
+import type { JwtPayload } from "../../common/decorators/current-user.decorator";
 
 @Injectable()
 export class BatchService {
@@ -25,13 +27,30 @@ export class BatchService {
     private readonly barcodeService: BarcodeService,
   ) {}
 
+  /**
+   * Loads a batch and refuses it if it belongs to another branch.
+   *
+   * Every by-id route here takes a bare UUID, and a batch id is not a secret —
+   * it is returned by list endpoints and printed on labels. Without this check
+   * a shop manager could read another branch's cost prices, and worse, write:
+   * adjust its quantity, quarantine or recall it, reserve it, or delete it.
+   *
+   * Made the only way to load a batch by id rather than a check each method
+   * remembers to make, so a route added later inherits the guard.
+   */
+  private async loadOwnedBatch(id: string, user: JwtPayload) {
+    const batch = await this.batchRepo.findBatchById(id);
+    if (!batch) throw new NotFoundException(`Batch ${id} not found`);
+    assertBranchAccess(user, batch.branchId);
+    return batch;
+  }
+
   findAll(query: QueryBatchDto) {
     return this.batchRepo.findBatches(query);
   }
 
-  async findOne(id: string) {
-    const batch = await this.batchRepo.findBatchById(id);
-    if (!batch) throw new NotFoundException(`Batch ${id} not found`);
+  async findOne(id: string, user: JwtPayload) {
+    const batch = await this.loadOwnedBatch(id, user);
     return { data: batch };
   }
 
@@ -80,16 +99,15 @@ export class BatchService {
     return { data: batch, message: "Batch created" };
   }
 
-  async update(id: string, dto: UpdateBatchDto) {
-    const existing = await this.batchRepo.findBatchById(id);
-    if (!existing) throw new NotFoundException(`Batch ${id} not found`);
+  async update(id: string, dto: UpdateBatchDto, user: JwtPayload) {
+    await this.loadOwnedBatch(id, user);
     const batch = await this.batchRepo.updateBatch(id, dto);
     return { data: batch, message: "Batch updated" };
   }
 
-  async updateStatus(id: string, dto: UpdateBatchStatusDto, userId?: string) {
-    const existing = await this.batchRepo.findBatchById(id);
-    if (!existing) throw new NotFoundException(`Batch ${id} not found`);
+  async updateStatus(id: string, dto: UpdateBatchStatusDto, user: JwtPayload) {
+    const existing = await this.loadOwnedBatch(id, user);
+    const userId = user.sub;
 
     const batch = await this.batchRepo.updateBatchStatus(id, dto.status);
 
@@ -117,10 +135,10 @@ export class BatchService {
   async adjust(
     id: string,
     dto: AdjustBatchQuantityDto,
-    userId?: string,
+    user: JwtPayload,
   ) {
-    const existing = await this.batchRepo.findBatchById(id);
-    if (!existing) throw new NotFoundException(`Batch ${id} not found`);
+    const existing = await this.loadOwnedBatch(id, user);
+    const userId = user.sub;
 
     if (dto.adjustment < 0 && existing.quantity + dto.adjustment < 0) {
       throw new UnprocessableEntityException(
@@ -154,10 +172,10 @@ export class BatchService {
   async recordOtcSupply(
     id: string,
     dto: OtcSupplyBatchDto,
-    userId?: string,
+    user: JwtPayload,
   ) {
-    const existing = await this.batchRepo.findBatchById(id);
-    if (!existing) throw new NotFoundException(`Batch ${id} not found`);
+    const existing = await this.loadOwnedBatch(id, user);
+    const userId = user.sub;
 
     if (dto.quantity > existing.quantity) {
       throw new UnprocessableEntityException(
@@ -193,9 +211,8 @@ export class BatchService {
     };
   }
 
-  async remove(id: string) {
-    const existing = await this.batchRepo.findBatchById(id);
-    if (!existing) throw new NotFoundException(`Batch ${id} not found`);
+  async remove(id: string, user: JwtPayload) {
+    await this.loadOwnedBatch(id, user);
 
     const hasMovements = await this.batchRepo.hasMovements(id);
     if (hasMovements) {
@@ -213,30 +230,26 @@ export class BatchService {
     return { data: batches };
   }
 
-  async getMovements(batchId: string) {
-    const batch = await this.batchRepo.findBatchById(batchId);
-    if (!batch) throw new NotFoundException(`Batch ${batchId} not found`);
+  async getMovements(batchId: string, user: JwtPayload) {
+    await this.loadOwnedBatch(batchId, user);
     const movements = await this.movementRepo.findByBatch(batchId);
     return { data: movements };
   }
 
-  async reserveStock(id: string, quantity: number) {
-    const existing = await this.batchRepo.findBatchById(id);
-    if (!existing) throw new NotFoundException(`Batch ${id} not found`);
+  async reserveStock(id: string, quantity: number, user: JwtPayload) {
+    await this.loadOwnedBatch(id, user);
     const updated = await this.batchRepo.reserveStock(id, quantity);
     return { data: updated, message: "Stock reserved" };
   }
 
-  async releaseStock(id: string, quantity: number) {
-    const existing = await this.batchRepo.findBatchById(id);
-    if (!existing) throw new NotFoundException(`Batch ${id} not found`);
+  async releaseStock(id: string, quantity: number, user: JwtPayload) {
+    await this.loadOwnedBatch(id, user);
     const updated = await this.batchRepo.releaseStock(id, quantity);
     return { data: updated, message: "Stock reservation released" };
   }
 
-  async getBarcodeLabel(id: string) {
-    const batch = await this.batchRepo.findBatchById(id);
-    if (!batch) throw new NotFoundException(`Batch ${id} not found`);
+  async getBarcodeLabel(id: string, user: JwtPayload) {
+    const batch = await this.loadOwnedBatch(id, user);
 
     const code = batch.batchNo;
     const pngBuffer = await this.barcodeService.generateRaw(code);

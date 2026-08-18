@@ -2,7 +2,9 @@
 
 import * as ToastPrimitive from "@radix-ui/react-toast";
 import { createContext, useContext, useReducer, useCallback, ReactNode } from "react";
-import { X, CheckCircle2, AlertCircle, Info, AlertTriangle } from "lucide-react";
+import { X, CheckCircle2, AlertCircle, Info, AlertTriangle, Copy, Check } from "lucide-react";
+import { useState } from "react";
+import { explainError } from "@/lib/error-message";
 
 type ToastVariant = "success" | "error" | "info" | "warning";
 
@@ -10,6 +12,10 @@ interface Toast {
   id: string;
   title: string;
   description?: string;
+  /** The next action, kept apart from the description so it reads as advice. */
+  whatToDo?: string;
+  /** Support code, shown only when there is one worth quoting. */
+  reference?: string;
   variant: ToastVariant;
   duration?: number;
 }
@@ -20,6 +26,15 @@ interface ToastContextValue {
   error: (title: string, description?: string, duration?: number) => void;
   info: (title: string, description?: string) => void;
   warning: (title: string, description?: string, duration?: number) => void;
+  /**
+   * Shows any thrown error in words a non-technical person can act on.
+   *
+   * Prefer this over hand-writing `err.response.data.message` into a toast:
+   * that sentence is sometimes written for a human and sometimes not, and the
+   * cases where it is not ("Request failed with status code 500") are exactly
+   * the ones where the person most needs telling what to do.
+   */
+  fromError: (err: unknown, fallbackTitle?: string) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -93,8 +108,24 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     [toast],
   );
 
+  const fromError = useCallback(
+    (err: unknown, fallbackTitle?: string) => {
+      const e = explainError(err);
+      toast({
+        title: fallbackTitle ?? e.title,
+        description: e.message,
+        whatToDo: e.whatToDo,
+        reference: e.reference,
+        variant: "error",
+        // Long enough to read a reference off the screen and write it down.
+        duration: e.reference ? 12000 : 7000,
+      });
+    },
+    [toast],
+  );
+
   return (
-    <ToastContext.Provider value={{ toast, success, error, info, warning }}>
+    <ToastContext.Provider value={{ toast, success, error, info, warning, fromError }}>
       <ToastPrimitive.Provider swipeDirection="right">
         {children}
         <ToastPrimitive.Viewport className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2.5 w-84 max-w-[calc(100vw-2.5rem)] outline-none" />
@@ -119,6 +150,12 @@ export function ToastProvider({ children }: { children: ReactNode }) {
                   {t.description}
                 </ToastPrimitive.Description>
               )}
+              {t.whatToDo && (
+                <p className="text-xs font-semibold text-slate-700 mt-1.5 leading-snug">
+                  {t.whatToDo}
+                </p>
+              )}
+              {t.reference && <ReferenceChip reference={t.reference} />}
             </div>
             <ToastPrimitive.Close
               className="shrink-0 p-1 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
@@ -130,6 +167,36 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         ))}
       </ToastPrimitive.Provider>
     </ToastContext.Provider>
+  );
+}
+
+/**
+ * The support code, with one tap to copy it.
+ *
+ * Someone reading this out over the phone should not have to transcribe it by
+ * eye, and someone messaging it should not have to retype it.
+ */
+function ReferenceChip({ reference }: { reference: string }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        navigator.clipboard?.writeText(reference).then(
+          () => {
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          },
+          () => undefined,
+        );
+      }}
+      className="mt-2 inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-slate-50 px-2 py-1 font-mono text-[11px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+      aria-label={`Copy support reference ${reference}`}
+    >
+      {copied ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+      {copied ? "Copied" : reference}
+    </button>
   );
 }
 

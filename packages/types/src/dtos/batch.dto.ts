@@ -33,6 +33,12 @@ export const adjustBatchQuantitySchema = z.object({
 
 export const queryBatchSchema = z.object({
   medicineId: z.string().uuid().optional(),
+  // Stock belongs to a branch, so the list has to be filterable by one. Without
+  // this field the endpoint had no way to express a branch at all and returned
+  // every branch's batches — including cost prices — to any branch user. The
+  // controller overwrites whatever arrives here with the caller's resolved
+  // scope, so it is a super_admin selector rather than a client-trusted filter.
+  branchId: z.string().uuid().optional(),
   status: z.string().optional(),
   expiringBefore: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),

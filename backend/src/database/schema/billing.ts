@@ -8,9 +8,12 @@ import {
   integer,
   numeric,
   index,
+  uniqueIndex,
+  date,
+  primaryKey,
   AnyPgColumn,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import { invoiceStatusEnum, paymentModeEnum } from "./enums";
 import { medicines, inventoryBatches } from "./inventory";
 import { branches } from "./branches";
@@ -98,6 +101,27 @@ export const salesInvoices = pgTable(
     overriddenBy: uuid("overridden_by").references(() => users.id, {
       onDelete: "set null",
     }),
+    // What the sale did to the patient's loyalty balance. Recorded rather than
+    // recomputed because voiding has to put it back exactly, and neither figure
+    // survives on the invoice otherwise: the accrual formula could change, and
+    // redemption is folded into discountAmount alongside any manual discount,
+    // so the two cannot be told apart after the fact.
+    // Rows written before this column existed carry 0 and reverse nothing —
+    // honest, since what they awarded is genuinely unknown.
+    loyaltyPointsEarned: integer("loyalty_points_earned").notNull().default(0),
+    loyaltyPointsRedeemed: integer("loyalty_points_redeemed").notNull().default(0),
+    /**
+     * Caller-supplied idempotency key, unique across all invoices.
+     *
+     * The offline POS queues a sale locally and replays it when the connection
+     * returns, marking the row synced only once the call resolves. If the
+     * server committed but the response was lost — dropped connection, timeout,
+     * tab closed mid-flight — the queue replayed the same sale and billed it
+     * twice, deducting the stock twice and accruing the points twice. The key
+     * lets the second attempt find the first invoice instead of writing a new
+     * one. Null for callers that do not send one.
+     */
+    clientRef: varchar("client_ref", { length: 64 }),
     customerGstin: varchar("customer_gstin", { length: 15 }),
     pdfUrl: varchar("pdf_url", { length: 255 }),
     createdAt: timestamp("created_at", { withTimezone: true })
@@ -116,6 +140,11 @@ export const salesInvoices = pgTable(
       t.branchId,
       t.createdAt,
     ),
+    // Partial: only rows that carry a key take part, so the many invoices
+    // without one do not collide with each other on NULL.
+    clientRefUniq: uniqueIndex("invoices_client_ref_uniq")
+      .on(t.clientRef)
+      .where(sql`${t.clientRef} IS NOT NULL`),
   }),
 );
 
@@ -217,3 +246,44 @@ export const paymentsRelations = relations(payments, ({ one }) => ({
     references: [users.id],
   }),
 }));
+
+/**
+ * Per-branch, per-day invoice counter.
+ *
+ * The serial used to come from a Redis INCR keyed by branch and date, with a
+ * two-day TTL and nothing in Postgres behind it. That had two failure modes,
+ * both of them costly:
+ *
+ *  - Lose the key — eviction, restart before the RDB snapshot, a flush — and
+ *    the counter restarts at 1, re-issuing numbers already used that day. The
+ *    unique index on invoice_no then rejects the insert, so billing stops dead
+ *    at the counter until the date rolls over.
+ *  - The number was handed out before the invoice was written and Redis takes
+ *    no part in the transaction, so any later failure inside it — a concurrent
+ *    depletion, a bad payment row — consumed a number that nothing recorded.
+ *    Rule 46 requires the series to be consecutive, and those gaps could not
+ *    be explained after the fact because no trace of them existed.
+ *
+ * Allocating here instead means the number is durable and rolls back with the
+ * sale that failed. The cost is that the row lock serialises checkouts within
+ * one branch for the length of the transaction, which is inherent: a gapless
+ * series cannot be handed out concurrently.
+ */
+export const invoiceSequences = pgTable(
+  "invoice_sequences",
+  {
+    branchId: uuid("branch_id")
+      .notNull()
+      .references(() => branches.id, { onDelete: "cascade" }),
+    // The series restarts daily and the date is part of the printed number,
+    // so it is part of the key rather than a column to reset on a schedule.
+    seqDate: date("seq_date").notNull(),
+    lastSeq: integer("last_seq").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.branchId, t.seqDate] }),
+  }),
+);

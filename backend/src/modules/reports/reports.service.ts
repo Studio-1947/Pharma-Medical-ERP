@@ -3,6 +3,7 @@ import { and, between, desc, eq, gte, inArray, isNull, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import { ClickHouseService } from "../../common/clickhouse/clickhouse.service";
 import * as schema from "../../database/schema";
+import { suppliedInvoiceStatuses } from "../../common/utils/invoice-status";
 
 @Injectable()
 export class ReportsService {
@@ -46,7 +47,7 @@ export class ReportsService {
       .where(
         and(
           eq(schema.salesInvoices.branchId, branchId),
-          inArray(schema.salesInvoices.status, ["confirmed", "paid"]),
+          inArray(schema.salesInvoices.status, suppliedInvoiceStatuses()),
           between(schema.salesInvoices.createdAt, new Date(startDate), new Date(endDate)),
         ),
       );
@@ -183,7 +184,7 @@ export class ReportsService {
     since.setHours(0, 0, 0, 0);
 
     const conditions = [
-      inArray(schema.salesInvoices.status, ["confirmed", "paid"]),
+      inArray(schema.salesInvoices.status, suppliedInvoiceStatuses()),
       gte(schema.salesInvoices.createdAt, since),
     ];
     if (branchId) conditions.push(eq(schema.salesInvoices.branchId, branchId));
@@ -214,7 +215,7 @@ export class ReportsService {
     since.setDate(since.getDate() - days);
 
     const conditions = [
-      inArray(schema.salesInvoices.status, ["confirmed", "paid"]),
+      inArray(schema.salesInvoices.status, suppliedInvoiceStatuses()),
       gte(schema.salesInvoices.createdAt, since),
     ];
     if (branchId) conditions.push(eq(schema.salesInvoices.branchId, branchId));
@@ -273,7 +274,7 @@ export class ReportsService {
         .from(schema.salesInvoices)
         .where(
           and(
-            inArray(schema.salesInvoices.status, ["confirmed", "paid"]),
+            inArray(schema.salesInvoices.status, suppliedInvoiceStatuses()),
             between(schema.salesInvoices.createdAt, start, end),
           ),
         )
@@ -359,7 +360,7 @@ export class ReportsService {
     since.setDate(since.getDate() - days);
 
     const conditions = [
-      inArray(schema.salesInvoices.status, ["confirmed", "paid"]),
+      inArray(schema.salesInvoices.status, suppliedInvoiceStatuses()),
       gte(schema.salesInvoices.createdAt, since),
     ];
     if (branchId) conditions.push(eq(schema.salesInvoices.branchId, branchId));
@@ -386,7 +387,7 @@ export class ReportsService {
     since.setDate(since.getDate() - days);
 
     const conditions = [
-      inArray(schema.salesInvoices.status, ["confirmed", "paid"]),
+      inArray(schema.salesInvoices.status, suppliedInvoiceStatuses()),
       gte(schema.salesInvoices.createdAt, since),
     ];
     if (branchId) conditions.push(eq(schema.salesInvoices.branchId, branchId));
@@ -499,7 +500,7 @@ export class ReportsService {
       .where(
         and(
           eq(schema.salesInvoices.branchId, branchId),
-          inArray(schema.salesInvoices.status, ["confirmed", "paid"]),
+          inArray(schema.salesInvoices.status, suppliedInvoiceStatuses()),
           between(schema.salesInvoices.createdAt, start, end),
           inArray(schema.medicines.scheduleClass, ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"]),
         ),

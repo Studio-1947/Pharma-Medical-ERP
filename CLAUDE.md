@@ -10,7 +10,9 @@ Do not guess APIs, versions, flags, commit SHAs, or package names. Verify by rea
 - If any build or dev command fails with `MODULE_NOT_FOUND`, run `pnpm fix-deps` (root) before investigating further. This is almost always a corrupted pnpm store, not a code bug.
 - Never investigate a MODULE_NOT_FOUND error by editing source files. Fix the store first.
 - After resuming work in a new session, if `pnpm build` or `pnpm dev` fails immediately, run `pnpm fix-deps` first.
-- `pnpm fix-deps` = `pnpm store verify` then `pnpm install --force`. Both steps are required: verify cleans corrupted store entries, --force re-extracts them.
+- `pnpm fix-deps` = `pnpm store status`, `pnpm store prune`, then `pnpm install --force`. NOTE: `pnpm store verify` does NOT exist in pnpm 9 — it silently prints the store help and does nothing, which is why the old fix-deps only ever ran the reinstall half.
+- `pnpm install --force` alone does NOT repair an entry that has been emptied in the virtual store: it sees the directory, considers it present, and leaves it broken. When a package resolves but its files are gone (`Cannot find module '.../next/dist/bin/next'`), delete that entry under `node_modules/.pnpm/<pkg>@<version>_<hash>/` and the workspace symlink, then reinstall.
+- Symptom seen 2026-08-18: `npx next build` worked while `pnpm --filter frontend build` failed, because npx resolved the binary a different way. A passing `npx` run is not evidence the install is healthy.
 - The frontend `prebuild` script auto-heals silently on every `pnpm build` run. If it runs `pnpm install --force` unexpectedly, it means the store was corrupted again -- check disk health.
 - Do not run `pnpm install` without `--force` to fix MODULE_NOT_FOUND -- it will reuse the corrupted store entry and fail again.
 

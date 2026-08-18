@@ -37,8 +37,11 @@ export class BatchController {
   @Get()
   @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "List batches (filter by medicine, status, expiry)" })
-  findAll(@Query() query: unknown) {
-    return this.service.findAll(queryBatchSchema.parse(query));
+  findAll(@Query() query: unknown, @CurrentUser() user: JwtPayload) {
+    const dto = queryBatchSchema.parse(query);
+    // Overwrites any client-supplied branchId: a branch user is pinned to their
+    // own, and only super_admin may leave it undefined to see every branch.
+    return this.service.findAll({ ...dto, branchId: resolveBranchScope(user, dto.branchId) });
   }
 
   @Get("expiring")
@@ -56,22 +59,22 @@ export class BatchController {
   @Get(":id")
   @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Get a single batch" })
-  findOne(@Param("id") id: string) {
-    return this.service.findOne(id);
+  findOne(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
+    return this.service.findOne(id, user);
   }
 
   @Get(":id/movements")
   @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Stock movement history for a batch" })
-  getMovements(@Param("id") id: string) {
-    return this.service.getMovements(id);
+  getMovements(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
+    return this.service.getMovements(id, user);
   }
 
   @Get(":id/barcode-label")
   @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Get printable barcode label data + base64 barcode image for a batch" })
-  getBarcodeLabel(@Param("id") id: string) {
-    return this.service.getBarcodeLabel(id);
+  getBarcodeLabel(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
+    return this.service.getBarcodeLabel(id, user);
   }
 
   @Post()
@@ -89,8 +92,8 @@ export class BatchController {
   @Patch(":id")
   @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Update batch details (batch number, expiry, cost, MRP)" })
-  update(@Param("id") id: string, @Body() body: unknown) {
-    return this.service.update(id, updateBatchSchema.parse(body));
+  update(@Param("id") id: string, @Body() body: unknown, @CurrentUser() user: JwtPayload) {
+    return this.service.update(id, updateBatchSchema.parse(body), user);
   }
 
   @Patch(":id/status")
@@ -104,15 +107,15 @@ export class BatchController {
     return this.service.updateStatus(
       id,
       updateBatchStatusSchema.parse(body),
-      user.sub,
+      user,
     );
   }
 
   @Delete(":id")
   @Roles("admin")
   @ApiOperation({ summary: "Delete a batch (admin only — blocked if stock movements exist)" })
-  remove(@Param("id") id: string) {
-    return this.service.remove(id);
+  remove(@Param("id") id: string, @CurrentUser() user: JwtPayload) {
+    return this.service.remove(id, user);
   }
 
   @Post(":id/otc-supply")
@@ -130,7 +133,7 @@ export class BatchController {
     return this.service.recordOtcSupply(
       id,
       { ...dto, branchId },
-      user.sub,
+      user,
     );
   }
 
@@ -145,23 +148,23 @@ export class BatchController {
     return this.service.adjust(
       id,
       adjustBatchQuantitySchema.parse(body),
-      user.sub,
+      user,
     );
   }
 
   @Post(":id/reserve")
   @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Reserve stock on a batch for an active cart" })
-  reserve(@Param("id") id: string, @Body() body: unknown) {
+  reserve(@Param("id") id: string, @Body() body: unknown, @CurrentUser() user: JwtPayload) {
     const dto = reserveBatchStockSchema.parse(body);
-    return this.service.reserveStock(id, dto.quantity);
+    return this.service.reserveStock(id, dto.quantity, user);
   }
 
   @Post(":id/release")
   @Roles("admin", "shop_manager")
   @ApiOperation({ summary: "Release reserved stock on a batch" })
-  release(@Param("id") id: string, @Body() body: unknown) {
+  release(@Param("id") id: string, @Body() body: unknown, @CurrentUser() user: JwtPayload) {
     const dto = releaseBatchStockSchema.parse(body);
-    return this.service.releaseStock(id, dto.quantity);
+    return this.service.releaseStock(id, dto.quantity, user);
   }
 }
