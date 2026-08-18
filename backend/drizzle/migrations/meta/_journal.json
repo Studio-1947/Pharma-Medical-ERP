@@ -246,6 +246,13 @@
       "when": 1786951906638,
       "tag": "0034_misty_lady_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1787039688506,
+      "tag": "0035_equal_gwen_stacy",
+      "breakpoints": true
     }
   ]
 }

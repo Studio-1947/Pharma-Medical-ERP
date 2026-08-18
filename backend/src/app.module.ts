@@ -26,6 +26,7 @@ import { ClinicModule } from "./modules/clinic/clinic.module";
 import { SettingsModule } from "./modules/settings/settings.module";
 import { S3Module } from "./common/s3/s3.module";
 import { ClickHouseModule } from "./common/clickhouse/clickhouse.module";
+import { SharingModule } from "./modules/sharing/sharing.module";
 import { GlobalExceptionFilter } from "./common/filters/global-exception.filter";
 import { TransformInterceptor } from "./common/interceptors/transform.interceptor";
 
@@ -102,6 +103,7 @@ import { TransformInterceptor } from "./common/interceptors/transform.intercepto
     NotificationsModule,
     ClinicModule,
     SettingsModule,
+    SharingModule,
     S3Module,
     ClickHouseModule,
   ],

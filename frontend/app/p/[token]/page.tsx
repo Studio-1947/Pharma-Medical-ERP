@@ -14,21 +14,20 @@ import { PHARMACY_PRINT_DETAILS, formatTokenNo } from "@pharmerp/types";
 export default function PublicPatientPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
 
-  const isRx = token.startsWith("rx-");
-  const isInv = token.startsWith("inv-");
-  const entityId = token.replace(/^(rx-|inv-)/, "");
-
-  const endpoint = isRx 
-    ? `/prescriptions/public/${entityId}`
-    : `/billing/public/invoices/${entityId}`;
-
+  // One endpoint for both record kinds. The token is an opaque share secret,
+  // not a record id, so the page cannot tell prescription from invoice until
+  // the server says which it is.
   const { data: response, isLoading, error } = useQuery({
     queryKey: ["public-patient-view", token],
-    queryFn: () => apiClient.get(endpoint) as Promise<any>,
-    enabled: !!token && (isRx || isInv),
+    queryFn: () => apiClient.get(`/public/records/${token}`) as Promise<any>,
+    enabled: !!token,
+    // A dead link stays dead; retrying just delays the message.
+    retry: false,
   });
 
   const record = (response as any)?.data?.data ?? (response as any)?.data;
+  const isRx = record?.type === "prescription";
+  const isInv = record?.type === "invoice";
 
   if (isLoading) {
     return (
@@ -51,7 +50,7 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
             <FileText className="w-6 h-6" />
           </div>
           <h2 className="text-base font-bold text-slate-900">Record Not Found</h2>
-          <p className="text-xs text-slate-500">This prescription or invoice link may be invalid or expired.</p>
+          <p className="text-xs text-slate-500">This link has expired, been revoked, or is not valid. Ask the pharmacy for a new one.</p>
         </div>
       </div>
     );
@@ -107,7 +106,7 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Prescription ID</span>
-                <p className="text-sm font-black font-mono text-slate-900">#{record.prescriptionNumber || record.id.slice(0, 8)}</p>
+                <p className="text-sm font-black font-mono text-slate-900">#{record.prescriptionNumber ?? "--"}</p>
               </div>
               <div className="text-right">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Issued Date</span>
@@ -168,6 +167,8 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
             </div>
 
             {/* Prescribed Photo Image */}
+            {/* Scan image is deliberately excluded from the public projection:
+                an uploaded photo can carry far more than this one record. */}
             {record.displayUrl && (
               <div className="space-y-2">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">Prescription Photo Scan</h4>
@@ -185,12 +186,12 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Invoice Number</span>
-                <p className="text-sm font-black font-mono text-slate-900">#{record.invoiceNo || record.id.slice(0, 8)}</p>
+                <p className="text-sm font-black font-mono text-slate-900">#{record.invoiceNo ?? "--"}</p>
               </div>
               <div className="text-right">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Date</span>
                 <p className="text-xs font-semibold text-slate-700">
-                  {record.createdAt ? new Date(record.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "--"}
+                  {record.invoiceDate ?? record.createdAt ? new Date(record.invoiceDate ?? record.createdAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "--"}
                 </p>
               </div>
             </div>
