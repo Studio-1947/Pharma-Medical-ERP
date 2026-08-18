@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { useAuthStore } from "@/stores/auth.store";
 import { apiClient } from "@/lib/api-client";
 import { LogOut, Menu, Search } from "lucide-react";
@@ -66,6 +67,17 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
             <Menu size={18} />
             <span className="hidden xs:inline">Menu</span>
           </button>
+          {/* Below md the breadcrumbs are hidden and the sidebar is a drawer, so
+              the chrome carries no brand at all. The mark fills exactly that gap
+              and disappears once breadcrumbs take the space back. */}
+          <Image
+            src="/logo.svg"
+            alt="Radha Madhav Medical Hall"
+            width={32}
+            height={32}
+            className="md:hidden shrink-0 w-8 h-8 rounded-lg ring-1 ring-slate-200"
+            priority
+          />
           <div className="hidden md:block min-w-0">
             <Breadcrumbs />
           </div>

@@ -233,3 +233,38 @@ To prevent schema drift and database migration mismatch errors (e.g. `Database s
    Deploying the container and letting boot migration run is the preferred path; the proxy route is for inspection and recovery.
 6. **Never rely on `db:push` or ad-hoc `ALTER TABLE` scripts in Production**: Always use versioned migrations in `backend/drizzle/migrations/` so `runMigrations()` and `drizzle-kit` track schema versions accurately.
 
+
+---
+
+## 6. Frontend PWA: Static Asset Retention on Cloud Run
+
+Each deploy ships a fresh image, so the previous build's `/_next/static/*` files
+disappear when the new revision takes over. Any browser still running the old
+build (an open tab, an installed PWA resuming from cache) then requests a chunk
+that no longer exists and fails with `ChunkLoadError`. This is not a service
+worker problem; a plain browser tab breaks the same way.
+
+`frontend/docker-entrypoint.sh` solves this in a host-agnostic way: given any
+directory that outlives the container, it publishes the current build's assets
+into that archive, restores older builds' assets into `.next/static` so the
+Next.js server can serve them, and prunes assets no recent deploy shipped. No
+proxy or volume driver is assumed, so the same image works on Cloud Run and on
+the VPS unchanged.
+
+On Cloud Run, mount a Cloud Storage bucket at the archive path. Volume mounts
+require the second generation execution environment, which Cloud Run selects
+automatically unless configured otherwise:
+
+```bash
+gcloud run deploy pharmerp-frontend \
+  --image REGION-docker.pkg.dev/PROJECT/REPO/frontend:TAG \
+  --add-volume mount-path=/var/www/next-static-root,type=cloud-storage,bucket=BUCKET_NAME,readonly=false \
+  --set-env-vars NEXT_STATIC_RETENTION_DAYS=7
+```
+
+Keep retention short on Cloud Run, since every cold start walks the archive.
+If no volume is mounted the feature is a strict no-op and the service behaves
+exactly as it does today.
+
+Full details, tuning variables and the VPS equivalent are in
+`HOSTINGER_VPS_DEPLOYMENT.md` section 12.

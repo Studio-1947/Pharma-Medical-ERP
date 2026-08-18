@@ -5,6 +5,7 @@ import { apiClient } from "@/lib/api-client";
 import { Modal } from "@/components/ui/modal";
 import { format } from "date-fns";
 import { Receipt, AlertTriangle, Loader2 } from "lucide-react";
+import { formatTokenNo } from "@pharmerp/types";
 
 /**
  * Read-only view of a past invoice: what was dispensed, from which batch, and
@@ -65,6 +66,19 @@ export function InvoiceDetailModal({
         </div>
       ) : (
         <div className="space-y-5">
+          {/* Clinic queue token, above the invoice details so it reads the same
+              way as the printed copy. Absent for walk-in sales. */}
+          {formatTokenNo(inv.tokenNo) && (
+            <div className="flex items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                Token No.
+              </span>
+              <span className="text-lg font-black tracking-widest tabular-nums text-slate-900">
+                {formatTokenNo(inv.tokenNo)}
+              </span>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
             <div>
               <p className="text-[11px] text-muted-foreground">Patient</p>

@@ -1,0 +1,19 @@
+# Files that are executed inside Linux containers or on the VPS must keep LF
+# endings. This repo is authored on Windows with core.autocrlf=true, so without
+# these rules a fresh checkout rewrites them to CRLF and the shell fails with
+# "bad interpreter: /bin/sh^M" -- at container start, not at build time, which
+# makes it a confusing way to break a deploy.
+#
+# Deliberately scoped rather than a blanket `* text=auto`: every one of these
+# files is already LF in both the working tree and the committed blobs, so
+# these rules add protection without renormalizing anything.
+
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.Dockerfile    text eol=lf
+docker-entrypoint.sh text eol=lf
+
+# Config read by Linux services.
+nginx.conf      text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf

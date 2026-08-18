@@ -226,6 +226,25 @@ export class BillingRepository {
     });
   }
 
+  /**
+   * Clinic queue token for a prescription, or null when there is none.
+   *
+   * Invoices carry a prescriptionId but no token of their own, so the queue
+   * number a patient was called by is reached through the prescription. Only
+   * clinic visits have one; a walk-in pharmacy sale legitimately returns null
+   * and the token row is then omitted from the printed document.
+   */
+  async findTokenNoByPrescription(
+    prescriptionId: string | null | undefined,
+  ): Promise<number | null> {
+    if (!prescriptionId) return null;
+    const row = await this.db.query.clinicTokens.findFirst({
+      where: eq(schema.clinicTokens.prescriptionId, prescriptionId),
+      columns: { tokenNo: true },
+    });
+    return row?.tokenNo ?? null;
+  }
+
   async voidInvoice(id: string) {
     const [inv] = await this.db.update(schema.salesInvoices).set({ status: "cancelled", updatedAt: new Date() }).where(eq(schema.salesInvoices.id, id)).returning();
     return inv!;

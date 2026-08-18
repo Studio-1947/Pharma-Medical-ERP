@@ -1,7 +1,7 @@
 {
-  "name": "PharmERP — Medical Pharmacy ERP",
-  "short_name": "PharmERP",
-  "description": "Multi-branch Pharmacy ERP with POS Billing, Schedule H Compliance, and Batch Inventory Management",
+  "name": "Radha Madhav Medical Hall",
+  "short_name": "Radha Madhav",
+  "description": "Pharmacy management for Radha Madhav Medical Hall: POS billing, Schedule H compliance and batch inventory.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -13,7 +13,13 @@
       "src": "/logo.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/logo-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
     }
   ],
   "categories": ["medical", "business", "productivity"]

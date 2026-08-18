@@ -1,6 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Image from "next/image";
+import { PHARMACY_PRINT_DETAILS, formatTokenNo } from "@pharmerp/types";
+import { buildReceiptHeaderHtml, RECEIPT_HEADER_STYLES } from "@/lib/receipt-header";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera, ShieldAlert, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, LayoutGrid, Table, Percent, Edit3, SlidersHorizontal, CheckCircle2 } from "lucide-react";
@@ -293,11 +296,14 @@ export function PosTerminal({
   .text-right { text-align:right; }
   .text-center { text-align:center; }
   .text-green { color:#16a34a; }
+  ${RECEIPT_HEADER_STYLES}
 </style>
 </head><body>
-  <h1>Radha Madhav Medical Hall</h1>
-  <p class="subtitle">Tax Invoice / Bill of Supply</p>
-  <hr class="divider-solid"/>
+${buildReceiptHeaderHtml({
+    tokenNo: lastInvoice.tokenNo,
+    origin: window.location.origin,
+    subtitle: "Tax Invoice / Bill of Supply",
+  })}  <hr class="divider-solid"/>
 
   <div class="meta">
     <div>
@@ -363,7 +369,27 @@ export function PosTerminal({
 </body></html>`);
     w.document.close();
     w.focus();
-    setTimeout(() => { w.print(); w.close(); }, 300);
+
+    // Print once the letterhead has actually loaded. The previous fixed delay
+    // could fire first and print an invoice with a missing logo. The timeout is
+    // kept as a hard cap so a slow or failed image can never leave the counter
+    // staring at a print dialog that never opens.
+    let printed = false;
+    const fire = () => {
+      if (printed) return;
+      printed = true;
+      w.print();
+      w.close();
+    };
+
+    const logo = w.document.getElementById("brand-logo") as HTMLImageElement | null;
+    if (logo && !logo.complete) {
+      logo.addEventListener("load", fire, { once: true });
+      logo.addEventListener("error", fire, { once: true });
+      setTimeout(fire, 2000);
+    } else {
+      setTimeout(fire, 300);
+    }
   };
 
   // ── Patient lookup ──────────────────────────────────────────────────────────
@@ -969,7 +995,15 @@ export function PosTerminal({
   }
 
   return (
-    <div className="flex flex-col gap-3 lg:h-[calc(100vh-7.5rem)]">
+    <div
+      className="flex flex-col gap-3 lg:h-[calc(100vh-7.5rem)]"
+      // Suppresses the background auto-reload used to apply a new app version
+      // while a sale is in progress. PwaRegister looks for this attribute; the
+      // user still gets the explicit "Update" prompt.
+      data-pharmerp-unsaved={
+        items.length > 0 || consultationFee ? "pos-cart" : undefined
+      }
+    >
       {/* Top bar & quick hotkeys */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 bg-slate-900 text-white p-3 rounded-2xl shadow-md border border-slate-800">
         <div className="flex items-center gap-3">
@@ -2101,9 +2135,40 @@ export function PosTerminal({
             {/* Scrollable receipt body */}
             <div id="invoice-print-area" className="overflow-y-auto flex-1 px-6 py-5 space-y-4 print:overflow-visible print:p-6">
 
-              {/* Store header */}
-              <div className="text-center space-y-0.5">
-                <h2 className="text-lg font-black tracking-tight text-gray-900 uppercase">Radha Madhav Medical Hall</h2>
+              {/* Queue token, above everything else so the patient can match the
+                  bill to the number they were called by. Clinic visits only. */}
+              {formatTokenNo(lastInvoice.tokenNo) && (
+                <div className="text-center">
+                  <div className="inline-block rounded-lg border-2 border-gray-900 px-4 py-1.5">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-gray-500">
+                      Token No.
+                    </p>
+                    <p className="text-2xl font-black tracking-[0.2em] text-gray-900 leading-tight">
+                      {formatTokenNo(lastInvoice.tokenNo)}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Store header. The lockup carries the trading name, so the legal
+                  name is printed as text beneath it alongside the address. */}
+              <div className="text-center space-y-1">
+                <Image
+                  src="/logo-full.svg"
+                  alt={PHARMACY_PRINT_DETAILS.legalName}
+                  width={129}
+                  height={68}
+                  className="mx-auto h-12 w-auto"
+                  priority
+                />
+                <h2 className="text-base font-extrabold tracking-tight text-gray-900">
+                  {PHARMACY_PRINT_DETAILS.legalName}
+                </h2>
+                <p className="text-[11px] leading-snug text-gray-500">
+                  {PHARMACY_PRINT_DETAILS.addressLine}
+                  <br />
+                  Ph: {PHARMACY_PRINT_DETAILS.phone}
+                </p>
                 <p className="text-xs text-gray-500">Tax Invoice / Bill of Supply</p>
               </div>
 

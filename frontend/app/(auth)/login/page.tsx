@@ -110,7 +110,19 @@ export default function LoginPage() {
           <div className="glass-panel bg-white/90 backdrop-blur-xl border border-slate-200/90 shadow-glass-lg rounded-3xl p-8 sm:p-10 animate-in fade-in zoom-in-95 duration-300">
             {/* Logo header */}
             <div className="flex flex-col items-center text-center mb-8">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 p-0.5 shadow-md shadow-emerald-600/20 mb-4 flex items-center justify-center">
+              {/* The brand panel beside this card is hidden below lg, so on
+                  phones this is the only branding on the screen. It carries the
+                  full lockup there and falls back to the mark alone on desktop,
+                  where the panel already states the name. */}
+              <Image
+                src="/logo-full.svg"
+                alt="Radha Madhav Medical Hall"
+                width={129}
+                height={68}
+                className="lg:hidden h-16 w-auto max-w-[80%] mb-5"
+                priority
+              />
+              <div className="hidden lg:flex w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 p-0.5 shadow-md shadow-emerald-600/20 mb-4 items-center justify-center">
                 <Image
                   src="/logo.svg"
                   alt="Radha Madhav Medical Hall"

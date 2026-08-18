@@ -13,6 +13,8 @@ describe("BillingService (Compliance)", () => {
   beforeEach(() => {
     mockRepo = {
       nextInvoiceNumber: vi.fn().mockResolvedValue("INV-001"),
+      // Walk-in by default: no clinic token, so the printed token row is omitted.
+      findTokenNoByPrescription: vi.fn().mockResolvedValue(null),
       createInvoiceWithItems: vi.fn().mockResolvedValue({ invoice: { id: "inv-1" }, items: [] }),
       findById: vi.fn(),
     };
@@ -227,6 +229,47 @@ describe("BillingService (Compliance)", () => {
       });
 
       await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(UnprocessableEntityException);
+    });
+  });
+
+  // ── Queue token on the invoice detail ───────────────────────────────────
+  describe("Clinic queue token (findOne)", () => {
+    it("attaches the token so a reprint matches the original receipt", async () => {
+      mockRepo.findById.mockResolvedValue({
+        id: "inv-1",
+        invoiceNo: "INV-001",
+        prescriptionId: "rx-1",
+        status: "paid",
+      });
+      mockRepo.findTokenNoByPrescription.mockResolvedValue(7);
+
+      const res = await service.findOne("inv-1");
+
+      expect((res.data as any).tokenNo).toBe(7);
+      // Resolved from the prescription, since invoices carry no token column.
+      expect(mockRepo.findTokenNoByPrescription).toHaveBeenCalledWith("rx-1");
+    });
+
+    it("attaches null for a walk-in invoice so the row is omitted", async () => {
+      mockRepo.findById.mockResolvedValue({
+        id: "inv-2",
+        invoiceNo: "INV-002",
+        prescriptionId: null,
+        status: "paid",
+      });
+      mockRepo.findTokenNoByPrescription.mockResolvedValue(null);
+
+      const res = await service.findOne("inv-2");
+
+      expect((res.data as any).tokenNo).toBeNull();
+    });
+
+    it("preserves the existing not-found behaviour", async () => {
+      mockRepo.findById.mockResolvedValue(undefined);
+
+      await expect(service.findOne("missing")).rejects.toThrow(NotFoundException);
+      // The token lookup must not run for an invoice that does not exist.
+      expect(mockRepo.findTokenNoByPrescription).not.toHaveBeenCalled();
     });
   });
 

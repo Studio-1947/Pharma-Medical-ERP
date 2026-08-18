@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 import { S3Service } from "../../common/s3/s3.service";
+import { PHARMACY_PRINT_DETAILS, formatTokenNo } from "@pharmerp/types";
 
 const BLUE = "#1d4ed8";
 const GRAY = "#64748b";
@@ -52,7 +53,19 @@ export class InvoicePdfService {
       ? await db.select().from(schema.branches).where(eq(schema.branches.id, invoice.branchId))
       : [];
 
-    const pdfBuffer = await this.buildPdf(invoice, branch ?? null);
+    // Clinic queue token, printed above the invoice so the patient can match
+    // the bill to the number they were called by. Null for walk-in sales.
+    const token = invoice.prescriptionId
+      ? await db.query.clinicTokens.findFirst({
+          where: eq(schema.clinicTokens.prescriptionId, invoice.prescriptionId),
+          columns: { tokenNo: true },
+        })
+      : null;
+
+    const pdfBuffer = await this.buildPdf(
+      { ...invoice, tokenNo: token?.tokenNo ?? null },
+      branch ?? null,
+    );
     const key = `invoices/${invoice.invoiceNo}-${Date.now()}.pdf`;
 
     await this.s3.upload(pdfBuffer, key, "application/pdf");
@@ -74,7 +87,7 @@ export class InvoicePdfService {
         bufferPages: true,
         info: {
           Title: `Tax Invoice ${invoice.invoiceNo}`,
-          Author: branch?.name ?? "PharmERP",
+          Author: PHARMACY_PRINT_DETAILS.legalName,
         },
       });
 
@@ -90,12 +103,20 @@ export class InvoicePdfService {
       const drawHeader = (headerY: number) => {
         doc.rect(ML, headerY, PW, 65).fill(BLUE);
         doc.fillColor("white").fontSize(18).font("Helvetica-Bold")
-          .text(branch?.name ?? "PharmERP", ML + 12, headerY + 14, { width: PW * 0.55, lineBreak: false });
+          .text(PHARMACY_PRINT_DETAILS.legalName, ML + 12, headerY + 14, { width: PW * 0.55, lineBreak: false });
         doc.fontSize(8).font("Helvetica")
-          .text(branch?.address ?? "", ML + 12, headerY + 34, { width: PW * 0.55, lineBreak: false })
-          .text([branch?.phone, branch?.email].filter(Boolean).join("  |  "), ML + 12, headerY + 44, { width: PW * 0.55, lineBreak: false });
+          .text(PHARMACY_PRINT_DETAILS.addressLine, ML + 12, headerY + 34, { width: PW * 0.55, lineBreak: false })
+          .text(`Ph: ${PHARMACY_PRINT_DETAILS.phone}`, ML + 12, headerY + 44, { width: PW * 0.55, lineBreak: false });
         doc.fontSize(16).font("Helvetica-Bold").fillColor("white")
           .text("TAX INVOICE", ML + PW * 0.58, headerY + 14, { width: PW * 0.42, align: "right", lineBreak: false });
+
+        // Queue token, right-aligned under the document title. Omitted entirely
+        // when absent so a walk-in bill keeps the original header spacing.
+        const tokenLabel = formatTokenNo(invoice.tokenNo);
+        if (tokenLabel) {
+          doc.fontSize(11).font("Helvetica-Bold").fillColor("white")
+            .text(`TOKEN NO. ${tokenLabel}`, ML + PW * 0.58, headerY + 38, { width: PW * 0.42, align: "right", lineBreak: false });
+        }
         doc.fillColor(BLACK);
       };
 

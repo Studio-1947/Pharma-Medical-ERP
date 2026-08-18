@@ -12,6 +12,10 @@ services:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - ./certbot/conf:/etc/letsencrypt:ro
       - ./certbot/www:/var/www/certbot:ro
+      # Hashed Next.js assets retained across deploys. Read-only here: the
+      # frontend container is the only writer. nginx serves these directly and
+      # falls back to proxying the frontend when a file is absent.
+      - next_static_archive:/var/www/next-static-root:ro
     depends_on:
       - backend
       - frontend
@@ -64,6 +68,13 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: /api/v1
+      # Days an asset is kept after the last deploy that shipped it. Sets how
+      # long a client running an old build can still resolve its chunks.
+      NEXT_STATIC_RETENTION_DAYS: "30"
+    volumes:
+      # Written by the container entrypoint on every boot; see
+      # frontend/docker-entrypoint.sh.
+      - next_static_archive:/var/www/next-static-root
     depends_on:
       - backend
     networks:
@@ -211,3 +222,7 @@ volumes:
   redis_prod_data:
   clickhouse_prod_data:
   minio_prod_data:
+  # Accumulates hashed /_next/static output across deploys. Safe to delete: it
+  # rebuilds itself on the next container start, costing only the ability of
+  # already-open older clients to resolve their chunks until they reload.
+  next_static_archive:
