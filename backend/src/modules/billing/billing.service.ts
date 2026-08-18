@@ -14,6 +14,10 @@ import { AuditService } from "../../common/audit/audit.service";
 import { AuditAction } from "../../common/audit/audit-actions";
 import { NotificationsService } from "../notifications/notifications.service";
 import {
+  RETURNABLE_INVOICE_STATUSES,
+  isReturnableStatus,
+} from "../../common/utils/invoice-status";
+import {
   addToBucket,
   bucketBreakdown,
   daysPastDue,
@@ -58,6 +62,16 @@ interface RawAllocation {
   allocation: BatchAllocation;
 }
 
+/**
+ * Postgres 23505 — unique_violation. Reached when two replays of the same
+ * offline sale race past the clientRef lookup and the index settles it.
+ */
+function isUniqueViolation(err: unknown): boolean {
+  const code = (err as { code?: string; cause?: { code?: string } })?.code
+    ?? (err as { cause?: { code?: string } })?.cause?.code;
+  return code === "23505";
+}
+
 interface AllocationLine extends BatchAllocation {
   item: InvoiceItemDto;
   med: MedicineSnapshot;
@@ -100,6 +114,46 @@ export class BillingService {
    * GST split, and split payments.
    */
   async create(dto: CreateInvoiceDto, staffId: string, branchId: string) {
+    // A replayed checkout must not become a second sale. The offline queue
+    // marks a row synced only once the POST resolves, so a response lost after
+    // the server committed — dropped connection, timeout, tab closed — sent the
+    // identical payload again on the next reconnect, billing the patient twice,
+    // deducting the stock twice and accruing the points twice.
+    if (dto.clientRef) {
+      const already = await this.repo.findByClientRef(dto.clientRef);
+      if (already) return this.buildCreateResponse(already);
+    }
+
+    let result;
+    try {
+      result = await this.createInTransaction(dto, staffId, branchId);
+    } catch (err) {
+      // Two replays can pass the check above at the same moment; the unique
+      // index is what actually decides. Losing that race is success, not an
+      // error — the sale is recorded, just not by this request.
+      if (dto.clientRef && isUniqueViolation(err)) {
+        const winner = await this.repo.findByClientRef(dto.clientRef);
+        if (winner) return this.buildCreateResponse(winner);
+      }
+      throw err;
+    }
+
+    return result;
+  }
+
+  /** Re-serves an invoice that a previous, duplicate attempt already wrote. */
+  private async buildCreateResponse(invoice: any) {
+    const tokenNo = await this.repo.findTokenNoByPrescription(invoice.prescriptionId);
+    return {
+      invoice: { ...invoice, tokenNo },
+      items: invoice.items ?? [],
+      // Lets the POS tell "your sale is recorded" apart from "a new sale was
+      // just made", which matters when reprinting after a flaky connection.
+      deduplicated: true,
+    };
+  }
+
+  private async createInTransaction(dto: CreateInvoiceDto, staffId: string, branchId: string) {
     const result = await this.drizzle.db.transaction(async (tx) => {
       const interState = false;
 
@@ -175,7 +229,9 @@ export class BillingService {
       for (const item of dto.items) {
         const med = medicines.find(m => m.id === item.medicineId);
         if (!med || !med.isActive) {
-          throw new NotFoundException(`Medicine ${item.medicineId} not found or inactive`);
+          throw new NotFoundException(
+            "One of the items on this bill is no longer available — it may have been removed or deactivated. Clear the bill and add it again.",
+          );
         }
 
         const isControlled = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"].includes(med.scheduleClass ?? "") || med.requiresPrescription;
@@ -214,7 +270,13 @@ export class BillingService {
       // one query per item.
       const allAllocations: RawAllocation[] = [];
       const batchAllocationsPerItem = await this.batchRepo.selectBatchesForDispenseMulti(
-        dto.items.map(item => ({ medicineId: item.medicineId, needed: item.quantity })),
+        dto.items.map(item => ({
+          medicineId: item.medicineId,
+          needed: item.quantity,
+          // So an out-of-stock failure can name the product on the counter
+          // screen rather than printing its id.
+          medicineName: medicines.find(m => m.id === item.medicineId)?.name,
+        })),
         // Only this branch's shelves are sellable from this till.
         branchId,
         tx,
@@ -228,6 +290,8 @@ export class BillingService {
 
       // 3. Compute Totals & Validate Payment Sum
       const lines: AllocationLine[] = allAllocations.map(({ item, med, allocation }) => {
+        // Pre-tax unit price, despite the column name — see the note on
+        // TaxService.calculateLineTax. GST is added on top, deliberately.
         const unitMrp = parseFloat(allocation.mrpAtEntry) / (med.stripSize || 1);
         const { lineTotal, taxAmount, breakdown } = this.taxService.calculateLineTax(
           unitMrp,
@@ -254,7 +318,10 @@ export class BillingService {
       // zero tax and never touches inventory or FEFO allocation.
       const feeAmount = dto.consultationFee ? new Decimal(dto.consultationFee.amount) : new Decimal(0);
       const subtotalWithFee = new Decimal(subtotal).plus(feeAmount).toNumber();
+      // Pre-discount total. Kept for reference only — the charged total is
+      // computed from the discounted lines further down.
       const totalWithFee = new Decimal(totalAmount).plus(feeAmount).toNumber();
+      void totalWithFee;
 
       // Loyalty point redemption: 100 points = ₹10 discount
       const pointsToRedeem = dto.loyaltyPointsToRedeem ?? 0;
@@ -271,8 +338,53 @@ export class BillingService {
         await this.patientsRepo.deductLoyaltyPoints(dto.patientId, pointsToRedeem, tx);
       }
 
-      const discountAmount = new Decimal(dto.discountAmount ?? "0").plus(loyaltyDiscount);
-      const finalTotal = new Decimal(totalWithFee).minus(discountAmount).toNumber();
+      // A price reduction agreed at the time of supply. GST is charged on what
+      // the patient actually pays, so this has to come off the taxable value
+      // BEFORE the tax is worked out. It previously came off the total after
+      // the tax had already been computed, which charged GST on money never
+      // collected and overstated the liability on every discounted sale.
+      const manualDiscount = new Decimal(dto.discountAmount ?? "0");
+
+      if (manualDiscount.greaterThan(0)) {
+        const adjusted = this.taxService.apportionDiscountAcrossLines(
+          lines.map((l) => ({
+            taxableAmount: l.taxableAmount,
+            taxPct: parseFloat(l.med.taxPercent),
+          })),
+          manualDiscount.toNumber(),
+          interState,
+        );
+        adjusted.forEach((a, i) => {
+          const line = lines[i]!;
+          line.taxableAmount = a.taxableAmount;
+          line.taxAmount = a.taxAmount;
+          line.lineTotal = a.lineTotal;
+          line.breakdown = a.breakdown;
+        });
+      }
+
+      // Redeemed loyalty points are deliberately NOT apportioned. They are
+      // consideration the patient hands over, not a reduction in the price of
+      // the goods, so the taxable value is unchanged and only the cash due
+      // falls. Treating them as a price reduction would also put the server's
+      // total below what the POS quoted, and the over-payment guard below would
+      // then reject every checkout that redeemed points.
+      const discountAmount = manualDiscount.plus(loyaltyDiscount);
+
+      // Recomputed from the adjusted lines so the stored tax, and the per-line
+      // CGST/SGST that GSTR-1 is built from, agree with each other.
+      const discountedTax = lines
+        .reduce((sum, l) => sum.plus(l.taxAmount), new Decimal(0))
+        .toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+
+      // subtotal − discount + tax, holding the same identity the printed bill
+      // shows. With no manual discount this is exactly the old total, so the
+      // amount the POS quoted still matches.
+      const finalTotal = new Decimal(subtotalWithFee)
+        .minus(discountAmount)
+        .plus(discountedTax)
+        .toDecimalPlaces(2, Decimal.ROUND_HALF_UP)
+        .toNumber();
 
       if (finalTotal < 0) {
         throw new UnprocessableEntityException("Discount exceeds invoice total");
@@ -319,9 +431,10 @@ export class BillingService {
         quantity: number;
         performedBy: string;
         referenceType: string;
+        referenceId?: string;
       }[] = [];
 
-      for (const { allocation, item } of allAllocations) {
+      for (const { allocation, item, med } of allAllocations) {
         const [deducted] = await tx
           .update(schema.inventoryBatches)
           .set({
@@ -338,7 +451,7 @@ export class BillingService {
 
         if (!deducted) {
           throw new UnprocessableEntityException(
-            `Concurrent depletion: batch ${allocation.batchNo} for ${item.medicineId} no longer has sufficient units`
+            `${med.name} was sold at another till while this bill was open, so batch ${allocation.batchNo} no longer has enough units. Check the stock and try again.`
           );
         }
 
@@ -353,7 +466,12 @@ export class BillingService {
         });
       }
 
-      await this.movementRepo.logMany(movementRows, tx);
+      // Written after the invoice below, not here: a sale movement recorded
+      // referenceType "invoice" with a null referenceId, so the ledger said a
+      // sale had happened without saying which sale. Void and return had always
+      // stamped theirs. That is the link a recall, a billing dispute or a
+      // Schedule H trace follows — "which invoice took this batch off the
+      // shelf" was unanswerable from the movement alone.
 
       // 4.5 Update Prescription Dispensed Quantities — reuses the map
       // fetched once above instead of re-querying per item. The map is
@@ -381,7 +499,20 @@ export class BillingService {
       }
 
       // 5. Insert Invoice, Items, and Payments
-      const invoiceNo = await this.repo.nextInvoiceNumber(branchId);
+      // Allocated after the stock work, never before it. The sequence row is the
+      // only thing that serialises checkouts within a branch, so it is held for
+      // the shortest possible slice of the transaction; and taking it after the
+      // batch locks (FEFO selects FOR UPDATE) fixes one global lock order —
+      // batches, then sequence — which is what stops a concurrent sale and
+      // return from deadlocking against each other. createReturn() follows the
+      // same order for the same reason.
+      const invoiceNo = await this.repo.nextInvoiceNumber(branchId, tx);
+
+      // Computed here rather than at the accrual step below so the figure can
+      // be stored on the invoice. A void has to give back exactly what the sale
+      // took and gave, and neither number is recoverable from the row otherwise.
+      const pointsEarned =
+        dto.patientId && finalTotal > 0 ? Math.floor(finalTotal / 100) : 0;
 
       const invoiceData: typeof schema.salesInvoices.$inferInsert = {
         invoiceNo,
@@ -391,14 +522,17 @@ export class BillingService {
         prescriptionId: dto.prescriptionId,
         subtotal: subtotalWithFee.toFixed(2),
         discountAmount: discountAmount.toFixed(2),
-        taxAmount: taxAmount.toFixed(2),
+        taxAmount: discountedTax.toFixed(2),
         totalAmount: finalTotalDec.toFixed(2),
         amountPaid: paymentTotalDec.toFixed(2),
         amountDue: amountDueDec.toFixed(2),
         paymentMode: dto.payments.length > 1 ? "mixed" : dto.payments[0]!.mode as any,
         status: invoiceStatus,
+        loyaltyPointsEarned: pointsEarned,
+        loyaltyPointsRedeemed: pointsToRedeem,
         notes: dto.notes,
         isOfflineSync: dto.isOfflineSync ?? false,
+        clientRef: dto.clientRef,
         isReturn: false,
         overrideReason: dto.overrideReason,
         overriddenBy: dto.overriddenBy,
@@ -438,6 +572,13 @@ export class BillingService {
 
       const { invoice, items: insertedItems } = await this.repo.createInvoiceWithItems(invoiceData, itemsData, tx);
 
+      // Same transaction as the batch deductions above, so the ledger and the
+      // stock can never disagree about whether the sale happened.
+      await this.movementRepo.logMany(
+        movementRows.map((row) => ({ ...row, referenceId: invoice.id })),
+        tx,
+      );
+
       // Insert multiple payment rows
       for (const p of dto.payments) {
         await tx.insert(schema.payments).values({
@@ -450,11 +591,8 @@ export class BillingService {
       }
 
       // 6. Accrue loyalty points (1 point per ₹100 of final total, rounded down)
-      if (dto.patientId && finalTotal > 0) {
-        const pointsEarned = Math.floor(finalTotal / 100);
-        if (pointsEarned > 0) {
-          await this.patientsRepo.addLoyaltyPoints(dto.patientId, pointsEarned, tx);
-        }
+      if (dto.patientId && pointsEarned > 0) {
+        await this.patientsRepo.addLoyaltyPoints(dto.patientId, pointsEarned, tx);
       }
 
       // 7. Add the un-paid balance to the patient's dues so the counter can
@@ -525,6 +663,98 @@ export class BillingService {
     };
   }
 
+  /**
+   * Undoes everything a sale did apart from moving stock.
+   *
+   * create() writes four things beyond the batch quantities: it accrues loyalty
+   * points, spends redeemed ones, books any unpaid balance to the patient, and
+   * marks prescription lines as dispensed. The void path reversed none of them,
+   * so a cancelled sale left the patient holding points they had not earned,
+   * short of points they had spent, owing money for goods they never kept, and
+   * — worst of the four — with a prescription reading as fully dispensed, which
+   * the Schedule H gate then refuses to dispense against a second time.
+   *
+   * Runs inside the caller's transaction, after the conditional status update
+   * has claimed the void, so a concurrent second void cannot double-reverse.
+   */
+  private async reverseNonStockEffects(
+    invoice: {
+      patientId?: string | null;
+      prescriptionId?: string | null;
+      amountDue?: string | null;
+      loyaltyPointsEarned?: number | null;
+      loyaltyPointsRedeemed?: number | null;
+      items?: Array<{ medicineId?: string | null; quantity: number }>;
+    },
+    tx: any,
+  ) {
+    if (invoice.patientId) {
+      // Take back what the sale awarded. Zero on invoices written before the
+      // column existed, which reverse nothing rather than guess.
+      const earned = invoice.loyaltyPointsEarned ?? 0;
+      if (earned > 0) {
+        // Clawback, not a strict deduction: if the patient already spent these
+        // points, refusing here would abort the void and leave the sale standing.
+        await this.patientsRepo.clawBackLoyaltyPoints(invoice.patientId, earned, tx);
+      }
+
+      // Give back what the patient spent on a sale that no longer stands.
+      const redeemed = invoice.loyaltyPointsRedeemed ?? 0;
+      if (redeemed > 0) {
+        await this.patientsRepo.addLoyaltyPoints(invoice.patientId, redeemed, tx);
+      }
+
+      // A voided credit sale is not a debt.
+      const due = new Decimal(invoice.amountDue ?? "0");
+      if (due.greaterThan(0)) {
+        await this.patientsRepo.deductOutstanding(
+          invoice.patientId,
+          due.toFixed(2),
+          tx,
+        );
+      }
+    }
+
+    if (!invoice.prescriptionId) return;
+
+    // Hand the prescribed quantities back. Two cart lines can name the same
+    // medicine, so the deltas are summed before being applied — subtracting
+    // per line would leave the second line's quantity standing.
+    const dispensedByMedicine = new Map<string, number>();
+    for (const item of invoice.items ?? []) {
+      if (!item.medicineId) continue;
+      dispensedByMedicine.set(
+        item.medicineId,
+        (dispensedByMedicine.get(item.medicineId) ?? 0) + item.quantity,
+      );
+    }
+    if (dispensedByMedicine.size === 0) return;
+
+    for (const [medicineId, quantity] of dispensedByMedicine) {
+      await tx
+        .update(schema.prescriptionItems)
+        .set({
+          // GREATEST guards the case where the line was also dispensed on
+          // another invoice: never drive the counter below zero.
+          quantityDispensed: sql`GREATEST(${schema.prescriptionItems.quantityDispensed} - ${quantity}, 0)`,
+          // Recomputed rather than forced to false: another invoice may have
+          // dispensed the rest of this line, and blanking the flag would reopen
+          // a prescription that is genuinely spent.
+          isFullyDispensed: sql`(
+            ${schema.prescriptionItems.quantityPrescribed} IS NOT NULL
+            AND GREATEST(${schema.prescriptionItems.quantityDispensed} - ${quantity}, 0)
+                >= ${schema.prescriptionItems.quantityPrescribed}
+          )`,
+        })
+        .where(
+          and(
+            eq(schema.prescriptionItems.prescriptionId, invoice.prescriptionId),
+            eq(schema.prescriptionItems.medicineId, medicineId),
+          ),
+        );
+    }
+  }
+
   async voidInvoice(id: string, dto: VoidInvoiceDto, userId: string) {
     const existing = await this.findOne(id);
     // Return stock inside transaction — use a conditional status update as
@@ -565,6 +795,12 @@ export class BillingService {
           notes: dto.reason,
         }, tx);
       }
+
+      // Everything below used to survive a void, because only the stock was
+      // being put back. A voided sale that still awards points, still bills the
+      // patient and still counts against their prescription is not voided in
+      // any sense the counter would recognise.
+      await this.reverseNonStockEffects(existing.data, tx);
     });
 
     await this.audit?.writeSafe({
@@ -583,8 +819,16 @@ export class BillingService {
     // Load original invoice with items and payments
     const original = await this.repo.findById(originalInvoiceId);
     if (!original) throw new NotFoundException(`Invoice ${originalInvoiceId} not found`);
-    if (original.status !== "confirmed") {
-      throw new UnprocessableEntityException("Only confirmed invoices can be returned");
+    // Previously gated on status === "confirmed", which no sale has carried
+    // since the checkout rewrite — create() writes "paid" or "partially_paid"
+    // and recordPayment() moves a settled credit sale to "paid". The gate
+    // therefore rejected every invoice the POS could produce, so returns were
+    // unreachable in practice. "confirmed" stays in the list for historic rows.
+    if (!isReturnableStatus(original.status)) {
+      throw new UnprocessableEntityException(
+        `Invoice ${original.invoiceNo} cannot be returned — status is "${original.status}". ` +
+          `Returns are accepted on: ${RETURNABLE_INVOICE_STATUSES.join(", ")}.`,
+      );
     }
 
     // Get already-returned quantities (keyed by "medicineId:batchId")
@@ -627,7 +871,15 @@ export class BillingService {
 
     const returnTotal = returnLineData.reduce((sum, l) => sum + l.lineTotal, 0);
 
-    const returnInvoiceNo = await this.repo.nextInvoiceNumber(original.branchId);
+    // Split the credit between "cancel what they still owe" and "hand money
+    // back". Now that credit sales are returnable, paying out the full line
+    // value in cash would refund money the patient never paid and leave the
+    // original invoice's due standing — the patient would be paid for goods
+    // they returned and still be billed for them.
+    const creditValue = new Decimal(returnTotal).abs();
+    const originalDue = new Decimal(original.amountDue ?? "0");
+    const creditAgainstDue = Decimal.min(creditValue, originalDue);
+    const cashRefund = creditValue.minus(creditAgainstDue);
 
     // Determine refund payment mode from original invoice
     const refundMode = original.payments?.[0]?.mode ?? "cash";
@@ -659,6 +911,21 @@ export class BillingService {
         }, tx);
       }
 
+      // Allocated here, not at the top of the transaction, for two reasons.
+      //
+      // Lock ORDER: create() takes the batch locks first (FEFO selects FOR
+      // UPDATE) and the sequence row second. A return that took them the other
+      // way round would deadlock against a concurrent sale on the same branch —
+      // each holding what the other is waiting for — and Postgres would kill
+      // one of them mid-checkout. Every write path now takes batches, then the
+      // sequence, in that order.
+      //
+      // Lock DURATION: the sequence row is the one thing that serialises
+      // checkouts within a branch, so it is held for as little of the
+      // transaction as possible — everything slow (restocking, movement logs)
+      // has already finished by this point.
+      const returnInvoiceNo = await this.repo.nextInvoiceNumber(original.branchId, tx);
+
       // Create return invoice
       const returnInvoiceData: typeof schema.salesInvoices.$inferInsert = {
         invoiceNo: returnInvoiceNo,
@@ -672,7 +939,10 @@ export class BillingService {
         discountAmount: "0.00",
         taxAmount: returnLineData.reduce((s, l) => s + l.cgstAmt + l.sgstAmt + l.igstAmt, 0).toFixed(2),
         totalAmount: returnTotal.toFixed(2),
-        amountPaid: returnTotal.toFixed(2),
+        // What actually went back across the counter. On a fully-settled
+        // invoice this equals totalAmount; on a credit sale the rest of the
+        // credit is applied to the original's due below instead of paid out.
+        amountPaid: cashRefund.negated().toFixed(2),
         amountDue: "0.00",
         paymentMode: refundMode as any,
         status: "confirmed",
@@ -698,15 +968,56 @@ export class BillingService {
       const { invoice: returnInvoice, items: returnInsertedItems } =
         await this.repo.createInvoiceWithItems(returnInvoiceData, returnItems, tx);
 
-      // Refund payment row (negative amount)
-      await tx.insert(schema.payments).values({
-        invoiceId: returnInvoice.id,
-        amount: returnTotal.toFixed(2),   // negative string e.g. "-150.00"
-        mode: refundMode as any,
-        processedBy: staffId,
-      });
+      // Refund payment row (negative amount). Only for money that genuinely
+      // left the till — a return that merely cancels an unpaid balance moves no
+      // cash, and a zero-value payment row would misreport the day's takings.
+      if (cashRefund.greaterThan(0)) {
+        await tx.insert(schema.payments).values({
+          invoiceId: returnInvoice.id,
+          amount: cashRefund.negated().toFixed(2),   // negative string e.g. "-150.00"
+          mode: refundMode as any,
+          processedBy: staffId,
+        });
+      }
 
-      return { data: { invoice: returnInvoice, items: returnInsertedItems }, message: "Return processed" };
+      // Write down the original invoice's outstanding balance by the part of
+      // the credit that was not refunded in cash, and mirror it on the
+      // patient's account so the two cannot drift.
+      if (creditAgainstDue.greaterThan(0)) {
+        const remainingDue = originalDue.minus(creditAgainstDue);
+        await tx
+          .update(schema.salesInvoices)
+          .set({
+            amountDue: remainingDue.toFixed(2),
+            // A credit sale whose balance is fully cancelled by a return is
+            // settled, not still awaiting payment.
+            ...(remainingDue.equals(0) && original.status === "partially_paid"
+              ? { status: "paid" as const }
+              : {}),
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.salesInvoices.id, originalInvoiceId));
+
+        if (original.patientId) {
+          await this.patientsRepo.deductOutstanding(
+            original.patientId,
+            creditAgainstDue.toFixed(2),
+            tx,
+          );
+        }
+      }
+
+      return {
+        data: {
+          invoice: returnInvoice,
+          items: returnInsertedItems,
+          creditAgainstDue: creditAgainstDue.toFixed(2),
+          cashRefund: cashRefund.toFixed(2),
+        },
+        message: cashRefund.greaterThan(0)
+          ? `Return processed — ₹${cashRefund.toFixed(2)} refunded`
+          : `Return processed — ₹${creditAgainstDue.toFixed(2)} written off against the outstanding balance`,
+      };
     });
   }
 

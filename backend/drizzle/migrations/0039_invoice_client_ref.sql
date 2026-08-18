@@ -1,0 +1,2 @@
+ALTER TABLE "sales_invoices" ADD COLUMN "client_ref" varchar(64);--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "invoices_client_ref_uniq" ON "sales_invoices" USING btree ("client_ref") WHERE "sales_invoices"."client_ref" IS NOT NULL;

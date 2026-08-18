@@ -28,6 +28,13 @@ describe("BatchService.recordOtcSupply", () => {
     return { service, batchRepo, movementRepo };
   }
 
+  /** Shop manager at the batch's own branch — passes the ownership guard. */
+  const counterStaff = {
+    sub: "user-1",
+    role: "shop_manager",
+    branchId: "branch-1",
+  } as any;
+
   const activeBatch = {
     id: "batch-1",
     batchNo: "BAT-001",
@@ -42,7 +49,7 @@ describe("BatchService.recordOtcSupply", () => {
       { id: "batch-1", quantity: 26 },
     );
 
-    const result = await service.recordOtcSupply("batch-1", { quantity: 1, notes: "free sample" }, "user-1");
+    const result = await service.recordOtcSupply("batch-1", { quantity: 1, notes: "free sample" }, counterStaff);
 
     expect(batchRepo.adjustQuantity).toHaveBeenCalledWith("batch-1", -1);
     expect(movementRepo.log).toHaveBeenCalledWith({
@@ -65,7 +72,7 @@ describe("BatchService.recordOtcSupply", () => {
 
   it("throws NotFound when the batch does not exist", async () => {
     const { service } = buildService(undefined);
-    await expect(service.recordOtcSupply("missing", { quantity: 1 })).rejects.toThrow(
+    await expect(service.recordOtcSupply("missing", { quantity: 1 }, counterStaff)).rejects.toThrow(
       NotFoundException,
     );
   });
@@ -73,7 +80,7 @@ describe("BatchService.recordOtcSupply", () => {
   it("rejects a quantity above the batch's available stock (422)", async () => {
     const { service } = buildService(activeBatch);
     await expect(
-      service.recordOtcSupply("batch-1", { quantity: 999 }),
+      service.recordOtcSupply("batch-1", { quantity: 999 }, counterStaff),
     ).rejects.toThrow(UnprocessableEntityException);
   });
 
@@ -81,14 +88,14 @@ describe("BatchService.recordOtcSupply", () => {
     // adjustQuantity returns undefined when the WHERE guard prevents going negative
     const { service, movementRepo } = buildService(activeBatch, undefined);
     await expect(
-      service.recordOtcSupply("batch-1", { quantity: 1 }),
+      service.recordOtcSupply("batch-1", { quantity: 1 }, counterStaff),
     ).rejects.toThrow(UnprocessableEntityException);
     expect(movementRepo.log).not.toHaveBeenCalled();
   });
 
   it("defaults notes when none are provided", async () => {
     const { service, movementRepo } = buildService(activeBatch, { id: "batch-1", quantity: 26 });
-    await service.recordOtcSupply("batch-1", { quantity: 1 }, "user-1");
+    await service.recordOtcSupply("batch-1", { quantity: 1 }, counterStaff);
     expect(movementRepo.log).toHaveBeenCalledWith(
       expect.objectContaining({ notes: "OTC supply without billing" }),
     );

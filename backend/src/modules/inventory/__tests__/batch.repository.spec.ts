@@ -114,8 +114,14 @@ describe("BatchRepository (FEFO)", () => {
 
     it("throws when no batches available at all", async () => {
       const repo = buildRepo([]); // no active batches
+      // Asserted on meaning rather than wording: the message is read by a
+      // cashier mid-sale, so it has to say the stock is not there and what to
+      // do about it, not report an internal condition.
       await expect(repo.selectBatchesForDispense("med-1", 1)).rejects.toThrow(
-        /Insufficient stock/,
+        /out of stock/i,
+      );
+      await expect(repo.selectBatchesForDispense("med-1", 1)).rejects.toThrow(
+        /remove it from the bill|receive stock/i,
       );
     });
 

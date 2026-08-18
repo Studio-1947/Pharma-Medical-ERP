@@ -34,6 +34,13 @@ export const createInvoiceSchema = z
     loyaltyPointsToRedeem: z.number().int().min(0).default(0),
     notes: z.string().optional(),
     isOfflineSync: z.boolean().default(false),
+    /**
+     * Idempotency key. Send the same value when retrying a checkout and the
+     * server returns the invoice it already wrote instead of billing the sale
+     * twice — the failure mode the offline queue hits when a response is lost
+     * after the server has committed.
+     */
+    clientRef: z.string().min(8).max(64).optional(),
     consultationFee: consultationFeeSchema.optional(),
     items: z.array(invoiceItemSchema),
     payments: z.array(paymentEntrySchema).min(1),

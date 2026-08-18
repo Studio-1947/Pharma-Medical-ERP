@@ -1,6 +1,6 @@
 {
-  "id": "9f2c1d7a-0b64-4c3e-9a51-6d8e0f4b2a36",
-  "prevId": "07500d94-7731-48b4-a06e-6cf181d8d731",
+  "id": "a21d370e-9f26-441f-832e-5e97ab09c33d",
+  "prevId": "9f2c1d7a-0b64-4c3e-9a51-6d8e0f4b2a36",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1970,6 +1970,20 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "loyalty_points_earned": {
+          "name": "loyalty_points_earned",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "loyalty_points_redeemed": {
+          "name": "loyalty_points_redeemed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         },
         "customer_gstin": {
           "name": "customer_gstin",

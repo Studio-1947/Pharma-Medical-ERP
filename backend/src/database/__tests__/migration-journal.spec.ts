@@ -107,6 +107,32 @@ describe("drizzle migration journal", () => {
     expect(changed).toEqual([]);
   });
 
+  it("never removes or renames an entry already on main", () => {
+    let baseline: JournalEntry[];
+    try {
+      const raw = execFileSync(
+        "git",
+        ["show", "origin/main:backend/drizzle/migrations/meta/_journal.json"],
+        { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+      );
+      baseline = readJournal(raw);
+    } catch {
+      return;
+    }
+
+    const current = new Set(journal.map((e) => e.tag));
+    const vanished = baseline
+      .filter((e) => !current.has(e.tag))
+      .map((e) => `${e.tag} is on main but no longer in this journal`);
+
+    // A released migration is immutable. Renaming one makes drizzle treat it as
+    // new and re-run it against every database that already applied it — which
+    // is only survivable when the SQL happens to be idempotent, and silently
+    // destructive when it is not. Deleting one is worse: fresh databases never
+    // get it. Add a new migration instead of editing a released one.
+    expect(vanished).toEqual([]);
+  });
+
   it("gives new entries a `when` above every entry already on main", () => {
     let baseline: JournalEntry[];
     try {

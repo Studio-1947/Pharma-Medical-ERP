@@ -20,7 +20,7 @@
     "db:seed:inventory": "pnpm --filter backend db:seed:inventory",
     "db:seed:prod": "pnpm --filter backend db:seed:prod",
     "db:studio": "pnpm --filter backend drizzle-kit studio",
-    "fix-deps": "pnpm store verify; pnpm install --force"
+    "fix-deps": "pnpm store status; pnpm store prune; pnpm install --force"
   },
   "workspaces": [
     "backend",

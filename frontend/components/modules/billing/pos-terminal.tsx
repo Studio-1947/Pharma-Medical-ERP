@@ -17,6 +17,7 @@ import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { usePermissions } from "@/hooks/use-permissions";
 import { queueOfflineInvoice, syncOfflineQueue } from "@/lib/pos-db";
+import { errorText } from "@/lib/error-message";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -45,7 +46,13 @@ export function PosTerminal({
    */
   paymentOnly?: boolean;
 }) {
-  const { warning: toastWarning, success: toastSuccess, info: toastInfo, error: toastError } = useToast();
+  const {
+    warning: toastWarning,
+    success: toastSuccess,
+    info: toastInfo,
+    error: toastError,
+    fromError: toastFromError,
+  } = useToast();
   // Batch lookups are pinned to the selling branch so the packs shown on screen
   // are the packs the checkout will actually allocate. Branch staff are scoped
   // server-side anyway; this is what keeps super_admin's view honest.
@@ -124,7 +131,7 @@ export function PosTerminal({
       setPatientFormError("");
     },
     onError: (err: any) => {
-      setPatientFormError(err?.response?.data?.message ?? "Failed to register patient.");
+      setPatientFormError(errorText(err));
     },
   });
 
@@ -484,8 +491,8 @@ ${buildReceiptHeaderHtml({
       } else {
         toastWarning("Not found", `No medicine found for barcode: "${scanCode}"`);
       }
-    } catch {
-      toastError("Scan error", "Failed to search scanned item.");
+    } catch (err) {
+      toastFromError(err, "Could not look up that barcode");
     }
   };
 
@@ -497,7 +504,28 @@ ${buildReceiptHeaderHtml({
 
   // ── Online/offline ──────────────────────────────────────────────────────────
   useEffect(() => {
-    const on = () => { setIsOnline(true); syncOfflineQueue((p) => apiClient.post("/billing/invoices", p) as any); };
+    const on = async () => {
+      setIsOnline(true);
+      // Every queued payload carries a clientRef, so replaying one the server
+      // already recorded returns that invoice instead of billing it again.
+      const { synced, abandoned } = await syncOfflineQueue(
+        (p) => apiClient.post("/billing/invoices", p) as any,
+      );
+      if (synced > 0) {
+        toastInfo(
+          "Offline sales synced",
+          `${synced} ${synced === 1 ? "sale" : "sales"} saved while offline ${synced === 1 ? "has" : "have"} been recorded.`,
+        );
+      }
+      // Silence here is how a sale used to disappear: the queue retried for
+      // ever and nobody was told it was failing.
+      if (abandoned > 0) {
+        toastError(
+          "Some offline sales could not be recorded",
+          `${abandoned} queued ${abandoned === 1 ? "sale" : "sales"} failed repeatedly and ${abandoned === 1 ? "is" : "are"} no longer being retried. Re-enter ${abandoned === 1 ? "it" : "them"} at the counter.`,
+        );
+      }
+    };
     const off = () => setIsOnline(false);
     window.addEventListener("online", on);
     window.addEventListener("offline", off);
@@ -550,10 +578,10 @@ ${buildReceiptHeaderHtml({
       setPrintOpen(true);
     },
     onError: (err: any) => {
-      toastError(
-        "Checkout failed",
-        err?.response?.data?.message ?? "Could not complete the sale. Check stock, prescription, and payment details, then try again.",
-      );
+      // Routed through the explainer so a 500 or a dropped connection says what
+      // to do next, and carries a reference the cashier can read out, instead
+      // of showing "Request failed with status code 500".
+      toastFromError(err, "Sale not completed");
     },
   });
 
@@ -591,6 +619,9 @@ ${buildReceiptHeaderHtml({
       })),
       discountAmount: "0",
       payments,
+      // Idempotency key for the online path as well: a retry after a timeout
+      // is the same hazard as an offline replay.
+      clientRef: `POS-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
     };
 
     if (!isOnline) {
@@ -647,8 +678,8 @@ ${buildReceiptHeaderHtml({
         unit: m.unit, batchStock: availableQty, totalStock: Number(m.totalStock ?? availableQty),
       });
       setSearch("");
-    } catch {
-      toastError("Failed to load stock", "Could not fetch batch details. Check your connection and try again.");
+    } catch (err) {
+      toastFromError(err, "Could not load stock");
     }
   };
 
@@ -805,8 +836,8 @@ ${buildReceiptHeaderHtml({
       if (warnings.length > 0) {
         setRxLoadWarnings(warnings);
       }
-    } catch {
-      toastError("Prescription load failed", "Could not load the prescription. Check the link and try again.");
+    } catch (err) {
+      toastFromError(err, "Could not load the prescription");
     }
   }
 

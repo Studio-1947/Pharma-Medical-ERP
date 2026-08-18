@@ -23,6 +23,11 @@ export class BatchRepository {
     if (params.medicineId) {
       conditions.push(eq(schema.inventoryBatches.medicineId, params.medicineId) as any);
     }
+    // Undefined only for super_admin, who is unscoped by design; every other
+    // caller arrives here pinned to their own branch by resolveBranchScope.
+    if (params.branchId) {
+      conditions.push(eq(schema.inventoryBatches.branchId, params.branchId) as any);
+    }
     if (params.status) {
       conditions.push(eq(schema.inventoryBatches.status, params.status as any) as any);
     }
@@ -341,7 +346,9 @@ export class BatchRepository {
     if (remaining > 0) {
       const available = needed - remaining;
       throw new UnprocessableEntityException(
-        `Insufficient stock for medicine ${medicineId}: requested ${needed}, available ${available}`,
+        available === 0
+          ? `This medicine is out of stock at this branch. Remove it from the bill, or receive stock first.`
+          : `Not enough stock — ${needed} needed, ${available} available. Reduce the quantity or receive more stock.`,
       );
     }
 
@@ -368,7 +375,10 @@ export class BatchRepository {
    * branches' figures were wrong afterwards.
    */
   async selectBatchesForDispenseMulti(
-    needs: { medicineId: string; needed: number }[],
+    // medicineName is carried purely so a failure can name the product. A
+    // cashier reading "Insufficient stock for medicine 9f2c1d7a-0b64-…" has no
+    // way to act on it; the name is the only part of the message they can use.
+    needs: { medicineId: string; needed: number; medicineName?: string }[],
     branchId: string,
     tx?: any,
   ): Promise<Array<{ batchId: string; batchNo: string; expiryDate: string; allocate: number; mrpAtEntry: string }>[]> {
@@ -428,7 +438,7 @@ export class BatchRepository {
 
     const result: Array<{ batchId: string; batchNo: string; expiryDate: string; allocate: number; mrpAtEntry: string }>[] = [];
 
-    for (const { medicineId, needed } of needs) {
+    for (const { medicineId, needed, medicineName } of needs) {
       const allocations: Array<{ batchId: string; batchNo: string; expiryDate: string; allocate: number; mrpAtEntry: string }> = [];
       let remaining = needed;
 
@@ -449,8 +459,11 @@ export class BatchRepository {
 
       if (remaining > 0) {
         const available = needed - remaining;
+        const label = medicineName ?? `medicine ${medicineId}`;
         throw new UnprocessableEntityException(
-          `Insufficient stock for medicine ${medicineId}: requested ${needed}, available ${available}`,
+          available === 0
+            ? `${label} is out of stock at this branch. Remove it from the bill, or receive stock first.`
+            : `Not enough ${label} in stock — ${needed} needed, ${available} available. Reduce the quantity or receive more stock.`,
         );
       }
 

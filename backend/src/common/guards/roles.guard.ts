@@ -27,7 +27,7 @@ export class RolesGuard implements CanActivate {
 
     if (!required.includes(user.role)) {
       throw new ForbiddenException(
-        `Role '${user.role}' is not allowed to perform this action`,
+        "You do not have permission to do this. Ask an administrator if you need access.",
       );
     }
     return true;

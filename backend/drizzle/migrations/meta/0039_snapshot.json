@@ -1,6 +1,6 @@
 {
-  "id": "9f2c1d7a-0b64-4c3e-9a51-6d8e0f4b2a36",
-  "prevId": "07500d94-7731-48b4-a06e-6cf181d8d731",
+  "id": "ac116587-c3ca-44fb-a994-cc5dde567107",
+  "prevId": "0df659db-99f1-46cd-803d-6b3996de1945",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1444,6 +1444,64 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {}
     },
+    "public.invoice_sequences": {
+      "name": "invoice_sequences",
+      "schema": "",
+      "columns": {
+        "branch_id": {
+          "name": "branch_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "seq_date": {
+          "name": "seq_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "last_seq": {
+          "name": "last_seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "invoice_sequences_branch_id_branches_id_fk": {
+          "name": "invoice_sequences_branch_id_branches_id_fk",
+          "tableFrom": "invoice_sequences",
+          "tableTo": "branches",
+          "columnsFrom": [
+            "branch_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "invoice_sequences_branch_id_seq_date_pk": {
+          "name": "invoice_sequences_branch_id_seq_date_pk",
+          "columns": [
+            "branch_id",
+            "seq_date"
+          ]
+        }
+      },
+      "uniqueConstraints": {}
+    },
     "public.patients": {
       "name": "patients",
       "schema": "",
@@ -1971,6 +2029,26 @@
           "primaryKey": false,
           "notNull": false
         },
+        "loyalty_points_earned": {
+          "name": "loyalty_points_earned",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "loyalty_points_redeemed": {
+          "name": "loyalty_points_redeemed",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "client_ref": {
+          "name": "client_ref",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": false
+        },
         "customer_gstin": {
           "name": "customer_gstin",
           "type": "varchar(15)",
@@ -2076,6 +2154,22 @@
             }
           ],
           "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "invoices_client_ref_uniq": {
+          "name": "invoices_client_ref_uniq",
+          "columns": [
+            {
+              "expression": "client_ref",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"sales_invoices\".\"client_ref\" IS NOT NULL",
           "concurrently": false,
           "method": "btree",
           "with": {}
