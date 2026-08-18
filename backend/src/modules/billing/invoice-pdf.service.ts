@@ -74,7 +74,7 @@ export class InvoicePdfService {
         bufferPages: true,
         info: {
           Title: `Tax Invoice ${invoice.invoiceNo}`,
-          Author: branch?.name ?? "PharmERP",
+          Author: branch?.name ?? "Radha Madhav Medical Hall",
         },
       });
 
@@ -90,7 +90,7 @@ export class InvoicePdfService {
       const drawHeader = (headerY: number) => {
         doc.rect(ML, headerY, PW, 65).fill(BLUE);
         doc.fillColor("white").fontSize(18).font("Helvetica-Bold")
-          .text(branch?.name ?? "PharmERP", ML + 12, headerY + 14, { width: PW * 0.55, lineBreak: false });
+          .text(branch?.name ?? "Radha Madhav Medical Hall", ML + 12, headerY + 14, { width: PW * 0.55, lineBreak: false });
         doc.fontSize(8).font("Helvetica")
           .text(branch?.address ?? "", ML + 12, headerY + 34, { width: PW * 0.55, lineBreak: false })
           .text([branch?.phone, branch?.email].filter(Boolean).join("  |  "), ML + 12, headerY + 44, { width: PW * 0.55, lineBreak: false });

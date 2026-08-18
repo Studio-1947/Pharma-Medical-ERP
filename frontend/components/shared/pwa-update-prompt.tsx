@@ -39,7 +39,7 @@ export function PwaUpdatePrompt({
         </div>
         <div className="leading-tight min-w-0">
           <p className="text-xs font-extrabold text-white">
-            A new version of PharmERP is ready
+            A new version is ready
           </p>
           <p className="text-[11px] text-slate-400 mt-0.5">
             Reload to apply. Your queued offline invoices are kept.

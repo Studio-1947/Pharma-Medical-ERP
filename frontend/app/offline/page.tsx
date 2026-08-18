@@ -47,8 +47,8 @@ export default function OfflinePage() {
 
         <p className="mt-2 text-sm font-medium text-slate-500 leading-relaxed">
           {online
-            ? "Connection restored. Taking you back to PharmERP."
-            : "PharmERP could not reach the server. Counter billing keeps working offline and queued invoices sync automatically once you are back online."}
+            ? "Connection restored. Taking you back."
+            : "Radha Madhav Medical Hall could not reach the server. Counter billing keeps working offline and queued invoices sync automatically once you are back online."}
         </p>
 
         <button

@@ -38,7 +38,7 @@ export function PwaInstallPrompt() {
           <Smartphone size={20} />
         </div>
         <div className="leading-tight">
-          <p className="text-xs font-extrabold text-white">Install PharmERP</p>
+          <p className="text-xs font-extrabold text-white">Install Radha Madhav</p>
           <p className="text-[11px] text-slate-400 mt-0.5">Quick POS access & offline billing</p>
         </div>
       </div>

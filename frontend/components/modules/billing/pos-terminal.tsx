@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera, ShieldAlert, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, LayoutGrid, Table, Percent, Edit3, SlidersHorizontal, CheckCircle2 } from "lucide-react";
@@ -293,9 +294,13 @@ export function PosTerminal({
   .text-right { text-align:right; }
   .text-center { text-align:center; }
   .text-green { color:#16a34a; }
+  .brand { text-align:center; margin-bottom:6px; }
+  .brand img { height:54px; width:auto; }
 </style>
 </head><body>
-  <h1>Radha Madhav Medical Hall</h1>
+  <div class="brand">
+    <img id="brand-logo" src="${window.location.origin}/logo-full.svg" alt="Radha Madhav Medical Hall"/>
+  </div>
   <p class="subtitle">Tax Invoice / Bill of Supply</p>
   <hr class="divider-solid"/>
 
@@ -363,7 +368,27 @@ export function PosTerminal({
 </body></html>`);
     w.document.close();
     w.focus();
-    setTimeout(() => { w.print(); w.close(); }, 300);
+
+    // Print once the letterhead has actually loaded. The previous fixed delay
+    // could fire first and print an invoice with a missing logo. The timeout is
+    // kept as a hard cap so a slow or failed image can never leave the counter
+    // staring at a print dialog that never opens.
+    let printed = false;
+    const fire = () => {
+      if (printed) return;
+      printed = true;
+      w.print();
+      w.close();
+    };
+
+    const logo = w.document.getElementById("brand-logo") as HTMLImageElement | null;
+    if (logo && !logo.complete) {
+      logo.addEventListener("load", fire, { once: true });
+      logo.addEventListener("error", fire, { once: true });
+      setTimeout(fire, 2000);
+    } else {
+      setTimeout(fire, 300);
+    }
   };
 
   // ── Patient lookup ──────────────────────────────────────────────────────────
@@ -2109,9 +2134,18 @@ export function PosTerminal({
             {/* Scrollable receipt body */}
             <div id="invoice-print-area" className="overflow-y-auto flex-1 px-6 py-5 space-y-4 print:overflow-visible print:p-6">
 
-              {/* Store header */}
-              <div className="text-center space-y-0.5">
-                <h2 className="text-lg font-black tracking-tight text-gray-900 uppercase">Radha Madhav Medical Hall</h2>
+              {/* Store header. The lockup already carries the pharmacy name, so
+                  the heading is kept for assistive tech and search only. */}
+              <div className="text-center space-y-1">
+                <Image
+                  src="/logo-full.svg"
+                  alt="Radha Madhav Medical Hall"
+                  width={129}
+                  height={68}
+                  className="mx-auto h-12 w-auto"
+                  priority
+                />
+                <h2 className="sr-only">Radha Madhav Medical Hall</h2>
                 <p className="text-xs text-gray-500">Tax Invoice / Bill of Supply</p>
               </div>
 

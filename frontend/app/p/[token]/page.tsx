@@ -1,6 +1,7 @@
 "use client";
 
 import { use } from "react";
+import Image from "next/image";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { 
@@ -61,9 +62,16 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
         
         {/* Top Header */}
         <div className="bg-gradient-to-r from-emerald-700 via-teal-700 to-emerald-800 p-6 text-white text-center relative">
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 mb-3 shadow-inner">
-            {isRx ? <Stethoscope className="w-6 h-6 text-emerald-300" /> : <Receipt className="w-6 h-6 text-emerald-300" />}
-          </div>
+          {/* The pharmacy mark, matching the printed letterhead. The asset
+              carries its own white ground so it stays legible on this header. */}
+          <Image
+            src="/logo.svg"
+            alt="Radha Madhav Medical Hall"
+            width={56}
+            height={56}
+            className="inline-block w-14 h-14 rounded-2xl mb-3 shadow-lg"
+            priority
+          />
           <h1 className="text-lg font-black tracking-tight">Radha Madhav Medical Hall</h1>
           <p className="text-xs text-emerald-200 font-medium mt-0.5">Digital Patient Healthcare Record</p>
 

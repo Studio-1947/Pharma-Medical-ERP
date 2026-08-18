@@ -19,7 +19,7 @@ export class ExcelExportService {
     data: Record<string, any>[],
   ): Promise<Buffer> {
     const workbook = new ExcelJS.Workbook();
-    workbook.creator = "PharmERP Healthcare Systems";
+    workbook.creator = "Radha Madhav Medical Hall";
     workbook.created = new Date();
 
     const sheetName = title.slice(0, 31).replace(/[\*\?:\/\\\[\]]/g, "");

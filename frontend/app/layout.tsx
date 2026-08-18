@@ -21,13 +21,14 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "PharmERP — Medical Pharmacy ERP",
-  description: "Multi-branch Pharmacy Management System with POS Billing, Schedule H Compliance & Batch Inventory",
+  title: "Radha Madhav Medical Hall",
+  description: "Pharmacy management for Radha Madhav Medical Hall: POS billing, Schedule H compliance and batch inventory.",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "PharmERP",
+    // Home-screen labels get truncated, so this is the short form.
+    title: "Radha Madhav",
   },
   icons: {
     icon: [

@@ -90,7 +90,7 @@ export class InvoicePdfWorker {
         bufferPages: true,
         info: {
           Title: `Cash Memo ${invoice.invoiceNo}`,
-          Author: branch?.name ?? "PharmERP",
+          Author: branch?.name ?? "Radha Madhav Medical Hall",
         },
       });
 
