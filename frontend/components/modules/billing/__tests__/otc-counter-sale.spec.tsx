@@ -4,7 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 /**
- * Wiring test for the OTC counter-sale modal.
+ * Wiring test for the OTC counter sale — inline on the counter desk, and in
+ * the dialog the POS terminal opens over the till.
  *
  * The arithmetic is covered by lib/__tests__/otc-quote.spec.ts and proved
  * against the server in the backend parity suite; what is checked here is that
@@ -66,6 +67,7 @@ vi.mock("../invoice-detail-modal", () => ({
 }));
 
 import { OtcSupplyModal } from "../otc-supply-modal";
+import { OtcCounterSale } from "../otc-counter-sale";
 
 const BATCHES = [
   {
@@ -147,7 +149,7 @@ beforeEach(() => {
   post.mockResolvedValue({ data: { invoice: { id: "inv-9", invoiceNo: "BRN01-1" } } });
 });
 
-describe("OtcSupplyModal", () => {
+describe("OTC counter sale", () => {
   it("bills the sale by default and tenders exactly the amount it displays", async () => {
     const user = userEvent.setup();
     renderModal();
@@ -321,7 +323,7 @@ describe("OtcSupplyModal", () => {
     await screen.findByRole("button", { name: /Bill ₹95\.76/ });
 
     // A walk-in rarely buys one thing — the second medicine joins the same bill.
-    await user.type(screen.getByLabelText(/Add another medicine/i), "cet");
+    await user.type(screen.getByLabelText(/Search medicines/i), "cet");
     await user.click(await screen.findByRole("button", { name: /Cetirizine 10 mg/ }));
 
     // 85.50 + 12% = 95.76, 40.00 + 12% = 44.80 — one bill of 140.56.
@@ -344,7 +346,7 @@ describe("OtcSupplyModal", () => {
     renderModal();
     await screen.findByRole("button", { name: /Bill ₹/ });
 
-    await user.type(screen.getByLabelText(/Add another medicine/i), "cet");
+    await user.type(screen.getByLabelText(/Search medicines/i), "cet");
     await user.click(await screen.findByRole("button", { name: /Cetirizine 10 mg/ }));
 
     // Two strips of the second medicine at 10% off: 80.00 less 8 = 72 taxable,
@@ -372,7 +374,7 @@ describe("OtcSupplyModal", () => {
     renderModal();
     await screen.findByRole("button", { name: /Bill ₹95\.76/ });
 
-    await user.type(screen.getByLabelText(/Add another medicine/i), "cet");
+    await user.type(screen.getByLabelText(/Search medicines/i), "cet");
     await user.click(await screen.findByRole("button", { name: /Cetirizine 10 mg/ }));
     await screen.findByRole("button", { name: /Bill ₹140\.56/ });
 
@@ -395,7 +397,7 @@ describe("OtcSupplyModal", () => {
       return Promise.resolve({ data: BATCHES });
     });
 
-    await user.type(screen.getByLabelText(/Add another medicine/i), "cet");
+    await user.type(screen.getByLabelText(/Search medicines/i), "cet");
     await user.click(await screen.findByRole("button", { name: /Cetirizine 10 mg/ }));
 
     expect(
@@ -403,6 +405,25 @@ describe("OtcSupplyModal", () => {
     ).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /Bill ₹/ })).toBeDisabled();
     expect(post).not.toHaveBeenCalled();
+  });
+
+  it("runs inline on the counter desk with no dialog around it", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <OtcCounterSale medicine={MEDICINE} onClose={onClose} variant="inline" />
+      </QueryClientProvider>,
+    );
+
+    // Search on the left, the bill on the right, both on the desk itself.
+    expect(await screen.findByLabelText(/Search medicines/i)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Bill ₹95\.76/ })).toBeEnabled();
+    expect(screen.getByText(/On this bill/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /Back to search/i }));
+    expect(onClose).toHaveBeenCalled();
   });
 
   it("hides billing from a user without the billing permission", async () => {
