@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { and, asc, desc, eq, ilike, isNull, or, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
+import { allocateTokenNo } from "../clinic/allocate-token-no";
 import type { CreatePatientDto, UpdatePatientDto, QueryPatientDto } from "@pharmerp/types";
 
 @Injectable()
@@ -102,27 +103,44 @@ export class PatientsRepository {
     return (rxRow?.count ?? 0) > 0;
   }
 
-  async createDoctorTokenForPatient(patientId: string, doctorId: string, branchId?: string) {
-    if (!branchId) return;
+  /**
+   * Registers a patient a doctor is about to see and puts them in that
+   * doctor's queue, atomically.
+   *
+   * Both or neither, deliberately. This used to insert the patient, then
+   * compute `max(token_no) + 1` with no lock and swallow any failure — so two
+   * registrations in the same moment raced, the unique index rejected the
+   * loser, and that patient sat in the clinic with no number at all and no
+   * error shown to anyone. A patient in the queue who cannot be called is not
+   * an acceptable outcome; if the token genuinely cannot be issued the whole
+   * registration rolls back and the doctor can simply try again, with no
+   * half-registered patient left behind to trip the phone-number check.
+   */
+  async createWithDoctorToken(
+    data: CreatePatientDto,
+    doctorId: string,
+    branchId: string,
+  ) {
     const today = new Date().toISOString().slice(0, 10);
-    const [maxRes] = await this.db
-      .select({ maxToken: sql<number>`coalesce(max(${schema.clinicTokens.tokenNo}), 0)::int` })
-      .from(schema.clinicTokens)
-      .where(and(eq(schema.clinicTokens.doctorId, doctorId), eq(schema.clinicTokens.date, today)));
-    const tokenNo = (maxRes?.maxToken ?? 0) + 1;
+    return this.db.transaction(async (tx) => {
+      const [patient] = await tx
+        .insert(schema.patients)
+        .values(data as any)
+        .returning();
 
-    try {
-      await this.db.insert(schema.clinicTokens).values({
+      const tokenNo = await allocateTokenNo(tx, doctorId, today);
+
+      await tx.insert(schema.clinicTokens).values({
         tokenNo,
-        patientId,
+        patientId: patient!.id,
         doctorId,
         branchId,
         date: today,
         status: "pending",
       } as any);
-    } catch {
-      // Ignore if token already exists
-    }
+
+      return patient!;
+    });
   }
 
   async findById(id: string) {
