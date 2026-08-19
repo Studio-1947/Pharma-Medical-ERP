@@ -500,7 +500,7 @@ export default function BillingPage() {
               Back to Counter Desk
             </button>
           </div>
-          <PosTerminal paymentOnly />
+          <PosTerminal paymentOnly onFinishedSale={() => setPaying(false)} />
         </div>
       );
     }

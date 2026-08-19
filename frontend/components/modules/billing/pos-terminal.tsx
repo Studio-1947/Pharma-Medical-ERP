@@ -37,6 +37,7 @@ const formLabelCls = "block text-xs font-semibold text-slate-600 mb-1";
 
 export function PosTerminal({
   paymentOnly = false,
+  onFinishedSale,
 }: {
   /**
    * Render a focused checkout view instead of the classic POS terminal — used
@@ -46,6 +47,14 @@ export function PosTerminal({
    * payment modal are identical to the terminal's.
    */
   paymentOnly?: boolean;
+  /**
+   * Called when the operator finishes with a completed sale and wants the next
+   * customer. Only meaningful alongside `paymentOnly`: the counter desk hands
+   * the bill over for payment, so "New Sale" belongs back at the desk rather
+   * than on an empty payment screen. The standalone terminal passes nothing
+   * and stays where it is, which is where a medicine-first cashier wants it.
+   */
+  onFinishedSale?: () => void;
 }) {
   const {
     warning: toastWarning,
@@ -1031,7 +1040,14 @@ ${buildReceiptHeaderHtml({
               </p>
               <div className="mt-5 flex gap-2">
                 <button
-                  onClick={() => { setPrintOpen(false); setLastInvoice(null); }}
+                  onClick={() => {
+                    setPrintOpen(false);
+                    setLastInvoice(null);
+                    // The cart was already emptied on checkout, so this lands
+                    // on a clean "Who is being served?" rather than a stale bill.
+                    onFinishedSale?.();
+                  }}
+                  title={onFinishedSale ? "Start the next customer at the counter desk" : "Start a new sale"}
                   className="flex-1 py-2.5 border border-slate-300 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition"
                 >
                   New Sale
