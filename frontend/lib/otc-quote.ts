@@ -38,6 +38,16 @@ export interface OtcQuote {
   short: number;
 }
 
+/**
+ * Unrounded running sums, kept so several medicines on one bill can be summed
+ * the way the server sums them — per allocation — instead of rounding each
+ * medicine's total and adding those.
+ */
+interface OtcQuoteInternal extends OtcQuote {
+  /** Sum of the per-allocation rounded line totals, before the final rounding. */
+  lineTotalSum: number;
+}
+
 /** Half-up to 2dp — matches Decimal.ROUND_HALF_UP on the server. */
 export function r2(n: number) {
   return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -57,11 +67,12 @@ export function quoteOtcSale({
   discountPct: number;
   taxPct: number;
   stripSize: number;
-}): OtcQuote {
+}): OtcQuoteInternal {
   const size = Math.max(1, stripSize || 1);
   let remaining = Math.max(0, units);
   let subtotal = 0;
   let tax = 0;
+  let lineTotalSum = 0;
   const used: OtcQuote["used"] = [];
 
   for (const b of batches) {
@@ -77,13 +88,73 @@ export function quoteOtcSale({
     const gross = unitPrice * take;
     const taxable = gross - (gross * discountPct) / 100;
 
+    const lineTax = (taxable * taxPct) / 100;
+
     subtotal += r2(taxable);
-    tax += r2((taxable * taxPct) / 100);
+    tax += r2(lineTax);
+    // The server rounds the line total in one step (taxable + tax), not by
+    // adding the two rounded halves, so a half-paisa on each does not become a
+    // whole one here. See TaxService.calculateLineTax.
+    lineTotalSum += r2(taxable + lineTax);
     used.push({ batchNo: b.batchNo, expiryDate: b.expiryDate, units: take });
     remaining -= take;
   }
 
-  const sub = r2(subtotal);
-  const tx = r2(tax);
-  return { subtotal: sub, tax: tx, total: r2(sub + tx), used, short: remaining };
+  return {
+    subtotal: r2(subtotal),
+    tax: r2(tax),
+    total: r2(lineTotalSum),
+    lineTotalSum,
+    used,
+    short: remaining,
+  };
+}
+
+export interface OtcQuoteLineInput {
+  /** Sellable batches in FEFO order, as the dispense endpoint returns them. */
+  batches: OtcQuoteBatch[];
+  /** Quantity in the unit the invoice API speaks (packs x stripSize, or loose). */
+  units: number;
+  discountPct: number;
+  taxPct: number;
+  stripSize: number;
+}
+
+export interface OtcMultiQuote {
+  /** Per-medicine quote, in the order the lines were given. */
+  lines: OtcQuote[];
+  subtotal: number;
+  tax: number;
+  total: number;
+  /** Units across all lines that could not be allocated. */
+  short: number;
+}
+
+/**
+ * Prices a counter sale that carries several medicines on one bill.
+ *
+ * The server writes one invoice line per FEFO allocation across every item and
+ * then aggregates (BillingService.createInTransaction → aggregateInvoiceTotals),
+ * so the bill total is the sum of the per-allocation rounded figures — not the
+ * sum of per-medicine totals rounded again. Summing this way keeps the tendered
+ * amount equal to the server's to the paisa, which the invoice route insists on.
+ */
+export function quoteOtcSaleLines(lines: OtcQuoteLineInput[]): OtcMultiQuote {
+  const quotes = lines.map((l) =>
+    quoteOtcSale({
+      batches: l.batches,
+      units: l.units,
+      discountPct: l.discountPct,
+      taxPct: l.taxPct,
+      stripSize: l.stripSize,
+    }),
+  );
+
+  return {
+    lines: quotes,
+    subtotal: r2(quotes.reduce((s, q) => s + q.subtotal, 0)),
+    tax: r2(quotes.reduce((s, q) => s + q.tax, 0)),
+    total: r2(quotes.reduce((s, q) => s + q.lineTotalSum, 0)),
+    short: quotes.reduce((s, q) => s + q.short, 0),
+  };
 }
