@@ -6,7 +6,7 @@ import { PHARMACY_PRINT_DETAILS, formatTokenNo } from "@pharmerp/types";
 import { buildReceiptHeaderHtml, RECEIPT_HEADER_STYLES } from "@/lib/receipt-header";
 import { useSearchParams } from "next/navigation";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera, ShieldAlert, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, LayoutGrid, Table, Percent, Edit3, SlidersHorizontal, CheckCircle2 } from "lucide-react";
+import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera, ShieldAlert, ShieldCheck, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, LayoutGrid, Table, Percent, Edit3, SlidersHorizontal, CheckCircle2 } from "lucide-react";
 import { useCartStore, CartItem } from "@/stores/cart.store";
 import { useUIStore } from "@/stores/ui.store";
 import { formatStockUnit, getUnitLabel } from "@/lib/stock-unit-formatter";
@@ -61,6 +61,9 @@ export function PosTerminal({
   const [search, setSearch] = useState("");
   const [payOpen, setPayOpen] = useState(false);
   const [rxPickerOpen, setRxPickerOpen] = useState(false);
+  // Schedule H in a queue: a manager can vouch for a prescription they have
+  // seen and attach it afterwards. The bill still records the debt.
+  const [rxAttested, setRxAttested] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   // Whole medicine row, not just id+name: the OTC modal prices the sale from
   // its MRP, tax rate and strip size.
@@ -197,13 +200,20 @@ export function PosTerminal({
   // OTC hand-outs are admin/shop-manager actions on the API; a doctor who sees
   // the button would only get a 403 on click, so hide it for roles without
   // inventory.adjust (super_admin, admin, shop_manager all hold it).
-  const { can: canPerm } = usePermissions();
+  const { can: canPerm, role: permRole } = usePermissions();
   // The OTC modal now bills by default and only falls back to a free hand-out,
   // so either permission opens it — the modal disables the path you lack.
   const canOtc = canPerm("billing.create") || canPerm("inventory.adjust");
   const { subtotal, tax, discount, total } = totals();
 
   const needsRx = hasControlledItems();
+  // The three roles the server accepts as an override approver. Offering the
+  // button to anyone else would only earn them a rejection at checkout.
+  const canAttestRx = ["super_admin", "admin", "shop_manager"].includes(String(permRole));
+  const currentUserId = user?.id ?? null;
+  // Either the prescription is here, or someone senior has put their name to
+  // having seen it.
+  const rxSettled = !needsRx || !!prescriptionId?.trim() || rxAttested;
   const loyaltyDiscount = loyaltyPointsToRedeem / 10;
   const finalTotal = Math.max(0, total - loyaltyDiscount);
 
@@ -591,13 +601,12 @@ ${buildReceiptHeaderHtml({
   });
 
   const handlePayConfirm = async (mode: string, splits?: { mode: string; amount: number; ref?: string }[]) => {
-    if (needsRx && !prescriptionId?.trim()) {
+    if (!rxSettled) {
       toastWarning(
         "Prescription required",
-        "This sale includes Schedule H / controlled medicines. Enter a verified Prescription ID in the cart before proceeding to checkout.",
+        "This sale includes Schedule H / controlled medicines. Link a verified prescription in the cart, or — if you have seen the paper and the queue is moving — use “I verified it” to bill now and attach it afterwards.",
         8000,
       );
-      return;
       return;
     }
 
@@ -609,6 +618,17 @@ ${buildReceiptHeaderHtml({
     const payload = {
       patientId: patientId || undefined,
       prescriptionId: prescriptionId?.trim() || undefined,
+      // Vouched-for Schedule H sale: the manager's name rides on the existing
+      // override fields, and rxPending keeps the missing paper visible until
+      // someone attaches it to this bill.
+      ...(rxAttested && !prescriptionId?.trim()
+        ? {
+            rxPending: true,
+            overriddenBy: currentUserId ?? undefined,
+            overrideReason:
+              "Manager verified the prescription at the counter; prescription to be attached",
+          }
+        : {}),
       consultationFee: consultationFee
         ? { doctorName: consultationFee.doctorName, amount: String(consultationFee.amount.toFixed(2)) }
         : undefined,
@@ -1163,11 +1183,13 @@ ${buildReceiptHeaderHtml({
 
       {/* Compact Schedule H warning banner */}
       {needsRx && (
-        <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 rounded-xl px-3.5 py-2 border transition-all text-xs ${prescriptionId?.trim() ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-300"}`}>
+        <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 rounded-xl px-3.5 py-2 border transition-all text-xs ${rxSettled ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-300"}`}>
           <div className="flex items-center gap-2 font-bold">
-            <AlertTriangle size={15} className={prescriptionId?.trim() ? "text-emerald-600 shrink-0" : "text-amber-600 shrink-0"} />
-            <span className={prescriptionId?.trim() ? "text-emerald-900" : "text-amber-900"}>
-              Schedule H / Controlled Meds in cart — Verified Prescription required
+            <AlertTriangle size={15} className={rxSettled ? "text-emerald-600 shrink-0" : "text-amber-600 shrink-0"} />
+            <span className={rxSettled ? "text-emerald-900" : "text-amber-900"}>
+              {rxAttested && !prescriptionId?.trim()
+                ? "Schedule H — billed on your verification, prescription still to be attached"
+                : "Schedule H / Controlled Meds in cart — Verified Prescription required"}
             </span>
           </div>
 
@@ -1195,6 +1217,27 @@ ${buildReceiptHeaderHtml({
               >
                 <X size={14} />
               </button>
+            )}
+            {rxAttested ? (
+              <button
+                type="button"
+                onClick={() => setRxAttested(false)}
+                className="px-3 py-1 rounded-lg border border-emerald-300 bg-emerald-50 text-emerald-800 text-[11px] font-bold shrink-0 flex items-center gap-1"
+                title="Undo — go back to requiring the prescription up front"
+              >
+                <ShieldCheck size={13} /> Vouched — undo
+              </button>
+            ) : (
+              canAttestRx && (
+                <button
+                  type="button"
+                  onClick={() => setRxAttested(true)}
+                  className="px-3 py-1 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-bold shrink-0 flex items-center gap-1"
+                  title="Bill now on your verification and attach the prescription afterwards"
+                >
+                  <ShieldCheck size={13} /> I verified it
+                </button>
+              )
             )}
           </div>
         </div>

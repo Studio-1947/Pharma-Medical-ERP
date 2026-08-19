@@ -102,6 +102,10 @@ export class BillingRepository {
       }
     }
     if (params.search) conditions.push(ilike(schema.salesInvoices.invoiceNo, `%${params.search}%`));
+    // Bills a manager vouched for that still owe their prescription. Drives
+    // the outstanding list the counter works off, so it has to be a filter
+    // rather than something the caller sifts out of a full page.
+    if (params.rxPending) conditions.push(eq(schema.salesInvoices.rxPending, true));
     if (params.from) conditions.push(gte(schema.salesInvoices.createdAt, new Date(params.from)));
     if (params.to) {
       // When only a date is provided (no time), include the full day
@@ -128,6 +132,8 @@ export class BillingRepository {
           amountDue: schema.salesInvoices.amountDue,
           paymentMode: schema.salesInvoices.paymentMode,
           status: schema.salesInvoices.status,
+          prescriptionId: schema.salesInvoices.prescriptionId,
+          rxPending: schema.salesInvoices.rxPending,
           createdAt: schema.salesInvoices.createdAt,
         })
         .from(schema.salesInvoices)

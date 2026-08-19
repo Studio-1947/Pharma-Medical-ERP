@@ -46,12 +46,34 @@ export const createInvoiceSchema = z
     payments: z.array(paymentEntrySchema).min(1),
     overrideReason: z.string().min(1).optional(),
     overriddenBy: z.string().uuid().optional(),
+    /**
+     * A Schedule H sale the manager vouched for at the counter with the
+     * prescription not yet recorded — they saw the paper, the queue was
+     * moving. The sale completes; the invoice stays flagged as owing a
+     * prescription until one is attached to it.
+     *
+     * Only legal alongside a manager override (that is who is vouching), and
+     * only on a bill that actually contains a prescription-only medicine —
+     * see the refinement below.
+     */
+    rxPending: z.boolean().default(false),
   })
   // A consultation-only bill (doctor path on the counter desk, no medicines)
   // legitimately carries an empty items array — the fee is billed as a
   // GST-exempt service line. Allow that; any other empty-items invoice stays
   // rejected.
   .superRefine((val, ctx) => {
+    // Attesting is an override with a debt attached: someone senior has to be
+    // named as having seen the prescription, or there is nothing to chase and
+    // no one to ask.
+    if (val.rxPending && !(val.overrideReason && val.overriddenBy)) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "Marking a prescription as still to come requires the manager who verified it and a reason",
+        path: ["rxPending"],
+      });
+    }
     if (val.items.length === 0 && !val.consultationFee) {
       // Match the shape of a normal array issue so the errors object is
       // consistent for API clients.
@@ -78,6 +100,8 @@ export const returnInvoiceSchema = z.object({
 });
 
 export const queryInvoiceSchema = z.object({
+  /** Only bills still owing the prescription a manager attested for. */
+  rxPending: z.coerce.boolean().optional(),
   patientId: z.string().uuid().optional(),
   staffId: z.string().uuid().optional(),
   branchId: z.string().uuid().optional(),
@@ -101,3 +125,14 @@ export type ReturnItemDto = z.infer<typeof returnItemSchema>;
 export type ReturnInvoiceDto = z.infer<typeof returnInvoiceSchema>;
 export type QueryInvoiceDto = z.infer<typeof queryInvoiceSchema>;
 export type VoidInvoiceDto = z.infer<typeof voidInvoiceSchema>;
+
+/**
+ * Attaching the prescription a manager promised at the counter. Documentary
+ * only — the stock left the shelf when the invoice was written; this records
+ * which prescription authorised it and clears the outstanding flag.
+ */
+export const attachPrescriptionSchema = z.object({
+  prescriptionId: z.string().uuid(),
+});
+
+export type AttachPrescriptionDto = z.infer<typeof attachPrescriptionSchema>;

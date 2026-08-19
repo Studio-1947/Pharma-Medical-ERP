@@ -479,6 +479,8 @@ export class ReportsService {
         patientName: schema.patients.name,
         doctorName: schema.prescriptions.doctorName,
         doctorRegNo: schema.prescriptions.doctorRegNo,
+        rxPending: schema.salesInvoices.rxPending,
+        attestedBy: schema.salesInvoices.overriddenBy,
       })
       .from(schema.salesInvoices)
       .innerJoin(
@@ -537,8 +539,13 @@ export class ReportsService {
       batchNo: batchMap[r.batchId!] || "N/A",
       quantity: r.quantity,
       patientName: r.patientName || "N/A",
-      doctorName: r.doctorName || "N/A",
-      doctorRegNo: r.doctorRegNo || "N/A",
+      // A sale a manager attested for has no prescription attached yet, so
+      // these columns are genuinely unknown rather than not applicable. Saying
+      // so is the point: "N/A" reads as "nothing to record" and would let an
+      // incomplete register pass for a complete one at inspection.
+      doctorName: r.doctorName || (r.rxPending ? "PRESCRIPTION PENDING" : "N/A"),
+      doctorRegNo: r.doctorRegNo || (r.rxPending ? "PRESCRIPTION PENDING" : "N/A"),
+      rxPending: !!r.rxPending,
     }));
   }
 

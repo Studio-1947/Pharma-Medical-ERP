@@ -32,6 +32,7 @@ import type {
   InvoiceItemDto,
   QueryInvoiceDto,
   VoidInvoiceDto,
+  AttachPrescriptionDto,
   ReturnInvoiceDto,
   SaleEventDto,
   QueryPatientLedgerDto,
@@ -240,6 +241,18 @@ export class BillingService {
 
         if (!approver || !["super_admin", "admin", "shop_manager"].includes(approver.role)) {
           throw new UnprocessableEntityException("Override approver must be a shop manager or admin");
+        }
+      }
+
+      if (dto.rxPending) {
+        const anyControlled = dto.items.some((item) => {
+          const med = medicines.find((m) => m.id === item.medicineId);
+          return !!med && (isControlledSchedule(med.scheduleClass) || med.requiresPrescription);
+        });
+        if (!anyControlled) {
+          throw new UnprocessableEntityException(
+            "Nothing on this bill needs a prescription, so there is none to attach later",
+          );
         }
       }
 
@@ -553,6 +566,7 @@ export class BillingService {
         isReturn: false,
         overrideReason: dto.overrideReason,
         overriddenBy: dto.overriddenBy,
+        rxPending: dto.rxPending ?? false,
       };
 
       const itemsData: Omit<typeof schema.salesInvoiceItems.$inferInsert, "invoiceId">[] = lines.map(line => ({
@@ -770,6 +784,80 @@ export class BillingService {
           ),
         );
     }
+  }
+
+
+  /**
+   * Attaches the prescription a manager promised at the counter.
+   *
+   * Documentary only, and deliberately so: the stock left the shelf when the
+   * invoice was written, the money is taken, and the sale is already in the
+   * ledger. What was missing is the piece of paper that authorised it, so this
+   * records which prescription that was and clears the outstanding flag. It
+   * does NOT touch stock, totals, or the prescription's dispensed quantities —
+   * re-running the dispense accounting hours later against a prescription
+   * whose lines may not even match the bill would corrupt both.
+   */
+  async attachPrescription(
+    id: string,
+    dto: AttachPrescriptionDto,
+    user: { sub: string; role?: string; branchId?: string | null },
+  ) {
+    const invoice = (await this.repo.findById(id)) as any;
+    if (!invoice) throw new NotFoundException(`Invoice ${id} not found`);
+
+    if (invoice.prescriptionId) {
+      throw new UnprocessableEntityException(
+        "This bill already has a prescription linked to it",
+      );
+    }
+
+    const [rx] = await this.drizzle.db
+      .select({
+        id: schema.prescriptions.id,
+        status: schema.prescriptions.status,
+        branchId: schema.prescriptions.branchId,
+        deletedAt: schema.prescriptions.deletedAt,
+      })
+      .from(schema.prescriptions)
+      .where(eq(schema.prescriptions.id, dto.prescriptionId));
+
+    if (!rx || rx.deletedAt) {
+      throw new NotFoundException("That prescription no longer exists");
+    }
+    // An unverified prescription does not discharge the debt — it just moves
+    // the gap from "no paper" to "paper nobody has checked".
+    if (rx.status !== "verified") {
+      throw new UnprocessableEntityException(
+        "Verify the prescription first — an unverified one does not close off a Schedule H sale",
+      );
+    }
+    // A prescription filed at another branch cannot be the authority for this
+    // branch's dispense; branch is how these registers are kept and inspected.
+    if (rx.branchId && invoice.branchId && rx.branchId !== invoice.branchId) {
+      throw new UnprocessableEntityException(
+        "That prescription belongs to another branch",
+      );
+    }
+
+    await this.drizzle.db
+      .update(schema.salesInvoices)
+      .set({ prescriptionId: dto.prescriptionId, rxPending: false })
+      .where(eq(schema.salesInvoices.id, id));
+
+    await this.audit?.writeSafe({
+      actorId: user.sub,
+      action: AuditAction.INVOICE_RX_ATTACH,
+      entity: "sales_invoice",
+      entityId: id,
+      oldValue: { prescriptionId: null, rxPending: invoice.rxPending ?? true },
+      newValue: { prescriptionId: dto.prescriptionId, rxPending: false },
+    });
+
+    return {
+      data: { id, prescriptionId: dto.prescriptionId, rxPending: false },
+      message: "Prescription attached — this sale is no longer outstanding",
+    };
   }
 
   async voidInvoice(id: string, dto: VoidInvoiceDto, userId: string) {
