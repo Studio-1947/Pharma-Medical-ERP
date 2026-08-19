@@ -799,6 +799,11 @@ export function PatientFirstBilling({
                 <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
                   <div className="relative flex-1">
                     <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    {/* One box, three kinds of input: a mobile number, a patient
+                        name, a medicine. inputMode="tel" opened a number pad on
+                        phones and in the installed PWA, which cannot type either
+                        of the other two — the text keyboard is the only one that
+                        serves all three, and digits are one tap away on it. */}
                     <input
                       autoFocus
                       value={query}
@@ -807,8 +812,12 @@ export function PatientFirstBilling({
                         setShowResults(false);
                       }}
                       placeholder="Search patient by mobile / name, or medicine…"
-                      inputMode="tel"
-                      className="w-full border-2 border-slate-200 rounded-full pl-11 pr-4 py-3 text-sm font-medium bg-white focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 transition-all"
+                      type="search"
+                      enterKeyHint="search"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      className="w-full border-2 border-slate-200 rounded-full pl-11 pr-4 py-3 text-sm font-medium bg-white focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 transition-all [&::-webkit-search-cancel-button]:appearance-none"
                     />
                   </div>
                   <div className="flex gap-3 shrink-0">
