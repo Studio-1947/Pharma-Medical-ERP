@@ -31,39 +31,42 @@ export function PwaUpdatePrompt({
     <div
       role="status"
       aria-live="polite"
-      className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[10000] w-[calc(100vw-2rem)] max-w-md p-4 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 flex items-center justify-between gap-3 animate-in slide-in-from-bottom duration-300"
+      // Below lg the mobile bottom nav owns the bottom edge, so the card is
+      // lifted clear of it (and of the iOS home indicator) instead of sitting
+      // on top of the nav buttons.
+      className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] lg:bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-[10000] w-[calc(100vw-1.5rem)] sm:w-[calc(100vw-2rem)] max-w-md p-3 sm:p-4 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 animate-in slide-in-from-bottom duration-300 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-3 sm:flex sm:items-center sm:justify-between sm:gap-3"
     >
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="w-10 h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shrink-0 shadow-sm">
-          <Sparkles size={20} />
+      <div className="col-start-1 row-start-1 flex items-center gap-3 min-w-0">
+        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shrink-0 shadow-sm">
+          <Sparkles size={18} className="sm:w-5 sm:h-5" />
         </div>
         <div className="leading-tight min-w-0">
           <p className="text-xs font-extrabold text-white">
             A new version is ready
           </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">
+          <p className="text-[11px] text-slate-400 mt-0.5 break-words">
             Reload to apply. Your queued offline invoices are kept.
           </p>
         </div>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
-        <button
-          onClick={handleApply}
-          disabled={applying}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-70 text-white text-xs font-bold rounded-xl shadow-sm transition-all"
-        >
-          <RefreshCw size={14} className={applying ? "animate-spin" : undefined} />
-          <span>{applying ? "Updating" : "Update"}</span>
-        </button>
-        <button
-          onClick={onDismiss}
-          className="p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors"
-          aria-label="Dismiss update notice"
-        >
-          <X size={16} />
-        </button>
-      </div>
+      {/* Full-width primary action on its own row on phones, inline on sm+. */}
+      <button
+        onClick={handleApply}
+        disabled={applying}
+        className="col-span-2 row-start-2 w-full sm:w-auto min-h-[2.75rem] sm:min-h-0 flex items-center justify-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-70 text-white text-xs font-bold rounded-xl shadow-sm transition-all shrink-0"
+      >
+        <RefreshCw size={14} className={applying ? "animate-spin" : undefined} />
+        <span>{applying ? "Updating" : "Update"}</span>
+      </button>
+
+      <button
+        onClick={onDismiss}
+        className="col-start-2 row-start-1 justify-self-end p-2 sm:p-1.5 text-slate-400 hover:text-white rounded-lg transition-colors shrink-0"
+        aria-label="Dismiss update notice"
+      >
+        <X size={16} />
+      </button>
     </div>
   );
 }
