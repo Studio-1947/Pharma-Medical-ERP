@@ -26,6 +26,13 @@ const RECOVERY_FLAG = "pharmerp:sw-recovered-at";
 /** A tab may self-heal at most once per this window. */
 const RECOVERY_COOLDOWN_MS = 60_000;
 
+/**
+ * How long to wait after handing control to the waiting worker before reloading
+ * anyway. `controllerchange` is the happy path; this only exists so the Update
+ * button can never sit spinning if that event never reaches us.
+ */
+const APPLY_FALLBACK_MS = 4_000;
+
 const CHUNK_ERROR_PATTERN =
   /ChunkLoadError|Loading chunk [\w-]+ failed|Loading CSS chunk|Failed to fetch dynamically imported module|Importing a module script failed/i;
 
@@ -36,16 +43,56 @@ export function PwaRegister() {
   const waitingRef = useRef<ServiceWorker | null>(null);
   const reloadingRef = useRef(false);
   const hiddenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const applyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * Whether this page has ever been under a worker. Live, not a snapshot: the
+   * first worker claims an uncontrolled page some time after mount, and a tab
+   * that missed that transition would otherwise never recognise a later
+   * `controllerchange` as an update and would never reload.
+   */
+  const hadControllerRef = useRef(false);
+
+  /** Set once the user (or idle auto-apply) has asked for the new build. */
+  const applyRequestedRef = useRef(false);
+
+  /** Single reload path, so no two signals can race into a double reload. */
+  const reloadNow = useCallback(() => {
+    if (reloadingRef.current) return;
+    reloadingRef.current = true;
+    if (applyTimerRef.current) {
+      clearTimeout(applyTimerRef.current);
+      applyTimerRef.current = null;
+    }
+    window.location.reload();
+  }, []);
 
   /** Hand control to the waiting worker; `controllerchange` drives the reload. */
   const applyUpdate = useCallback(() => {
+    applyRequestedRef.current = true;
+
     const waiting = waitingRef.current;
-    if (!waiting) {
-      window.location.reload();
+
+    // Nothing parked, or the worker moved on while the prompt sat on screen
+    // (another tab applied it, or idle auto-apply won the race). There is
+    // nobody left to hand control to, so just load the new build.
+    if (!waiting || waiting.state === "redundant" || waiting.state === "activated") {
+      reloadNow();
       return;
     }
+
+    // The worker reaching `activated` is a second, independent signal that the
+    // handover went through -- `controllerchange` is not guaranteed to be the
+    // first one to arrive.
+    waiting.addEventListener("statechange", () => {
+      if (waiting.state === "activated") reloadNow();
+    });
+
+    if (applyTimerRef.current) clearTimeout(applyTimerRef.current);
+    applyTimerRef.current = setTimeout(reloadNow, APPLY_FALLBACK_MS);
+
     waiting.postMessage({ type: "SKIP_WAITING" });
-  }, []);
+  }, [reloadNow]);
 
   const dismissUpdate = useCallback(() => setUpdateReady(false), []);
 
@@ -54,10 +101,10 @@ export function PwaRegister() {
 
     const container = navigator.serviceWorker;
 
-    // Whether this page was already under a worker. On a first-ever install the
-    // worker claims the page and fires controllerchange, but there is no new
-    // build to load, so that case must not trigger a reload.
-    const hadController = Boolean(container.controller);
+    // On a first-ever install the worker claims the page and fires
+    // controllerchange, but there is no new build to load, so that one case
+    // must not trigger a reload.
+    hadControllerRef.current = Boolean(container.controller);
 
     let disposed = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -111,9 +158,20 @@ export function PwaRegister() {
     };
 
     const onControllerChange = () => {
-      if (!hadController || reloadingRef.current) return;
-      reloadingRef.current = true;
-      window.location.reload();
+      // First worker claiming a page that was loaded uncontrolled: same build,
+      // nothing to reload for. Remember it so the next handover does reload.
+      if (!hadControllerRef.current && !applyRequestedRef.current) {
+        hadControllerRef.current = true;
+        return;
+      }
+      reloadNow();
+    };
+
+    /** The activating worker announces itself; treat it as a handover signal. */
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.type !== "SW_ACTIVATED") return;
+      if (!applyRequestedRef.current) return;
+      reloadNow();
     };
 
     const checkForUpdate = () => {
@@ -173,11 +231,8 @@ export function PwaRegister() {
               .catch(() => undefined)
           : Promise.resolve(undefined);
 
-      clearAll.then(() => {
-        reloadingRef.current = true;
-        // Bypasses bfcache and any in-memory document cache.
-        window.location.reload();
-      });
+      // Bypasses bfcache and any in-memory document cache.
+      clearAll.then(reloadNow);
     };
 
     const onError = (event: ErrorEvent) => {
@@ -190,6 +245,7 @@ export function PwaRegister() {
     };
 
     container.addEventListener("controllerchange", onControllerChange);
+    container.addEventListener("message", onMessage);
     document.addEventListener("visibilitychange", onVisibilityChange);
     window.addEventListener("online", checkForUpdate);
     window.addEventListener("focus", checkForUpdate);
@@ -206,14 +262,16 @@ export function PwaRegister() {
       disposed = true;
       if (intervalId) clearInterval(intervalId);
       if (hiddenTimerRef.current) clearTimeout(hiddenTimerRef.current);
+      if (applyTimerRef.current) clearTimeout(applyTimerRef.current);
       container.removeEventListener("controllerchange", onControllerChange);
+      container.removeEventListener("message", onMessage);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("online", checkForUpdate);
       window.removeEventListener("focus", checkForUpdate);
       window.removeEventListener("error", onError);
       window.removeEventListener("unhandledrejection", onRejection);
     };
-  }, [applyUpdate]);
+  }, [applyUpdate, reloadNow]);
 
   return (
     <PwaUpdatePrompt

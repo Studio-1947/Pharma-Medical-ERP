@@ -20,6 +20,15 @@ export function PwaUpdatePrompt({
     if (!open) setApplying(false);
   }, [open]);
 
+  // Applying always ends in a reload, so the spinner normally dies with the
+  // page. If that reload is blocked for any reason, fall back to an offerable
+  // button rather than leaving a control that spins for ever.
+  useEffect(() => {
+    if (!applying) return;
+    const timer = setTimeout(() => setApplying(false), 10_000);
+    return () => clearTimeout(timer);
+  }, [applying]);
+
   if (!open) return null;
 
   const handleApply = () => {
@@ -31,10 +40,15 @@ export function PwaUpdatePrompt({
     <div
       role="status"
       aria-live="polite"
+      // Centred with `left/right + mx-auto` rather than `-translate-x-1/2`:
+      // `animate-in` resolves to `fade-in ... both`, whose final keyframe sets
+      // `transform: translateY(0)` and would permanently cancel a translate
+      // used for centring, leaving the card hanging off the right edge.
+      //
       // Below lg the mobile bottom nav owns the bottom edge, so the card is
       // lifted clear of it (and of the iOS home indicator) instead of sitting
       // on top of the nav buttons.
-      className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] lg:bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] left-1/2 -translate-x-1/2 z-[10000] w-[calc(100vw-1.5rem)] sm:w-[calc(100vw-2rem)] max-w-md p-3 sm:p-4 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 animate-in slide-in-from-bottom duration-300 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-3 sm:flex sm:items-center sm:justify-between sm:gap-3"
+      className="fixed bottom-[calc(4.5rem+env(safe-area-inset-bottom,0px))] lg:bottom-[calc(1rem+env(safe-area-inset-bottom,0px))] left-3 right-3 sm:left-4 sm:right-4 mx-auto z-[10000] max-w-md p-3 sm:p-4 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 animate-in grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-2 gap-y-3 sm:flex sm:items-center sm:justify-between sm:gap-3"
     >
       <div className="col-start-1 row-start-1 flex items-center gap-3 min-w-0">
         <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-emerald-600 flex items-center justify-center text-white shrink-0 shadow-sm">
