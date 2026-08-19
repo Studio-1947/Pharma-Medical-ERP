@@ -35,7 +35,7 @@ import { QuickPatientForm, QuickPatient } from "@/components/modules/patients/qu
 import { CounterDeskModals, DeskModalView } from "@/components/modules/billing/counter-desk-modals";
 import { DoctorMedicinesPanel } from "@/components/modules/billing/doctor-medicines-panel";
 import { DoctorsOverview } from "@/components/modules/billing/doctors-overview";
-import { OtcSupplyModal } from "@/components/modules/billing/otc-supply-modal";
+import { OtcCounterSale } from "@/components/modules/billing/otc-counter-sale";
 import { InvoiceDetailModal } from "@/components/modules/billing/invoice-detail-modal";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
 import { useToast } from "@/components/ui/toast";
@@ -811,10 +811,19 @@ export function PatientFirstBilling({
         </div>
       </div>
 
-      {/* Journey card: patient search -> patient card -> path -> path content */}
+      {/* Journey card: patient search -> patient card -> path -> path content.
+          An OTC counter sale takes the card over while it runs — the counter
+          searches on the left and watches the bill grow on the right, in the
+          same viewport, rather than through a dialog that hides the desk. */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        {/* Step 1 — find the patient */}
-        {!cart.patientId ? (
+        {otcSupplyTarget ? (
+          <div className="p-5">
+            <OtcCounterSale
+              medicine={otcSupplyTarget}
+              onClose={() => setOtcSupplyTarget(null)}
+            />
+          </div>
+        ) : !cart.patientId ? (
           <div className="p-6">
             {registering ? (
               <QuickPatientForm
@@ -1590,18 +1599,13 @@ export function PatientFirstBilling({
       {/* Stat-card drill-down modals — never leave the desk */}
       <CounterDeskModals view={deskModal} onClose={() => setDeskModal(null)} />
 
-      {/* OTC supply without billing — shared with the classic POS */}
+      {/* A bill opened from a stat card or the day's billings list */}
       {openInvoiceId && (
         <InvoiceDetailModal
           invoiceId={openInvoiceId}
           onClose={() => setOpenInvoiceId(null)}
         />
       )}
-
-      <OtcSupplyModal
-        medicine={otcSupplyTarget}
-        onClose={() => setOtcSupplyTarget(null)}
-      />
 
       {/* Browse a doctor's full list from the top-of-page overview. Deliberately
           patient-free: an operator can eyeball the list before deciding whether
