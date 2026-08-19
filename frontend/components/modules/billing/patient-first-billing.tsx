@@ -36,6 +36,7 @@ import { CounterDeskModals, DeskModalView } from "@/components/modules/billing/c
 import { DoctorMedicinesPanel } from "@/components/modules/billing/doctor-medicines-panel";
 import { DoctorsOverview } from "@/components/modules/billing/doctors-overview";
 import { OtcSupplyModal } from "@/components/modules/billing/otc-supply-modal";
+import { InvoiceDetailModal } from "@/components/modules/billing/invoice-detail-modal";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
 import { useToast } from "@/components/ui/toast";
 import { useCartStore } from "@/stores/cart.store";
@@ -261,6 +262,7 @@ export function PatientFirstBilling({
   // Whole medicine row, not just id+name: the OTC modal prices the sale from
   // its MRP, tax rate and strip size.
   const [otcSupplyTarget, setOtcSupplyTarget] = useState<any | null>(null);
+  const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
 
   const selectedPatientRaw = cart.patientId
     ? patients.find((p) => p.id === cart.patientId)
@@ -879,27 +881,48 @@ export function PatientFirstBilling({
                             const servedPatientId = inv?.patientId;
                             const servedName = inv?.patientName ?? "Walk-in";
                             return (
-                              <button
+                              // Two actions, because the row has two honest
+                              // meanings: look at the bill, and pick the patient
+                              // back up. It used to only do the second, so a
+                              // walk-in row — which has no patient — rendered
+                              // disabled and clicking the bill did nothing. Most
+                              // OTC sales are walk-ins, so that was the whole
+                              // list greyed out.
+                              <div
                                 key={inv.id}
-                                type="button"
-                                disabled={!servedPatientId}
-                                onClick={() => servedPatientId && selectPatient(servedPatientId, servedName)}
-                                className="w-full flex items-center justify-between gap-3 px-4 py-2.5 hover:bg-orange-50/60 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-orange-50/60 transition-colors"
                               >
-                                <div className="flex items-center gap-2.5 min-w-0">
-                                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 shrink-0 border border-slate-200">
-                                    {servedName.slice(0, 1).toUpperCase()}
+                                <button
+                                  type="button"
+                                  onClick={() => setOpenInvoiceId(inv.id)}
+                                  title={`Open bill ${inv?.invoiceNo ?? ""}`}
+                                  className="flex-1 flex items-center justify-between gap-3 text-left min-w-0"
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 shrink-0 border border-slate-200">
+                                      {servedName.slice(0, 1).toUpperCase()}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-[13px] font-bold text-slate-800 truncate">{servedName}</p>
+                                      <p className="text-[11px] text-slate-400 font-mono truncate">{inv?.invoiceNo}</p>
+                                    </div>
                                   </div>
-                                  <div className="min-w-0">
-                                    <p className="text-[13px] font-bold text-slate-800 truncate">{servedName}</p>
-                                    <p className="text-[11px] text-slate-400 font-mono truncate">{inv?.invoiceNo}</p>
+                                  <div className="text-right shrink-0">
+                                    <p className="text-xs font-bold text-slate-700">₹{Number(inv?.totalAmount ?? 0).toFixed(2)}</p>
+                                    <p className="text-[10px] text-slate-400">{formatTime(inv?.createdAt)}</p>
                                   </div>
-                                </div>
-                                <div className="text-right shrink-0">
-                                  <p className="text-xs font-bold text-slate-700">₹{Number(inv?.totalAmount ?? 0).toFixed(2)}</p>
-                                  <p className="text-[10px] text-slate-400">{formatTime(inv?.createdAt)}</p>
-                                </div>
-                              </button>
+                                </button>
+                                {servedPatientId && (
+                                  <button
+                                    type="button"
+                                    onClick={() => selectPatient(servedPatientId, servedName)}
+                                    title={`Serve ${servedName} again`}
+                                    className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-orange-600 hover:bg-orange-100 transition-colors"
+                                  >
+                                    <UserPlus size={14} />
+                                  </button>
+                                )}
+                              </div>
                             );
                           })}
                         </div>
@@ -1503,6 +1526,13 @@ export function PatientFirstBilling({
       <CounterDeskModals view={deskModal} onClose={() => setDeskModal(null)} />
 
       {/* OTC supply without billing — shared with the classic POS */}
+      {openInvoiceId && (
+        <InvoiceDetailModal
+          invoiceId={openInvoiceId}
+          onClose={() => setOpenInvoiceId(null)}
+        />
+      )}
+
       <OtcSupplyModal
         medicine={otcSupplyTarget}
         onClose={() => setOtcSupplyTarget(null)}
