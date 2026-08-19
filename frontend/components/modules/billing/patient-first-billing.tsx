@@ -1057,31 +1057,38 @@ export function PatientFirstBilling({
                         {medResults.map((m: any) => (
                           <div
                             key={m.id}
-                            className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-orange-50/40 transition-colors"
+                            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-orange-50/40 transition-colors"
                           >
-                            <div className="min-w-0">
+                            <div className="min-w-0 flex-1">
                               <p className="text-sm font-bold text-slate-800 truncate">{m.name}</p>
                               <p className="text-xs text-slate-400 font-mono truncate">
                                 {m.sku}
                                 {m.scheduleClass ? ` · ${m.scheduleClass}` : ""}
                               </p>
                             </div>
-                            <div className="flex items-center gap-2 shrink-0">
-                              <span className="text-[11px] text-emerald-700 font-semibold">
-                                {formatStockUnit(Number(m.totalStock || 0), m)}
-                              </span>
-                              {canOtc && (
+                            {/* Stock gets its own fixed column so the sale
+                                buttons line up down the list instead of
+                                shuffling left and right with the length of
+                                "Out of stock" — and out of stock reads as a
+                                warning, not as a quantity. */}
+                            <span
+                              className={`w-20 sm:w-36 shrink-0 text-right text-[11px] font-semibold leading-tight ${
+                                Number(m.totalStock || 0) > 0 ? "text-emerald-700" : "text-rose-600"
+                              }`}
+                            >
+                              {formatStockUnit(Number(m.totalStock || 0), m)}
+                            </span>
+                            {canOtc && (
                               <button
                                 type="button"
                                 onClick={() => setOtcSupplyTarget(m)}
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold transition-colors shadow-sm"
+                                className="w-[104px] shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold transition-colors shadow-sm"
                                 title="Sell over the counter without a prescription — bills it, or record a free hand-out"
                               >
                                 <Pill size={11} />
                                 OTC sale
                               </button>
-                              )}
-                            </div>
+                            )}
                           </div>
                         ))}
                       </div>

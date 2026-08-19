@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -108,11 +108,42 @@ function renderModal(medicine: any = MEDICINE) {
   );
 }
 
+/** A second medicine the counter can add to the same bill. */
+const MEDICINE_2 = {
+  id: "med-2",
+  name: "Cetirizine 10 mg",
+  sku: "CET10",
+  priceMrp: "40.00",
+  taxPercent: "12",
+  stripSize: "10",
+  unit: "Strip",
+  dosageForm: "Tablet",
+  scheduleClass: null,
+  requiresPrescription: false,
+};
+
+const BATCHES_2 = [
+  {
+    id: "batch-cet",
+    batchNo: "CET01",
+    quantity: 100,
+    reservedQty: 0,
+    mrpAtEntry: "40.00",
+    expiryDate: "2027-01-31",
+  },
+];
+
 beforeEach(() => {
   vi.clearAllMocks();
   mockRole = "admin";
   can.mockImplementation(() => true);
-  get.mockResolvedValue({ data: BATCHES });
+  // Batches are fetched per medicine, and the catalogue search shares the same
+  // client — answer by URL so a two-medicine bill prices each line correctly.
+  get.mockImplementation((url: string) => {
+    if (url === "/inventory/medicines") return Promise.resolve({ data: [MEDICINE_2] });
+    if (url.includes("med-2")) return Promise.resolve({ data: BATCHES_2 });
+    return Promise.resolve({ data: BATCHES });
+  });
   post.mockResolvedValue({ data: { invoice: { id: "inv-9", invoiceNo: "BRN01-1" } } });
 });
 
@@ -123,7 +154,9 @@ describe("OtcSupplyModal", () => {
 
     // One strip of 10 at 85.50 pre-tax + 12% GST.
     const button = await screen.findByRole("button", { name: /Bill ₹95\.76/ });
-    expect(screen.getByText("₹95.76")).toBeInTheDocument();
+    // Once on the medicine's own line, once as the amount to collect — the
+    // sale carries a list now, so a line and the bill total both show it.
+    expect(screen.getAllByText("₹95.76").length).toBeGreaterThan(0);
 
     await user.click(button);
 
@@ -280,6 +313,96 @@ describe("OtcSupplyModal", () => {
 
     // 240 loose units / strip of 10 = 24 full strips available.
     expect((qty as HTMLInputElement).value).toBe("24");
+  });
+
+  it("bills several medicines on one invoice, with one payment for the lot", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByRole("button", { name: /Bill ₹95\.76/ });
+
+    // A walk-in rarely buys one thing — the second medicine joins the same bill.
+    await user.type(screen.getByLabelText(/Add another medicine/i), "cet");
+    await user.click(await screen.findByRole("button", { name: /Cetirizine 10 mg/ }));
+
+    // 85.50 + 12% = 95.76, 40.00 + 12% = 44.80 — one bill of 140.56.
+    const bill = await screen.findByRole("button", { name: /Bill ₹140\.56/ });
+    await user.click(bill);
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [url, payload] = post.mock.calls[0] as [string, any];
+    expect(url).toBe("/billing/invoices");
+    expect(payload.items).toEqual([
+      { medicineId: "med-1", quantity: 10, discountPct: "0.00" },
+      { medicineId: "med-2", quantity: 10, discountPct: "0.00" },
+    ]);
+    // One invoice, one payment — not one bill per medicine.
+    expect(payload.payments).toEqual([{ mode: "cash", amount: "140.56" }]);
+  });
+
+  it("prices each medicine's quantity and discount on its own line", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByRole("button", { name: /Bill ₹/ });
+
+    await user.type(screen.getByLabelText(/Add another medicine/i), "cet");
+    await user.click(await screen.findByRole("button", { name: /Cetirizine 10 mg/ }));
+
+    // Two strips of the second medicine at 10% off: 80.00 less 8 = 72 taxable,
+    // GST 8.64, so 80.64 on top of the first line's 95.76.
+    // Set outright rather than clear-and-type: the field re-fills itself with
+    // 1 the moment it is emptied, so typing would append to that.
+    const qtys = await screen.findAllByLabelText(/^Quantity/i, { selector: "input" });
+    fireEvent.change(qtys[1]!, { target: { value: "2" } });
+    const discounts = screen.getAllByLabelText(/Discount %/i, { selector: "input" });
+    fireEvent.change(discounts[1]!, { target: { value: "10" } });
+
+    await user.click(await screen.findByRole("button", { name: /Bill ₹176\.40/ }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [, payload] = post.mock.calls[0] as [string, any];
+    expect(payload.items).toEqual([
+      { medicineId: "med-1", quantity: 10, discountPct: "0.00" },
+      { medicineId: "med-2", quantity: 20, discountPct: "10.00" },
+    ]);
+    expect(payload.payments[0].amount).toBe("176.40");
+  });
+
+  it("drops a medicine back off the bill without disturbing the rest", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByRole("button", { name: /Bill ₹95\.76/ });
+
+    await user.type(screen.getByLabelText(/Add another medicine/i), "cet");
+    await user.click(await screen.findByRole("button", { name: /Cetirizine 10 mg/ }));
+    await screen.findByRole("button", { name: /Bill ₹140\.56/ });
+
+    await user.click(screen.getByRole("button", { name: /Remove Cetirizine 10 mg/i }));
+
+    expect(await screen.findByRole("button", { name: /Bill ₹95\.76/ })).toBeEnabled();
+  });
+
+  it("holds the whole bill back when any medicine on it needs a prescription", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByRole("button", { name: /Bill ₹95\.76/ });
+
+    get.mockImplementation((url: string) => {
+      if (url === "/inventory/medicines")
+        return Promise.resolve({
+          data: [{ ...MEDICINE_2, scheduleClass: "H", requiresPrescription: true }],
+        });
+      if (url.includes("med-2")) return Promise.resolve({ data: BATCHES_2 });
+      return Promise.resolve({ data: BATCHES });
+    });
+
+    await user.type(screen.getByLabelText(/Add another medicine/i), "cet");
+    await user.click(await screen.findByRole("button", { name: /Cetirizine 10 mg/ }));
+
+    expect(
+      await screen.findByText(/cannot be handed over without a prescription/i),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Bill ₹/ })).toBeDisabled();
+    expect(post).not.toHaveBeenCalled();
   });
 
   it("hides billing from a user without the billing permission", async () => {
