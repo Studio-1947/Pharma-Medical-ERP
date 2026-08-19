@@ -17,7 +17,7 @@
  * deploy can never leave stale HTML pointing at deleted JS chunks behind.
  */
 
-const SW_VERSION = "bmt00gbe1";
+const SW_VERSION = "bmt01fa0q";
 
 const NAV_CACHE = `pharmerp-nav-${SW_VERSION}`;
 const ASSET_CACHE = `pharmerp-assets-${SW_VERSION}`;

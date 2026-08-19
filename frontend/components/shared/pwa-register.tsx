@@ -33,6 +33,15 @@ const RECOVERY_COOLDOWN_MS = 60_000;
  */
 const APPLY_FALLBACK_MS = 4_000;
 
+/**
+ * Where a tab lands once it has picked up a new build. Reloading in place drops
+ * the user back onto a half-finished screen rebuilt by different code, so the
+ * new build starts from the entry screen instead. Middleware sends a session
+ * holder straight on to /dashboard, so this only shows the login form to
+ * someone who was signed out anyway.
+ */
+const POST_UPDATE_PATH = "/login";
+
 const CHUNK_ERROR_PATTERN =
   /ChunkLoadError|Loading chunk [\w-]+ failed|Loading CSS chunk|Failed to fetch dynamically imported module|Importing a module script failed/i;
 
@@ -56,16 +65,23 @@ export function PwaRegister() {
   /** Set once the user (or idle auto-apply) has asked for the new build. */
   const applyRequestedRef = useRef(false);
 
-  /** Single reload path, so no two signals can race into a double reload. */
-  const reloadNow = useCallback(() => {
+  /** Single exit path, so no two signals can race into a double navigation. */
+  const leavePage = useCallback((to?: string) => {
     if (reloadingRef.current) return;
     reloadingRef.current = true;
     if (applyTimerRef.current) {
       clearTimeout(applyTimerRef.current);
       applyTimerRef.current = null;
     }
-    window.location.reload();
+    if (to) window.location.assign(to);
+    else window.location.reload();
   }, []);
+
+  /** Hand the user to the new build on a clean screen. */
+  const landOnNewBuild = useCallback(
+    () => leavePage(POST_UPDATE_PATH),
+    [leavePage],
+  );
 
   /** Hand control to the waiting worker; `controllerchange` drives the reload. */
   const applyUpdate = useCallback(() => {
@@ -77,7 +93,7 @@ export function PwaRegister() {
     // (another tab applied it, or idle auto-apply won the race). There is
     // nobody left to hand control to, so just load the new build.
     if (!waiting || waiting.state === "redundant" || waiting.state === "activated") {
-      reloadNow();
+      landOnNewBuild();
       return;
     }
 
@@ -85,14 +101,14 @@ export function PwaRegister() {
     // handover went through -- `controllerchange` is not guaranteed to be the
     // first one to arrive.
     waiting.addEventListener("statechange", () => {
-      if (waiting.state === "activated") reloadNow();
+      if (waiting.state === "activated") landOnNewBuild();
     });
 
     if (applyTimerRef.current) clearTimeout(applyTimerRef.current);
-    applyTimerRef.current = setTimeout(reloadNow, APPLY_FALLBACK_MS);
+    applyTimerRef.current = setTimeout(landOnNewBuild, APPLY_FALLBACK_MS);
 
     waiting.postMessage({ type: "SKIP_WAITING" });
-  }, [reloadNow]);
+  }, [landOnNewBuild]);
 
   const dismissUpdate = useCallback(() => setUpdateReady(false), []);
 
@@ -164,14 +180,14 @@ export function PwaRegister() {
         hadControllerRef.current = true;
         return;
       }
-      reloadNow();
+      landOnNewBuild();
     };
 
     /** The activating worker announces itself; treat it as a handover signal. */
     const onMessage = (event: MessageEvent) => {
       if (event.data?.type !== "SW_ACTIVATED") return;
       if (!applyRequestedRef.current) return;
-      reloadNow();
+      landOnNewBuild();
     };
 
     const checkForUpdate = () => {
@@ -232,7 +248,7 @@ export function PwaRegister() {
           : Promise.resolve(undefined);
 
       // Bypasses bfcache and any in-memory document cache.
-      clearAll.then(reloadNow);
+      clearAll.then(() => leavePage());
     };
 
     const onError = (event: ErrorEvent) => {
@@ -271,7 +287,7 @@ export function PwaRegister() {
       window.removeEventListener("error", onError);
       window.removeEventListener("unhandledrejection", onRejection);
     };
-  }, [applyUpdate, reloadNow]);
+  }, [applyUpdate, landOnNewBuild, leavePage]);
 
   return (
     <PwaUpdatePrompt

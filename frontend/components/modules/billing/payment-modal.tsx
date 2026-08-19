@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { X, Banknote, Smartphone, CreditCard, Shield, FileText, Layers, Plus, Trash2 } from "lucide-react";
 
 const MODE_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
@@ -71,8 +71,27 @@ export function PaymentModal({ open, total, hasPatient, onConfirm, onClose, load
     setSplits((s) => s.map((r, idx) => (idx === i ? { ...r, [field]: val } : r)));
 
   const totalAllocated = splits.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
-  const changeDue = Math.max(0, (parseFloat(cashTendered) || 0) - total);
+  const cashIn = parseFloat(cashTendered) || 0;
+  const changeDue = Math.max(0, cashIn - total);
   const splitGap = total - totalAllocated;
+
+  /** How far the cash on the counter falls short of the bill. */
+  const cashShort = Math.max(0, total - cashIn);
+
+  /**
+   * Notes a customer plausibly hands over: the next round figures above the
+   * bill. The fixed 100/200/500/1000 buttons this replaces sat *below* most
+   * bill totals, so tapping one under-paid the bill and then showed a change
+   * of zero with no explanation, which is what made this panel unusable.
+   */
+  const cashSuggestions = useMemo(() => {
+    const out: number[] = [];
+    for (const step of [10, 50, 100, 500, 1000]) {
+      const up = Math.ceil(total / step) * step;
+      if (up > total + 0.001 && !out.includes(up)) out.push(up);
+    }
+    return out.slice(0, 3);
+  }, [total]);
 
   const handleModeSwitch = (m: string) => {
     setMode(m);
@@ -130,7 +149,10 @@ export function PaymentModal({ open, total, hasPatient, onConfirm, onClose, load
 
           {/* Amount due */}
           <div className="bg-slate-50 rounded-xl px-4 py-2.5 text-center border border-slate-200">
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Amount Due</p>
+            {/* Not "Amount Due": in this app a due is money still owed after
+                the sale, so that wording on the bill total read to counter
+                staff as if the customer already owed it. */}
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-0.5">Amount to Collect</p>
             <p className="text-3xl font-black text-slate-900">₹{total.toFixed(2)}</p>
           </div>
 
@@ -269,15 +291,28 @@ export function PaymentModal({ open, total, hasPatient, onConfirm, onClose, load
 
           ) : mode === "cash" ? (
             <div className="space-y-2.5">
-              {/* Quick amount buttons */}
+              {/* What the customer actually handed over */}
               <div>
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Quick Amount</p>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+                  How much cash did the customer give?
+                </p>
                 <div className="grid grid-cols-4 gap-1.5">
-                  {[100, 200, 500, 1000].map((amt) => (
+                  <button
+                    type="button"
+                    onClick={() => setCashTendered(String(total.toFixed(2)))}
+                    className={`py-1.5 rounded-lg text-xs font-semibold border transition-all ${
+                      Math.abs(cashIn - total) < 0.005
+                        ? "bg-emerald-500 text-white border-emerald-500"
+                        : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700"
+                    }`}
+                  >
+                    Exact
+                  </button>
+                  {cashSuggestions.map((amt) => (
                     <button key={amt} type="button"
                       onClick={() => setCashTendered(String(amt.toFixed(2)))}
                       className={`py-1.5 rounded-lg text-xs font-semibold border transition-all ${
-                        parseFloat(cashTendered) === amt
+                        Math.abs(cashIn - amt) < 0.005
                           ? "bg-emerald-500 text-white border-emerald-500"
                           : "border-gray-200 bg-gray-50 text-gray-700 hover:bg-emerald-50 hover:border-emerald-300 hover:text-emerald-700"
                       }`}
@@ -291,7 +326,7 @@ export function PaymentModal({ open, total, hasPatient, onConfirm, onClose, load
               {/* Cash received + change */}
               <div className="bg-gray-50 rounded-xl p-3 border space-y-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700">Cash Received</span>
+                  <span className="text-sm font-medium text-gray-700">Cash received</span>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-gray-400 font-medium">₹</span>
                     <input
@@ -304,12 +339,24 @@ export function PaymentModal({ open, total, hasPatient, onConfirm, onClose, load
                   </div>
                 </div>
                 <div className="flex items-center justify-between border-t pt-2">
-                  <span className="text-sm font-semibold text-gray-600">Change Due</span>
+                  {/* "Change Due" sat directly under a header reading "Amount
+                      Due" and was read as more money owed -- the opposite of
+                      what it means. This names which way the money moves. */}
+                  <span className="text-sm font-semibold text-gray-600">Give back to customer</span>
                   <span className={`text-xl font-black ${changeDue > 0 ? "text-emerald-600" : "text-gray-400"}`}>
                     ₹{changeDue.toFixed(2)}
                   </span>
                 </div>
               </div>
+
+              {cashShort > 0.01 && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900 leading-snug">
+                  That is ₹{cashShort.toFixed(2)} less than the bill. This box only
+                  works out the change &mdash; confirming still records the full
+                  ₹{total.toFixed(2)} as paid. To leave the rest owing on the
+                  patient&apos;s account, use <strong>Mixed</strong> instead.
+                </div>
+              )}
             </div>
 
           ) : (

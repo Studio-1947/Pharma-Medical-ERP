@@ -38,6 +38,11 @@ class FakeContainer extends EventTarget {
 
 let container: FakeContainer;
 let reload: ReturnType<typeof vi.fn>;
+let assign: ReturnType<typeof vi.fn>;
+
+/** Applying an update navigates; a chunk-error self-heal reloads in place. */
+const wentToNewBuild = () =>
+  assign.mock.calls.length === 1 && assign.mock.calls[0]?.[0] === "/login";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -49,8 +54,9 @@ beforeEach(() => {
   });
 
   reload = vi.fn();
+  assign = vi.fn();
   Object.defineProperty(window, "location", {
-    value: { ...window.location, reload },
+    value: { ...window.location, reload, assign },
     configurable: true,
     writable: true,
   });
@@ -92,9 +98,10 @@ describe("PwaRegister update handover", () => {
     });
 
     expect(reload).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
   });
 
-  it("reloads on Update in a tab that was claimed after it loaded", async () => {
+  it("sends the tab to the entry screen on Update after a late claim", async () => {
     // Regression: `hadController` used to be snapshotted at mount. A tab that
     // loaded before any worker existed kept that snapshot at false for its whole
     // life, so the handover after Update was ignored and the button span for
@@ -113,16 +120,16 @@ describe("PwaRegister update handover", () => {
     });
 
     expect(next.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
-    expect(reload).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
 
     await act(async () => {
       container.claim(next);
     });
 
-    expect(reload).toHaveBeenCalledTimes(1);
+    expect(wentToNewBuild()).toBe(true);
   });
 
-  it("reloads once even when several handover signals arrive", async () => {
+  it("navigates once even when several handover signals arrive", async () => {
     await mount();
     await act(async () => {
       container.claim(new FakeWorker());
@@ -142,10 +149,11 @@ describe("PwaRegister update handover", () => {
       vi.advanceTimersByTime(10_000);
     });
 
-    expect(reload).toHaveBeenCalledTimes(1);
+    expect(assign).toHaveBeenCalledTimes(1);
+    expect(reload).not.toHaveBeenCalled();
   });
 
-  it("reloads anyway if the worker never hands over", async () => {
+  it("leaves for the new build anyway if the worker never hands over", async () => {
     await mount();
     await act(async () => {
       container.claim(new FakeWorker());
@@ -155,7 +163,7 @@ describe("PwaRegister update handover", () => {
     await act(async () => {
       screen.getByRole("button", { name: "Update" }).click();
     });
-    expect(reload).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
 
     // The worker swallowed SKIP_WAITING; the failsafe still gets the user onto
     // the new build rather than leaving the button spinning.
@@ -163,10 +171,10 @@ describe("PwaRegister update handover", () => {
       vi.advanceTimersByTime(4_000);
     });
 
-    expect(reload).toHaveBeenCalledTimes(1);
+    expect(wentToNewBuild()).toBe(true);
   });
 
-  it("reloads immediately when the waiting worker is already gone", async () => {
+  it("leaves immediately when the waiting worker is already gone", async () => {
     await mount();
     await act(async () => {
       container.claim(new FakeWorker());
@@ -181,6 +189,6 @@ describe("PwaRegister update handover", () => {
     });
 
     expect(next.postMessage).not.toHaveBeenCalled();
-    expect(reload).toHaveBeenCalledTimes(1);
+    expect(wentToNewBuild()).toBe(true);
   });
 });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Search,
@@ -90,6 +90,38 @@ export function PatientFirstBilling({
   // Shared cart — the POS terminal reads the same store, so anything built
   // here shows up there when we hand off for payment.
   const cart = useCartStore();
+
+  /**
+   * Packs this bill has already claimed, per medicine. The search list shows
+   * what is still on the shelf, so a counter hand does not promise the same
+   * bottle twice while building one bill.
+   *
+   * `totalStock` counts packs, and a line added as loose pills stores its
+   * quantity in pills, so those convert back through stripSize.
+   */
+  const reservedPacksByMedicine = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const i of cart.items) {
+      const packs =
+        i.saleUnit === "loose" ? i.quantity / (i.stripSize || 1) : i.quantity;
+      map.set(i.medicineId, (map.get(i.medicineId) ?? 0) + packs);
+    }
+    return map;
+  }, [cart.items]);
+
+  /** Whole packs of this medicine already on the bill. */
+  const inBillPacks = (m: { id: string }) =>
+    Math.round(reservedPacksByMedicine.get(m.id) ?? 0);
+
+  /**
+   * Shelf stock less what this bill holds. Floored, because a part-consumed
+   * pack is no longer a whole one the counter can hand over.
+   */
+  const remainingStock = (m: { id: string; totalStock?: unknown }) => {
+    const onShelf = Number(m.totalStock || 0);
+    const taken = reservedPacksByMedicine.get(m.id) ?? 0;
+    return Math.max(0, Math.floor(onShelf - taken));
+  };
 
   const branchParams = activeBranchId ? { branchId: activeBranchId } : {};
 
@@ -1365,7 +1397,12 @@ export function PatientFirstBilling({
                       <div className="min-w-0">
                         <p className="text-sm font-bold text-slate-800 truncate">{m.name}</p>
                         <p className="text-xs text-slate-400 font-mono truncate">
-                          {m.sku} · {formatStockUnit(Number(m.totalStock || 0), m)} in stock
+                          {m.sku} · {formatStockUnit(remainingStock(m), m)}
+                          {inBillPacks(m) > 0 && (
+                            <span className="ml-1 text-orange-600 font-bold">
+                              · {inBillPacks(m)} in bill
+                            </span>
+                          )}
                         </p>
                       </div>
                       <div className="flex items-center gap-3 shrink-0">
