@@ -31,6 +31,54 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
+/**
+ * The API's health probe. It sits at the server root, outside the /api/v1
+ * prefix that BASE_URL points at.
+ */
+const HEALTH_URL = BASE_URL.replace(/\/api\/v\d+\/?$/, "") + "/health";
+
+/** Statuses a proxy returns while the API behind it is not answering. */
+const GATEWAY_DOWN = new Set([502, 503, 504]);
+
+/** One reachability check at a time, however many requests fail at once. */
+let checkingReachability = false;
+
+/**
+ * Ends the session when the API is genuinely down, rather than on a single
+ * failed request.
+ *
+ * Two guards keep this from firing when it should not:
+ *  - a browser that is offline is expected to fail every call, and the counter
+ *    is meant to keep billing into the offline queue, so it is left alone;
+ *  - the failure is confirmed against /health before the session is ended, so
+ *    one unlucky request cannot sign a counter out.
+ *
+ * It still signs the user out when the API really is down (a deploy restart
+ * included) -- landing on /login requires clearing the session, since
+ * middleware sends a cookie holder straight back to /dashboard.
+ */
+async function endSessionIfApiIsDown() {
+  if (typeof window === "undefined") return;
+  if (checkingReachability) return;
+  if (!navigator.onLine) return;
+  if (window.location.pathname.startsWith("/login")) return;
+
+  checkingReachability = true;
+  try {
+    await axios.get(HEALTH_URL, { timeout: 4000 });
+  } catch {
+    if (navigator.onLine) clearAuthAndRedirect();
+  } finally {
+    checkingReachability = false;
+  }
+}
+
+/** A failure that means "no API answered", as opposed to one it rejected. */
+function looksUnreachable(error: AxiosError): boolean {
+  if (!error.response) return true;
+  return GATEWAY_DOWN.has(error.response.status);
+}
+
 let isRefreshing = false;
 let failedQueue: Array<{
   resolve: (v: string) => void;
@@ -87,6 +135,9 @@ apiClient.interceptors.response.use(
       _retry?: boolean;
     };
     if (error.response?.status !== 401 || original._retry) {
+      // Fire-and-forget: the caller still gets its rejection, and the redirect
+      // only happens once /health confirms the API is gone.
+      if (looksUnreachable(error)) void endSessionIfApiIsDown();
       return Promise.reject(error);
     }
 

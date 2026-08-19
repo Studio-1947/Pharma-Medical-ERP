@@ -59,7 +59,7 @@ export function PwaUpdatePrompt({
             A new version is ready
           </p>
           <p className="text-[11px] text-slate-400 mt-0.5 break-words">
-            Reload to apply. Your queued offline invoices are kept.
+            Updating restarts the app. Your queued offline invoices are kept.
           </p>
         </div>
       </div>
