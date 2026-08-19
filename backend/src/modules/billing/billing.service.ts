@@ -81,6 +81,23 @@ interface AllocationLine extends BatchAllocation {
   taxableAmount: number;
 }
 
+/**
+ * Schedule H / H1 / X — the classes that may not leave the counter without a
+ * verified prescription.
+ *
+ * Accepts both spellings on purpose. The seed writes "SCHEDULE_H"; the real
+ * imported catalogue writes "H" (3,911 rows on the live database, plus 222 H1
+ * and 5 X). Matching only the seed's spelling made this check dead code
+ * against production data — the Rx gate held solely because every one of those
+ * rows also carries requires_prescription = true, which is one bad import away
+ * from letting a Schedule H sale through.
+ */
+export function isControlledSchedule(scheduleClass: string | null | undefined): boolean {
+  if (!scheduleClass) return false;
+  const normalised = scheduleClass.trim().toUpperCase().replace(/^SCHEDULE[_\s-]?/, "");
+  return normalised === "H" || normalised === "H1" || normalised === "X";
+}
+
 @Injectable()
 export class BillingService {
   constructor(
@@ -234,7 +251,7 @@ export class BillingService {
           );
         }
 
-        const isControlled = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"].includes(med.scheduleClass ?? "") || med.requiresPrescription;
+        const isControlled = isControlledSchedule(med.scheduleClass) || med.requiresPrescription;
 
         if (isControlled) {
           if (!dto.prescriptionId && !dto.overrideReason) {

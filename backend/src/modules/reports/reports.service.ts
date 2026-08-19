@@ -502,7 +502,13 @@ export class ReportsService {
           eq(schema.salesInvoices.branchId, branchId),
           inArray(schema.salesInvoices.status, suppliedInvoiceStatuses()),
           between(schema.salesInvoices.createdAt, start, end),
-          inArray(schema.medicines.scheduleClass, ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"]),
+          // Both spellings, deliberately. The seed writes "SCHEDULE_H"; the
+          // imported catalogue writes "H" — and every controlled medicine on
+          // the live database uses the short form, so filtering on the seed's
+          // spelling alone returned an EMPTY register for a branch that had
+          // genuinely dispensed Schedule H1. A statutory register that
+          // silently reports nothing is worse than one that errors.
+          sql`upper(regexp_replace(trim(${schema.medicines.scheduleClass}), '^SCHEDULE[_ -]?', '', 'i')) IN ('H', 'H1', 'X')`,
         ),
       );
 

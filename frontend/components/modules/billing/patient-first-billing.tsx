@@ -72,7 +72,9 @@ export function PatientFirstBilling({
   // OTC hand-outs are an admin/shop-manager action (see the API's @Roles); a
   // doctor must not see a button that would 403 on click.
   const { can: canPerm } = usePermissions();
-  const canOtc = canPerm("inventory.adjust");
+  // The OTC modal now bills by default and only falls back to a free hand-out,
+  // so either permission opens it — the modal disables the path you lack.
+  const canOtc = canPerm("billing.create") || canPerm("inventory.adjust");
   const [nowTick, setNowTick] = useState(Date.now());
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
@@ -152,9 +154,9 @@ export function PatientFirstBilling({
     }).length;
   })();
 
-  // OTC medicines supplied today (hand-outs without a bill, from the stock
-  // ledger) — the counter desk serves medicine through OTC too, not only
-  // prescriptions.
+  // Free hand-outs today (from the stock ledger). Paid OTC sales are billed
+  // through the invoice route now, so they land in the sales figures; only
+  // give-aways with no money attached are counted here.
   const { data: otcTodayRaw } = useQuery({
     queryKey: ["counter-otc-today", today, activeBranchId],
     queryFn: () =>
@@ -256,7 +258,9 @@ export function PatientFirstBilling({
     return [];
   })();
 
-  const [otcSupplyTarget, setOtcSupplyTarget] = useState<{ id: string; name: string } | null>(null);
+  // Whole medicine row, not just id+name: the OTC modal prices the sale from
+  // its MRP, tax rate and strip size.
+  const [otcSupplyTarget, setOtcSupplyTarget] = useState<any | null>(null);
 
   const selectedPatientRaw = cart.patientId
     ? patients.find((p) => p.id === cart.patientId)
@@ -669,12 +673,12 @@ export function PatientFirstBilling({
           </button>
         </div>
 
-        {/* OTC medicines supplied today — the desk serves medicine without a
-            bill too, so this card sits beside the prescription count. */}
+        {/* Free hand-outs today — samples and staff medicine only. A paid OTC
+            sale is billed, so it counts under sales, not here. */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col">
           <p className="text-2xl font-black text-emerald-700">{otcToday.supplies}</p>
           <p className="text-xs font-semibold text-slate-600 mt-0.5">
-            OTC medicines supplied
+            Free hand-outs (no bill)
             {otcToday.units > 0 && (
               <span className="ml-1 text-[10px] font-bold text-slate-400">({otcToday.units} units)</span>
             )}
@@ -683,7 +687,7 @@ export function PatientFirstBilling({
             type="button"
             onClick={() => setDeskModal("otc-today")}
             className="mt-2 self-end w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600 transition-colors"
-            title="View OTC medicines supplied today"
+            title="View free hand-outs recorded today"
           >
             <ArrowRight size={13} />
           </button>
@@ -795,6 +799,11 @@ export function PatientFirstBilling({
                 <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3">
                   <div className="relative flex-1">
                     <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    {/* One box, three kinds of input: a mobile number, a patient
+                        name, a medicine. inputMode="tel" opened a number pad on
+                        phones and in the installed PWA, which cannot type either
+                        of the other two — the text keyboard is the only one that
+                        serves all three, and digits are one tap away on it. */}
                     <input
                       autoFocus
                       value={query}
@@ -803,8 +812,12 @@ export function PatientFirstBilling({
                         setShowResults(false);
                       }}
                       placeholder="Search patient by mobile / name, or medicine…"
-                      inputMode="tel"
-                      className="w-full border-2 border-slate-200 rounded-full pl-11 pr-4 py-3 text-sm font-medium bg-white focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 transition-all"
+                      type="search"
+                      enterKeyHint="search"
+                      autoCapitalize="none"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      className="w-full border-2 border-slate-200 rounded-full pl-11 pr-4 py-3 text-sm font-medium bg-white focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 transition-all [&::-webkit-search-cancel-button]:appearance-none"
                     />
                   </div>
                   <div className="flex gap-3 shrink-0">
@@ -959,7 +972,7 @@ export function PatientFirstBilling({
                       </div>
                     )}
 
-                    {/* Medicines group — OTC supply without billing */}
+                    {/* Medicines group — OTC counter sale (billed by default) */}
                     {medResults.length > 0 && (
                       <div className="divide-y divide-slate-100 border-t border-slate-100">
                         <p className="px-4 py-1.5 bg-slate-50 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-b border-slate-100 flex items-center gap-1.5">
@@ -984,12 +997,12 @@ export function PatientFirstBilling({
                               {canOtc && (
                               <button
                                 type="button"
-                                onClick={() => setOtcSupplyTarget({ id: m.id, name: m.name })}
+                                onClick={() => setOtcSupplyTarget(m)}
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold transition-colors shadow-sm"
-                                title="Hand out without billing — stock deducted and recorded"
+                                title="Sell over the counter without a prescription — bills it, or record a free hand-out"
                               >
                                 <Pill size={11} />
-                                OTC · No bill
+                                OTC sale
                               </button>
                               )}
                             </div>

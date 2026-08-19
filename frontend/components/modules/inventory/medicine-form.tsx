@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createMedicineSchema, type CreateMedicineDto } from "@pharmerp/types";
 import { apiClient, queryKeys } from "@/lib/api-client";
+import { isControlledScheduleClass } from "@/lib/schedule-class";
 import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
 import {
   Pill,
@@ -126,7 +127,10 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
   const scheduleOption = SCHEDULE_OPTIONS.find((o) => o.value === scheduleVal) ?? SCHEDULE_OPTIONS[0];
 
   useEffect(() => {
-    if (["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"].includes(scheduleVal ?? "")) {
+    // The dropdown above emits bare letters ("H"), so a "SCHEDULE_H" match
+    // never fired and a hand-added Schedule H medicine saved as
+    // requires_prescription = false.
+    if (isControlledScheduleClass(scheduleVal)) {
       setValue("requiresPrescription", true, { shouldDirty: true });
       setValue("isControlled", true, { shouldDirty: true });
     }
