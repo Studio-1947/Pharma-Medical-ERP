@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Search,
@@ -77,6 +77,7 @@ export function PatientFirstBilling({
   // so either permission opens it — the modal disables the path you lack.
   const canOtc = canPerm("billing.create") || canPerm("inventory.adjust");
   const [nowTick, setNowTick] = useState(Date.now());
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
   const [showResults, setShowResults] = useState(false);
@@ -807,6 +808,7 @@ export function PatientFirstBilling({
                         of the other two — the text keyboard is the only one that
                         serves all three, and digits are one tap away on it. */}
                     <input
+                      ref={searchInputRef}
                       autoFocus
                       value={query}
                       onChange={(e) => {
@@ -819,8 +821,27 @@ export function PatientFirstBilling({
                       autoCapitalize="none"
                       autoCorrect="off"
                       spellCheck={false}
-                      className="w-full border-2 border-slate-200 rounded-full pl-11 pr-4 py-3 text-sm font-medium bg-white focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 transition-all [&::-webkit-search-cancel-button]:appearance-none"
+                      className="w-full border-2 border-slate-200 rounded-full pl-11 pr-11 py-3 text-sm font-medium bg-white focus:outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100 transition-all [&::-webkit-search-cancel-button]:appearance-none"
                     />
+                    {/* WebKit's own clear button is suppressed above (it breaks
+                        the pill), and on the desk the counter needs one tap to
+                        wipe a half-typed name and the stale results under it. */}
+                    {query.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuery("");
+                          setSubmitted("");
+                          setShowResults(false);
+                          searchInputRef.current?.focus();
+                        }}
+                        title="Clear the search"
+                        aria-label="Clear the search"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full flex items-center justify-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                      >
+                        <X size={16} />
+                      </button>
+                    )}
                   </div>
                   <div className="flex gap-3 shrink-0">
                     <button

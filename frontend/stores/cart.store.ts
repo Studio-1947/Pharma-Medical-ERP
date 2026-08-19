@@ -136,7 +136,29 @@ export const useCartStore = create<CartState>()(
         }));
       },
       removeItem: (_, batchId) => set((s) => ({ items: s.items.filter((i) => i.batchId !== batchId) })),
-      setPatient: (id) => set({ patientId: id }),
+      /**
+       * Switching patient drops everything that belonged to the last one.
+       *
+       * A prescription, a consultation fee and a loyalty redemption all belong
+       * to one person, but the cart is persisted to localStorage, so they used
+       * to survive into the next customer's bill. The prescription was the
+       * dangerous one: the Rx banner only renders when the cart holds a
+       * controlled item, so on an ordinary sale a stale link was invisible —
+       * and it stamped the printed receipt with the previous patient's clinic
+       * queue token, because the token is looked up through the invoice's
+       * prescription.
+       */
+      setPatient: (id) =>
+        set((s) =>
+          s.patientId === id
+            ? { patientId: id }
+            : {
+                patientId: id,
+                prescriptionId: null,
+                consultationFee: null,
+                loyaltyPointsToRedeem: 0,
+              },
+        ),
       setBranchId: (id) => set({ branchId: id }),
       setPrescriptionId: (id) => set({ prescriptionId: id }),
       setConsultationFee: (fee) => set({ consultationFee: fee }),

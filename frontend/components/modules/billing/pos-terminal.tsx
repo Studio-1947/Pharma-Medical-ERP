@@ -1182,14 +1182,19 @@ ${buildReceiptHeaderHtml({
       )}
 
       {/* Compact Schedule H warning banner */}
-      {needsRx && (
+      {/* Rendered whenever a prescription is attached, not only when the cart
+          forces one: a link carried in from an earlier sale used to be
+          invisible on an ordinary bill and still printed that visit's token. */}
+      {(needsRx || prescriptionId?.trim()) && (
         <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 rounded-xl px-3.5 py-2 border transition-all text-xs ${rxSettled ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-300"}`}>
           <div className="flex items-center gap-2 font-bold">
             <AlertTriangle size={15} className={rxSettled ? "text-emerald-600 shrink-0" : "text-amber-600 shrink-0"} />
             <span className={rxSettled ? "text-emerald-900" : "text-amber-900"}>
-              {rxAttested && !prescriptionId?.trim()
-                ? "Schedule H — billed on your verification, prescription still to be attached"
-                : "Schedule H / Controlled Meds in cart — Verified Prescription required"}
+              {!needsRx
+                ? "Prescription linked to this bill — its clinic token will print on the receipt"
+                : rxAttested && !prescriptionId?.trim()
+                  ? "Schedule H — billed on your verification, prescription still to be attached"
+                  : "Schedule H / Controlled Meds in cart — Verified Prescription required"}
             </span>
           </div>
 
