@@ -101,6 +101,14 @@ export const salesInvoices = pgTable(
     overriddenBy: uuid("overridden_by").references(() => users.id, {
       onDelete: "set null",
     }),
+    // A Schedule H sale a manager attested for at the counter — they saw the
+    // prescription, the queue was moving, and the paper has not been recorded
+    // yet. `overriddenBy` and `overrideReason` say who vouched and why; this
+    // flag is what keeps the debt visible until the prescription is actually
+    // attached, which clears it and fills prescriptionId. Without it an
+    // attested sale is indistinguishable from any other override and nobody
+    // ever goes back for the paper.
+    rxPending: boolean("rx_pending").notNull().default(false),
     // What the sale did to the patient's loyalty balance. Recorded rather than
     // recomputed because voiding has to put it back exactly, and neither figure
     // survives on the invoice otherwise: the accrual formula could change, and

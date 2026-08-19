@@ -1,0 +1,1 @@
+ALTER TABLE "sales_invoices" ADD COLUMN "rx_pending" boolean DEFAULT false NOT NULL;

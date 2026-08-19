@@ -281,6 +281,13 @@
       "when": 1787048075731,
       "tag": "0039_invoice_client_ref",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1787120116467,
+      "tag": "0040_invoice_rx_pending",
+      "breakpoints": true
     }
   ]
 }

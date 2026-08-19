@@ -34,13 +34,29 @@ vi.mock("@/hooks/use-branch", () => ({
 
 const can = vi.fn((_permission: string) => true);
 vi.mock("@/hooks/use-permissions", () => ({
-  usePermissions: () => ({ can, role: "admin" }),
+  usePermissions: () => ({ can, role: mockRole }),
 }));
 
 const toastSuccess = vi.fn();
 const toastError = vi.fn();
 vi.mock("@/components/ui/toast", () => ({
   useToast: () => ({ success: toastSuccess, error: toastError }),
+}));
+
+let mockRole = "admin";
+vi.mock("@/stores/auth.store", () => ({
+  useAuthStore: (selector: any) =>
+    selector({ user: { id: "mgr-1", role: mockRole } }),
+}));
+
+// Stubbed so a test can hand back a prescription id the way the real picker
+// does once the counter has photographed or found the paper.
+vi.mock("../rx-picker-modal", () => ({
+  RxPickerModal: ({ onSelectRx }: { onSelectRx: (id: string, d?: any) => void }) => (
+    <button type="button" onClick={() => onSelectRx("rx-77", { doctorName: "Dr Rao" })}>
+      pick-rx
+    </button>
+  ),
 }));
 
 vi.mock("../invoice-detail-modal", () => ({
@@ -94,6 +110,7 @@ function renderModal(medicine: any = MEDICINE) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockRole = "admin";
   can.mockImplementation(() => true);
   get.mockResolvedValue({ data: BATCHES });
   post.mockResolvedValue({ data: { invoice: { id: "inv-9", invoiceNo: "BRN01-1" } } });
@@ -178,14 +195,69 @@ describe("OtcSupplyModal", () => {
     expect(url).not.toContain("invoices");
   });
 
-  it("refuses to sell a prescription-only medicine over the counter", async () => {
+  it("will not bill a prescription-only medicine until the prescription is settled", async () => {
     renderModal({ ...MEDICINE, requiresPrescription: true, scheduleClass: "H" });
 
     expect(
-      await screen.findByText(/needs a verified prescription/i),
+      await screen.findByText(/cannot be handed over without a prescription/i),
     ).toBeInTheDocument();
-    const button = await screen.findByRole("button", { name: /Bill ₹/ });
-    expect(button).toBeDisabled();
+    expect(await screen.findByRole("button", { name: /Bill ₹/ })).toBeDisabled();
+    // Both ways out are offered rather than sending staff to another screen.
+    expect(screen.getByRole("button", { name: /Scan \/ attach prescription/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /I verified it/i })).toBeEnabled();
+  });
+
+  it("bills on a manager's attestation and flags the bill as owing the prescription", async () => {
+    const user = userEvent.setup();
+    renderModal({ ...MEDICINE, requiresPrescription: true, scheduleClass: "H" });
+
+    await user.click(await screen.findByRole("button", { name: /I verified it/i }));
+    const bill = await screen.findByRole("button", { name: /Bill ₹/ });
+    expect(bill).toBeEnabled();
+    await user.click(bill);
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [, payload] = post.mock.calls[0] as [string, any];
+    expect(payload.rxPending).toBe(true);
+    expect(payload.overriddenBy).toBe("mgr-1");
+    expect(payload.overrideReason).toMatch(/verified the prescription/i);
+    expect(payload.prescriptionId).toBeUndefined();
+  });
+
+  it("bills against a prescription attached at the counter, with no debt left behind", async () => {
+    const user = userEvent.setup();
+    renderModal({ ...MEDICINE, requiresPrescription: true, scheduleClass: "H" });
+
+    await user.click(await screen.findByRole("button", { name: /Scan \/ attach prescription/i }));
+    await user.click(await screen.findByRole("button", { name: "pick-rx" }));
+
+    expect(await screen.findByText(/from Dr Rao/i)).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: /Bill ₹/ }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [, payload] = post.mock.calls[0] as [string, any];
+    expect(payload.prescriptionId).toBe("rx-77");
+    expect(payload.rxPending).toBeUndefined();
+  });
+
+  it("will not give a prescription-only medicine away for free", async () => {
+    const user = userEvent.setup();
+    renderModal({ ...MEDICINE, requiresPrescription: true, scheduleClass: "H" });
+
+    await user.click(await screen.findByRole("button", { name: /Free — no charge/ }));
+
+    expect(await screen.findByText(/cannot be given away as a free hand-out/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Record Free Hand-out/ })).toBeDisabled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("does not let a non-manager vouch for a prescription", async () => {
+    mockRole = "cashier";
+    renderModal({ ...MEDICINE, requiresPrescription: true, scheduleClass: "H" });
+
+    expect(await screen.findByRole("button", { name: /I verified it/i })).toBeDisabled();
+    // Scanning the paper is still open to them — that needs no authority.
+    expect(screen.getByRole("button", { name: /Scan \/ attach prescription/i })).toBeEnabled();
   });
 
   it("blocks a Schedule H1 medicine even if the prescription flag is missing", async () => {
@@ -193,9 +265,7 @@ describe("OtcSupplyModal", () => {
     // seed's spelling left this gate resting on requiresPrescription alone.
     renderModal({ ...MEDICINE, requiresPrescription: false, scheduleClass: "H1" });
 
-    expect(
-      await screen.findByText(/Schedule H1 needs a verified prescription/i),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/Schedule H1 cannot be handed over/i)).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /Bill ₹/ })).toBeDisabled();
   });
 

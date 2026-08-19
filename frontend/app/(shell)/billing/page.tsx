@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/modal";
 import { PatientFirstBilling } from "@/components/modules/billing/patient-first-billing";
 import { PosTerminal } from "@/components/modules/billing/pos-terminal";
 import { StuckSalesBanner } from "@/components/modules/billing/stuck-sales-banner";
+import { RxPendingBanner } from "@/components/modules/billing/rx-pending-banner";
 import { errorText } from "@/lib/error-message";
 
 // ─── PDF download button (polls until ready) ─────────────────────────────────
@@ -524,6 +525,7 @@ export default function BillingPage() {
       {/* Shown on both billing entry points: whichever screen the counter is
           on, an unrecorded sale is the most urgent thing there is. */}
       <StuckSalesBanner />
+      <RxPendingBanner />
       {newFlowActive && (
         <div className="mb-4 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 text-xs text-slate-500">

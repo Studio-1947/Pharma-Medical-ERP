@@ -10,6 +10,9 @@ import {
   Receipt,
   Gift,
   IndianRupee,
+  Camera,
+  FileCheck,
+  ShieldCheck,
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
@@ -19,6 +22,8 @@ import { usePermissions } from "@/hooks/use-permissions";
 import { formatStockUnit, getUnitLabel } from "@/lib/stock-unit-formatter";
 import { quoteOtcSale } from "@/lib/otc-quote";
 import { scheduleLabel } from "@/lib/schedule-class";
+import { useAuthStore } from "@/stores/auth.store";
+import { RxPickerModal } from "./rx-picker-modal";
 import { InvoiceDetailModal } from "./invoice-detail-modal";
 
 /**
@@ -66,7 +71,8 @@ export function OtcSupplyModal({
   const qc = useQueryClient();
   const { branchId: activeBranchId } = useActiveBranchId();
   const { success: toastSuccess, error: toastError } = useToast();
-  const { can } = usePermissions();
+  const { can, role } = usePermissions();
+  const currentUserId = useAuthStore((st) => st.user?.id ?? null);
 
   const canBill = can("billing.create");
   const canGiveFree = can("inventory.adjust");
@@ -80,6 +86,12 @@ export function OtcSupplyModal({
   const [batchId, setBatchId] = useState<string>("");
   const [notes, setNotes] = useState("");
   const [billedInvoiceId, setBilledInvoiceId] = useState<string | null>(null);
+  // Schedule H at the counter: either a prescription is attached now, or a
+  // manager vouches for one and the bill carries the debt until it arrives.
+  const [prescriptionId, setPrescriptionId] = useState<string | null>(null);
+  const [rxLabel, setRxLabel] = useState<string | null>(null);
+  const [attested, setAttested] = useState(false);
+  const [rxPickerOpen, setRxPickerOpen] = useState(false);
 
   const open = !!medicine;
 
@@ -94,6 +106,9 @@ export function OtcSupplyModal({
     setBatchId("");
     setSaleUnit("pack");
     setBilledInvoiceId(null);
+    setPrescriptionId(null);
+    setRxLabel(null);
+    setAttested(false);
   }, [medicine?.id]);
 
   const { data: batchesRaw, isLoading } = useQuery({
@@ -128,6 +143,11 @@ export function OtcSupplyModal({
   };
   const schedule = scheduleLabel(medicine?.scheduleClass);
   const isControlled = !!medicine?.requiresPrescription || !!schedule;
+  // Vouching puts a named person on the sale, so it is a manager's call. The
+  // same three roles the server accepts as an override approver — anyone else
+  // would be rejected at checkout, so do not offer them the button.
+  const canAttest = ["super_admin", "admin", "shop_manager"].includes(String(role));
+  const rxCleared = !isControlled || !!prescriptionId || attested;
 
   // Total sellable across every FEFO batch — the server allocates across
   // batches, so the ceiling is the pooled quantity, not one batch's.
@@ -190,7 +210,30 @@ export function OtcSupplyModal({
           },
         ],
         discountAmount: "0",
-        notes: ["OTC counter sale — no prescription", notes.trim()]
+        ...(prescriptionId ? { prescriptionId } : {}),
+        // Attested sale: the manager's name and reason ride on the existing
+        // override fields, and rxPending is what keeps the missing paper
+        // visible until someone attaches it.
+        ...(attested && !prescriptionId
+          ? {
+              rxPending: true,
+              overriddenBy: currentUserId ?? undefined,
+              overrideReason: [
+                "Manager verified the prescription at the counter; prescription to be attached",
+                notes.trim(),
+              ]
+                .filter(Boolean)
+                .join(" · "),
+            }
+          : {}),
+        notes: [
+          prescriptionId
+            ? "OTC counter sale — prescription attached"
+            : attested
+              ? "OTC counter sale — prescription attested, still to be attached"
+              : "OTC counter sale — no prescription",
+          notes.trim(),
+        ]
           .filter(Boolean)
           .join(" · "),
         // Same idempotency guard the POS uses: a retry after a lost response
@@ -252,12 +295,14 @@ export function OtcSupplyModal({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (mode === "free") {
+      if (isControlled) return;
       if (!batchId && !selectedBatch) return;
       if (!batchId && selectedBatch) setBatchId(selectedBatch.id);
       freeMutation.mutate();
       return;
     }
     if (quote.short > 0 || quote.total <= 0) return;
+    if (!rxCleared) return;
     billMutation.mutate();
   };
 
@@ -271,9 +316,33 @@ export function OtcSupplyModal({
   const pending = billMutation.isPending || freeMutation.isPending;
   const freeMax = Number(selectedBatch?.quantity ?? 0);
 
+  // The picker searches verified prescriptions and, on its upload tab,
+  // photographs a paper one and files it against a walk-in patient before
+  // returning the id — the whole "scan it now" path already existed for the POS.
+  if (rxPickerOpen && medicine) {
+    return (
+      <RxPickerModal
+        open
+        onClose={() => setRxPickerOpen(false)}
+        onSelectRx={(rxId, details) => {
+          setPrescriptionId(rxId);
+          setRxLabel(details?.doctorName ? `from ${details.doctorName}` : null);
+          setAttested(false);
+          setRxPickerOpen(false);
+        }}
+      />
+    );
+  }
+
   return (
     <Modal
-      title={mode === "bill" ? "OTC Sale — No Prescription" : "Free Hand-out — No Bill"}
+      title={
+        mode === "free"
+          ? "Free Hand-out — No Bill"
+          : isControlled
+            ? `${schedule ?? "Prescription"} Sale — Prescription Required`
+            : "OTC Sale — No Prescription"
+      }
       subtitle={`${medicine?.name ?? "Medicine"}${medicine?.sku ? ` · ${medicine.sku}` : ""}`}
       icon={<Pill size={16} />}
       open={open}
@@ -338,14 +407,111 @@ export function OtcSupplyModal({
             </div>
           )}
 
-          {isControlled && mode === "bill" && (
+          {/* Schedule H at the counter. This used to be a dead end — "bill it
+              from the POS" — which just moved the problem to another screen and
+              taught staff that the OTC desk lies. There are only two honest
+              ways past it: produce the prescription, or have a manager put
+              their name to having seen it and owe the paper afterwards. */}
+          {/* A free hand-out writes no invoice, so there is nothing to attach a
+              prescription to and no rxPending flag to carry the debt — the drug
+              would simply leave the shelf with a ledger line and no authority
+              behind it. Giving a Schedule H medicine away is not a lesser act
+              than selling one, so this path is closed for them outright. */}
+          {isControlled && mode === "free" && (
             <div className="flex items-start gap-2 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl px-3 py-2.5">
               <AlertTriangle size={14} className="shrink-0 mt-0.5" />
               <span>
-                {schedule ?? "This medicine"} needs a verified prescription.
-                Bill it from the POS with the prescription linked — it cannot be
-                sold over the counter here.
+                {schedule ?? "This medicine"} cannot be given away as a free
+                hand-out — there would be no bill and no prescription on record.
+                Use <strong>Bill it</strong> and either attach the prescription
+                or have a manager vouch for it.
               </span>
+            </div>
+          )}
+
+          {isControlled && mode === "bill" && (
+            <div
+              className={`rounded-xl border px-3 py-2.5 space-y-2.5 ${
+                rxCleared
+                  ? "bg-emerald-50 border-emerald-200"
+                  : "bg-red-50 border-red-200"
+              }`}
+            >
+              {prescriptionId ? (
+                <div className="flex items-start gap-2 text-xs text-emerald-800">
+                  <FileCheck size={14} className="shrink-0 mt-0.5" />
+                  <span>
+                    Prescription <strong>{rxLabel ?? "linked"}</strong> is
+                    attached to this sale.{" "}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPrescriptionId(null);
+                        setRxLabel(null);
+                      }}
+                      className="underline font-semibold"
+                    >
+                      Change
+                    </button>
+                  </span>
+                </div>
+              ) : attested ? (
+                <div className="flex items-start gap-2 text-xs text-emerald-800">
+                  <FileCheck size={14} className="shrink-0 mt-0.5" />
+                  <span>
+                    You are billing this on your own word that you have seen the
+                    prescription. The bill will be flagged as still owing it
+                    until someone attaches the prescription.{" "}
+                    <button
+                      type="button"
+                      onClick={() => setAttested(false)}
+                      className="underline font-semibold"
+                    >
+                      Undo
+                    </button>
+                  </span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-start gap-2 text-xs text-red-700">
+                    <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                    <span>
+                      {schedule ?? "This medicine"} cannot be handed over without
+                      a prescription. Attach it, or vouch for it and attach it
+                      later.
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setRxPickerOpen(true)}
+                      className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors"
+                    >
+                      <Camera size={14} /> Scan / attach prescription
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canAttest}
+                      onClick={() => setAttested(true)}
+                      title={
+                        canAttest
+                          ? "Bill now on your verification, attach the prescription afterwards"
+                          : "Only a shop manager or admin can vouch for a prescription"
+                      }
+                      className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                      <ShieldCheck size={14} /> I verified it — attach later
+                    </button>
+                  </div>
+                  {!canAttest && (
+                    <p className="text-[11px] text-slate-500">
+                      Vouching is a manager&apos;s call — your name goes on the
+                      sale. Ask a shop manager to sign in, or scan the
+                      prescription.
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           )}
 
@@ -618,8 +784,8 @@ export function OtcSupplyModal({
                   disabled={
                     pending ||
                     (mode === "bill"
-                      ? isControlled || !canBill || quote.short > 0 || quote.total <= 0
-                      : !canGiveFree || freeMax <= 0)
+                      ? !rxCleared || !canBill || quote.short > 0 || quote.total <= 0
+                      : isControlled || !canGiveFree || freeMax <= 0)
                   }
                   className={`flex items-center gap-2 px-5 py-2 text-white text-xs font-extrabold rounded-lg disabled:opacity-50 transition-colors shadow-sm ${
                     mode === "bill"

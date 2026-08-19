@@ -12,6 +12,7 @@ import {
   createInvoiceSchema,
   queryInvoiceSchema,
   voidInvoiceSchema,
+  attachPrescriptionSchema,
   returnInvoiceSchema,
   recordPaymentSchema,
   queryPatientLedgerSchema,
@@ -66,6 +67,26 @@ export class BillingController {
     const invoice = await this.service.findOne(id);
     assertBranchAccess(user, invoice.data.branchId);
     return this.service.voidInvoice(id, voidInvoiceSchema.parse(body), user.sub);
+  }
+
+  @Post("invoices/:id/prescription")
+  @Roles("admin", "shop_manager")
+  @ApiOperation({
+    summary:
+      "Attach the prescription a manager attested for at the counter — clears the outstanding flag",
+  })
+  async attachPrescription(
+    @Param("id") id: string,
+    @Body() body: unknown,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const invoice = await this.service.findOne(id);
+    assertBranchAccess(user, invoice.data.branchId);
+    return this.service.attachPrescription(
+      id,
+      attachPrescriptionSchema.parse(body),
+      user,
+    );
   }
 
   @Post("invoices/:id/return")
