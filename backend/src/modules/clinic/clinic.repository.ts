@@ -2,6 +2,7 @@ import { Injectable } from "@nestjs/common";
 import { and, asc, eq, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
+import { allocateTokenNo } from "./allocate-token-no";
 import type {
   CreateClinicTokenDto,
   UpdateClinicTokenDto,
@@ -93,21 +94,14 @@ export class ClinicRepository {
 
   async create(data: CreateClinicTokenDto & { branchId: string }) {
     return this.db.transaction(async (tx) => {
-      // Serialize concurrent token generation for the same doctor+date so two
-      // receptionists can't compute the same tokenNo and collide on the unique index.
-      await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtext(${`${data.doctorId}:${data.date}`}))`,
-      );
-
-      const [{ maxToken } = { maxToken: 0 }] = await tx
-        .select({ maxToken: sql<number>`coalesce(max(${schema.clinicTokens.tokenNo}), 0)::int` })
-        .from(schema.clinicTokens)
-        .where(and(eq(schema.clinicTokens.doctorId, data.doctorId), eq(schema.clinicTokens.date, data.date)));
+      // Shared with the doctor's register-a-patient shortcut; it takes the
+      // advisory lock that keeps the numbering sequential under concurrency.
+      const tokenNo = await allocateTokenNo(tx, data.doctorId, data.date);
 
       const [token] = await tx
         .insert(schema.clinicTokens)
         .values({
-          tokenNo: maxToken + 1,
+          tokenNo,
           patientId: data.patientId,
           doctorId: data.doctorId,
           branchId: data.branchId,

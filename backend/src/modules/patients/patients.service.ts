@@ -28,12 +28,17 @@ export class PatientsService {
   async create(dto: CreatePatientDto, user?: JwtPayload) {
     const existing = await this.repo.findByPhone(dto.phone);
     if (existing) throw new ConflictException("Phone number already registered");
-    const p = await this.repo.create(dto);
-
-    if (user?.role === "doctor") {
-      await this.repo.createDoctorTokenForPatient(p.id, user.sub, user.branchId);
+    // A doctor registering a patient is registering someone they are about to
+    // see, so the patient joins that doctor's queue in the same breath — and in
+    // the same transaction, so they can never be registered without a number.
+    // Every other role is registering a patient at the counter, which is not a
+    // clinic visit and must not mint a queue token.
+    if (user?.role === "doctor" && user.branchId) {
+      const p = await this.repo.createWithDoctorToken(dto, user.sub, user.branchId);
+      return { data: p, message: "Patient registered and added to your queue" };
     }
 
+    const p = await this.repo.create(dto);
     return { data: p, message: "Patient registered" };
   }
 

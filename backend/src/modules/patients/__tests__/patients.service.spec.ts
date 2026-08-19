@@ -32,7 +32,7 @@ describe("PatientsService", () => {
       update: vi.fn(),
       softDelete: vi.fn(),
       isPatientServedByDoctor: vi.fn(),
-      createDoctorTokenForPatient: vi.fn(),
+      createWithDoctorToken: vi.fn(),
     };
     service = new PatientsService(mockRepo);
   });
@@ -84,15 +84,31 @@ describe("PatientsService", () => {
   });
 
   describe("create", () => {
-    it("creates patient and auto-links doctor token if registered by a doctor", async () => {
+    it("registers the patient and issues their queue token in one call when a doctor does it", async () => {
       mockRepo.findByPhone.mockResolvedValue(null);
-      mockRepo.create.mockResolvedValue({ id: "p_new", name: "New Patient" });
+      mockRepo.createWithDoctorToken.mockResolvedValue({ id: "p_new", name: "New Patient" });
 
       const dto = { name: "New Patient", phone: "9876543210" } as any;
       const res = await service.create(dto, doctor);
 
       expect(res.data.id).toBe("p_new");
-      expect(mockRepo.createDoctorTokenForPatient).toHaveBeenCalledWith("p_new", "d1", "b1");
+      // One atomic call, not "create the patient, then try for a token" — a
+      // patient in the queue with no number cannot be called.
+      expect(mockRepo.createWithDoctorToken).toHaveBeenCalledWith(dto, "d1", "b1");
+      expect(mockRepo.create).not.toHaveBeenCalled();
+    });
+
+    it("does not mint a queue token when the counter registers a patient", async () => {
+      mockRepo.findByPhone.mockResolvedValue(null);
+      mockRepo.create.mockResolvedValue({ id: "p_counter", name: "Walk-in" });
+
+      const dto = { name: "Walk-in", phone: "9876543211" } as any;
+      const res = await service.create(dto, { sub: "u1", role: "shop_manager", branchId: "b1" } as any);
+
+      expect(res.data.id).toBe("p_counter");
+      // Registering at the till is not a clinic visit; a token here would put
+      // someone in a doctor's queue who is not waiting to see one.
+      expect(mockRepo.createWithDoctorToken).not.toHaveBeenCalled();
     });
   });
 
