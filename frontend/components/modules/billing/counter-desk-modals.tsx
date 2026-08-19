@@ -236,10 +236,11 @@ export function CounterDeskModals({
           </div>
         )}      </Modal>
 
-      {/* OTC medicines supplied today */}
+      {/* Free hand-outs today — billed OTC sales are ordinary invoices and
+          appear in the sales figures instead. */}
       <Modal
-        title="OTC medicines supplied today"
-        subtitle={`${otcSummary.supplies} supply record${otcSummary.supplies === 1 ? "" : "s"} · ${otcSummary.units} unit${otcSummary.units === 1 ? "" : "s"} handed out without a bill`}
+        title="Free hand-outs today (no bill)"
+        subtitle={`${otcSummary.supplies} record${otcSummary.supplies === 1 ? "" : "s"} · ${otcSummary.units} unit${otcSummary.units === 1 ? "" : "s"} given free — paid OTC sales are billed and counted under sales`}
         icon={<Pill size={16} />}
         open={open && view === "otc-today"}
         onClose={onClose}
@@ -248,17 +249,17 @@ export function CounterDeskModals({
         {otcLoading ? (
           <Loading />
         ) : otcSummary.supplies === 0 ? (
-          <Empty text="No OTC medicines were supplied today. Hand-outs are recorded via the OTC · No bill button on the desk." />
+          <Empty text="Nothing was given away free today. Free samples and staff medicine are recorded from the OTC sale button on the desk, under &ldquo;Free — no charge&rdquo;; paid OTC sales are billed and show under sales." />
         ) : (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 px-5 pt-5">
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-center">
                 <p className="text-2xl font-black text-emerald-700">{otcSummary.supplies}</p>
-                <p className="text-[11px] font-semibold text-slate-500 mt-0.5">Supply records</p>
+                <p className="text-[11px] font-semibold text-slate-500 mt-0.5">Free hand-outs</p>
               </div>
               <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-4 text-center">
                 <p className="text-2xl font-black text-emerald-700">{otcSummary.units}</p>
-                <p className="text-[11px] font-semibold text-slate-500 mt-0.5">Units handed out</p>
+                <p className="text-[11px] font-semibold text-slate-500 mt-0.5">Units given free</p>
               </div>
             </div>
 
@@ -299,9 +300,11 @@ export function CounterDeskModals({
             </div>
 
             <p className="px-5 pb-4 text-[11px] text-slate-400 leading-relaxed">
-              Stock-ledger movements of type <strong>otc_supply</strong>, recorded from
-              the counter desk and the classic POS&nbsp;&ldquo;OTC · No bill&rdquo; button. No
-              invoice is generated, but each hand-out stays traceable.
+              Stock-ledger movements of type <strong>otc_supply</strong> — medicine
+              given away without payment (free samples, staff medicine). No invoice
+              is generated, so none of this reaches the day-end takings; each
+              hand-out stays traceable through the ledger. A paid OTC sale is
+              billed instead and appears in the sales figures and the GST return.
             </p>
           </div>
         )}

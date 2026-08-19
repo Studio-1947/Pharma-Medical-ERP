@@ -179,6 +179,38 @@ function isRealDate(iso: string): boolean {
 const RX_SCHEDULES = new Set(["h", "h1", "x", "g", "rx"]);
 const CONTROLLED_SCHEDULES = new Set(["h1", "x"]);
 
+/**
+ * Forces the prescription flags to agree with the schedule class.
+ *
+ * Bulk import already derives them (see the RX_SCHEDULES use below), but the
+ * manual create/update path took `requiresPrescription` straight from the DTO,
+ * where it defaults to false — and the medicine form's dropdown emits bare
+ * letters ("H"), while its auto-tick only matched "SCHEDULE_H". A Schedule H
+ * medicine added by hand therefore saved as requires_prescription = false,
+ * reproduced against the live API on 2026-08-19. The sale-side gate in
+ * BillingService now also checks the schedule itself, but the flag has to be
+ * right at rest: badges, reports and the POS Rx warning all read it.
+ *
+ * Only ever raises a flag. An operator can mark an unscheduled medicine
+ * prescription-only; they cannot mark a Schedule H one as free to sell.
+ */
+function withScheduleDerivedFlags<T extends {
+  scheduleClass?: string | null;
+  requiresPrescription?: boolean;
+  isControlled?: boolean;
+}>(dto: T): T {
+  const key = (dto.scheduleClass ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^schedule[_\s-]?/, "");
+  if (!key) return dto;
+  return {
+    ...dto,
+    requiresPrescription: dto.requiresPrescription || RX_SCHEDULES.has(key),
+    isControlled: dto.isControlled || CONTROLLED_SCHEDULES.has(key),
+  };
+}
+
 /** Opening stock read off a catalogue row, held until its medicine has an id. */
 interface PendingBatch {
   batchNo: string;
@@ -219,7 +251,8 @@ export class InventoryService {
     return { data: medicine ?? null };
   }
 
-  async create(dto: CreateMedicineDto, userId?: string) {
+  async create(rawDto: CreateMedicineDto, userId?: string) {
+    const dto = withScheduleDerivedFlags(rawDto);
     await this.assertBarcodeUnique(dto.barcode);
     // If the operator left SKU blank, mint a MEDNNNNN like bulk import does.
     // Two simultaneous mints can race on the same next value, so retry a few
@@ -259,7 +292,8 @@ export class InventoryService {
     return code === "23505" && /sku/i.test(err?.message ?? "");
   }
 
-  async update(id: string, dto: UpdateMedicineDto) {
+  async update(id: string, rawDto: UpdateMedicineDto) {
+    const dto = withScheduleDerivedFlags(rawDto);
     await this.findOne(id);
     await this.assertBarcodeUnique(dto.barcode, id);
     try {

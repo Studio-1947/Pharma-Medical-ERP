@@ -13,28 +13,16 @@ import {
 } from "lucide-react";
 import { useDoctorMedicines } from "@/queries/clinic.queries";
 import { formatStockUnit } from "@/lib/stock-unit-formatter";
+import { isControlledRow, normalizeScheduleClass as normalizeSchedule } from "@/lib/schedule-class";
 
-/** Schedule classes that cannot leave the counter without a verified Rx. */
-const CONTROLLED = ["H", "H1", "X"];
-
-/**
- * The catalogue stores bare schedule letters ("H", "H1", "OTC"), while parts of
- * the cart layer use the "SCHEDULE_H" spelling. Normalising both ways here
- * keeps the badge honest whichever form a row arrives in.
- */
-export function normalizeSchedule(raw?: string | null): string | null {
-  const s = (raw ?? "").trim().toUpperCase().replace(/^SCHEDULE[_\s-]?/, "");
-  return s && s !== "NA" ? s : null;
-}
-
-/** True when the row may not be dispensed without a prescription on record. */
-export function isControlledRow(m: {
-  scheduleClass?: string | null;
-  requiresPrescription?: boolean;
-}): boolean {
-  const s = normalizeSchedule(m.scheduleClass);
-  return !!m.requiresPrescription || (!!s && CONTROLLED.includes(s));
-}
+// Re-exported from the shared classifier so the badge, the POS blocker, the
+// OTC modal and the medicine form all agree on what "controlled" means. Three
+// screens import these two names from here; the definitions moved, the imports
+// did not need to.
+export {
+  normalizeScheduleClass as normalizeSchedule,
+  isControlledRow,
+} from "@/lib/schedule-class";
 
 export interface DoctorMedicineRow {
   id: string;

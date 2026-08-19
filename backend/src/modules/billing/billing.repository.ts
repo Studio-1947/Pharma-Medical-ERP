@@ -354,17 +354,41 @@ export class BillingRepository {
     }, {} as Record<string, number>);
   }
 
+  /**
+   * Day-end takings for one branch.
+   *
+   * "Discounts given" has to count BOTH kinds of price reduction. Most
+   * discounts at this counter are per line (`sales_invoice_items.discount_pct`
+   * — that is what the POS cart and the OTC modal set); only a whole-bill
+   * reduction lands in `sales_invoices.discount_amount`. Summing the invoice
+   * column alone reported zero discounts on a day full of discounted sales,
+   * which is exactly the figure a shop checks the till against.
+   *
+   * The line discount is reconstructed rather than read: no column stores it,
+   * because `line_total` is already net of it.
+   */
   async endOfDaySummary(branchId: string | undefined, date: string) {
     const result = await this.db.execute(sql`
+      WITH day_invoices AS (
+        SELECT id, total_amount, tax_amount, discount_amount
+        FROM sales_invoices
+        WHERE DATE(created_at) = ${date}
+          AND status != 'cancelled'
+          ${branchId ? sql`AND branch_id = ${branchId}` : sql``}
+      )
       SELECT
-        COUNT(*)::int            AS "totalInvoices",
-        COALESCE(SUM(CAST(total_amount    AS FLOAT)), 0) AS "totalSales",
-        COALESCE(SUM(CAST(tax_amount      AS FLOAT)), 0) AS "totalTax",
-        COALESCE(SUM(CAST(discount_amount AS FLOAT)), 0) AS "totalDiscounts"
-      FROM sales_invoices
-      WHERE DATE(created_at) = ${date}
-        AND status != 'cancelled'
-        ${branchId ? sql`AND branch_id = ${branchId}` : sql``}
+        (SELECT COUNT(*)::int FROM day_invoices)                                  AS "totalInvoices",
+        (SELECT COALESCE(SUM(CAST(total_amount AS FLOAT)), 0) FROM day_invoices)  AS "totalSales",
+        (SELECT COALESCE(SUM(CAST(tax_amount   AS FLOAT)), 0) FROM day_invoices)  AS "totalTax",
+        (SELECT COALESCE(SUM(CAST(discount_amount AS FLOAT)), 0) FROM day_invoices)
+        + (
+            SELECT COALESCE(SUM(
+              CAST(ii.unit_price AS FLOAT) * ii.quantity
+              * CAST(ii.discount_pct AS FLOAT) / 100
+            ), 0)
+            FROM sales_invoice_items ii
+            JOIN day_invoices d ON d.id = ii.invoice_id
+          )                                                                        AS "totalDiscounts"
     `);
     const rows = (result as any).rows ?? result;
     const row = Array.isArray(rows) ? rows[0] : undefined;

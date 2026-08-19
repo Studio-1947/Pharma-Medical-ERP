@@ -10,6 +10,7 @@ import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, File
 import { useCartStore, CartItem } from "@/stores/cart.store";
 import { useUIStore } from "@/stores/ui.store";
 import { formatStockUnit, getUnitLabel } from "@/lib/stock-unit-formatter";
+import { isControlledScheduleClass } from "@/lib/schedule-class";
 import { PaymentModal } from "./payment-modal";
 import { RxPickerModal } from "./rx-picker-modal";
 import { OtcSupplyModal } from "./otc-supply-modal";
@@ -27,7 +28,7 @@ import { useActiveBranchId } from "@/hooks/use-branch";
 import { sendViaWhatsApp } from "@/lib/patient-messaging";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
 
-const CONTROLLED_CLASSES = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"];
+
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const formInputCls =
@@ -61,7 +62,9 @@ export function PosTerminal({
   const [payOpen, setPayOpen] = useState(false);
   const [rxPickerOpen, setRxPickerOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [otcSupplyTarget, setOtcSupplyTarget] = useState<{ id: string; name: string } | null>(null);
+  // Whole medicine row, not just id+name: the OTC modal prices the sale from
+  // its MRP, tax rate and strip size.
+  const [otcSupplyTarget, setOtcSupplyTarget] = useState<any | null>(null);
   const [isOnline, setIsOnline] = useState(true);
   const [printOpen, setPrintOpen] = useState(false);
   const [lastInvoice, setLastInvoice] = useState<any>(null);
@@ -195,7 +198,9 @@ export function PosTerminal({
   // the button would only get a 403 on click, so hide it for roles without
   // inventory.adjust (super_admin, admin, shop_manager all hold it).
   const { can: canPerm } = usePermissions();
-  const canOtc = canPerm("inventory.adjust");
+  // The OTC modal now bills by default and only falls back to a free hand-out,
+  // so either permission opens it — the modal disables the path you lack.
+  const canOtc = canPerm("billing.create") || canPerm("inventory.adjust");
   const { subtotal, tax, discount, total } = totals();
 
   const needsRx = hasControlledItems();
@@ -1282,7 +1287,7 @@ ${buildReceiptHeaderHtml({
                       <div>
                         <span className="font-bold text-slate-900">{m.name}</span>
                         <span className="text-slate-400 ml-2 font-mono text-[11px]">{m.sku}</span>
-                        {m.scheduleClass && CONTROLLED_CLASSES.includes(m.scheduleClass) && (
+                        {isControlledScheduleClass(m.scheduleClass) && (
                           <span className="ml-1.5 text-[9px] bg-red-100 text-red-700 font-extrabold px-1 rounded uppercase">
                             {m.scheduleClass} Rx
                           </span>
@@ -1294,12 +1299,12 @@ ${buildReceiptHeaderHtml({
                           type="button"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setOtcSupplyTarget({ id: m.id, name: m.name });
+                            setOtcSupplyTarget(m);
                           }}
                           className="px-2 py-1 rounded-lg bg-orange-100 hover:bg-orange-500 hover:text-white text-orange-700 text-[10px] font-extrabold transition-colors"
-                          title="Hand out without billing — stock deducted and recorded"
+                          title="Sell over the counter without a prescription — bills it, or record a free hand-out"
                         >
-                          OTC · No bill
+                          OTC sale
                         </button>
                         )}
                         <span className="text-[11px] text-emerald-700 font-semibold">{formatStockUnit(Number(m.totalStock || 0), m)}</span>
@@ -1357,7 +1362,7 @@ ${buildReceiptHeaderHtml({
                         <td className="py-2.5 px-3">
                           <div className="flex items-center gap-1.5">
                             <span className="font-extrabold text-slate-900 group-hover:text-emerald-900">{item.name}</span>
-                            {item.scheduleClass && CONTROLLED_CLASSES.includes(item.scheduleClass) && (
+                            {item.scheduleClass && isControlledScheduleClass(item.scheduleClass) && (
                               <span className="bg-red-100 text-red-700 text-[9px] font-extrabold px-1 rounded uppercase shrink-0">
                                 {item.scheduleClass}
                               </span>
@@ -1693,7 +1698,7 @@ ${buildReceiptHeaderHtml({
                     <div className="space-y-0.5">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className="font-bold text-slate-900 group-hover:text-emerald-800">{m.name}</span>
-                        {m.scheduleClass && CONTROLLED_CLASSES.includes(m.scheduleClass) && (
+                        {isControlledScheduleClass(m.scheduleClass) && (
                           <span className="text-[9px] bg-red-100 text-red-700 border border-red-200 font-extrabold px-1.5 py-0.2 rounded uppercase">
                             {m.scheduleClass} Rx
                           </span>
@@ -1734,12 +1739,12 @@ ${buildReceiptHeaderHtml({
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setOtcSupplyTarget({ id: m.id, name: m.name });
+                          setOtcSupplyTarget(m);
                         }}
                         className="px-2.5 py-1 rounded-lg bg-orange-100 hover:bg-orange-500 hover:text-white text-orange-700 text-[10px] font-extrabold transition-colors"
-                        title="Hand out without billing — stock deducted and recorded"
+                        title="Sell over the counter without a prescription — bills it, or record a free hand-out"
                       >
-                        OTC · No bill
+                        OTC sale
                       </button>
                       )}
                       <span className="font-extrabold text-sm text-emerald-700">₹{parseFloat(m.priceMrp).toFixed(2)}</span>
@@ -1798,7 +1803,7 @@ ${buildReceiptHeaderHtml({
                     <span className="text-xs font-bold text-slate-900 truncate" title={item.name}>
                       {item.name}
                     </span>
-                    {item.scheduleClass && CONTROLLED_CLASSES.includes(item.scheduleClass) && (
+                    {item.scheduleClass && isControlledScheduleClass(item.scheduleClass) && (
                       <span className="bg-red-100 text-red-700 text-[9px] font-extrabold px-1 rounded uppercase shrink-0">
                         {item.scheduleClass}
                       </span>
@@ -2430,7 +2435,7 @@ ${buildReceiptHeaderHtml({
         </div>
       )}
 
-      {/* OTC supply without billing — shared with the counter desk */}
+      {/* OTC counter sale (billed by default) — shared with the counter desk */}
       <OtcSupplyModal
         medicine={otcSupplyTarget}
         onClose={() => setOtcSupplyTarget(null)}

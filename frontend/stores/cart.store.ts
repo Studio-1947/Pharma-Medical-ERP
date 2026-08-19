@@ -1,5 +1,6 @@
 "use client";
 import { create } from "zustand";
+import { isControlledRow } from "@/lib/schedule-class";
 import { persist } from "zustand/middleware";
 
 // Doctor consultation fee attached to a prescription dispense. Billed as a
@@ -159,12 +160,11 @@ export const useCartStore = create<CartState>()(
         const fee = get().consultationFee?.amount ?? 0;
         return { subtotal: subtotal + fee, tax, discount, total: subtotal - discount + tax + fee };
       },
-      hasControlledItems: () => {
-        const controlled = ["SCHEDULE_H", "SCHEDULE_H1", "SCHEDULE_X"];
-        return get().items.some(
-          (i) => (i.scheduleClass && controlled.includes(i.scheduleClass)) || i.requiresPrescription
-        );
-      },
+      hasControlledItems: () =>
+        // Both spellings — the catalogue writes "H1", the seed "SCHEDULE_H1".
+        // Matching only the long form left this blocker resting on
+        // requiresPrescription alone.
+        get().items.some((i) => isControlledRow(i)),
     }),
     {
       name: "pharmerp-cart",
