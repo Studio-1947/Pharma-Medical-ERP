@@ -407,6 +407,102 @@ describe("OTC counter sale", () => {
     expect(post).not.toHaveBeenCalled();
   });
 
+  it("drops the attestation when the medicine it was given for leaves the bill", async () => {
+    // The vouching belongs to the bill, not to the screen. Left standing, it
+    // rode out on a bill with nothing controlled on it and the server threw the
+    // sale out: "Nothing on this bill needs a prescription, so there is none to
+    // attach later" — with no Rx panel left on screen to undo it.
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByRole("button", { name: /Bill ₹95\.76/ });
+
+    get.mockImplementation((url: string) => {
+      if (url === "/inventory/medicines")
+        return Promise.resolve({
+          data: [{ ...MEDICINE_2, scheduleClass: "H", requiresPrescription: true }],
+        });
+      if (url.includes("med-2")) return Promise.resolve({ data: BATCHES_2 });
+      return Promise.resolve({ data: BATCHES });
+    });
+
+    await user.type(screen.getByLabelText(/Search medicines/i), "cet");
+    await user.click(await screen.findByRole("button", { name: /Cetirizine 10 mg/ }));
+    await user.click(await screen.findByRole("button", { name: /I verified it/i }));
+    await screen.findByText(/on your own word that you have seen the prescription/i);
+
+    await user.click(screen.getByRole("button", { name: /Remove Cetirizine 10 mg/i }));
+
+    // Paracetamol on its own owes nobody a prescription, and the panel that
+    // said otherwise is gone with it.
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/on your own word that you have seen the prescription/i),
+      ).not.toBeInTheDocument(),
+    );
+
+    await user.click(await screen.findByRole("button", { name: /Bill ₹95\.76/ }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [, payload] = post.mock.calls[0] as [string, any];
+    expect(payload.items).toEqual([
+      { medicineId: "med-1", quantity: 10, discountPct: "0.00" },
+    ]);
+    expect(payload.rxPending).toBeUndefined();
+    expect(payload.overriddenBy).toBeUndefined();
+    expect(payload.overrideReason).toBeUndefined();
+    expect(payload.notes).not.toMatch(/attested/i);
+  });
+
+  it("makes a manager vouch again for a controlled medicine added after the first one left", async () => {
+    // Otherwise the attestation for one Schedule H drug is inherited by the
+    // next one, and the bill claims a manager saw a prescription for a medicine
+    // nobody ever showed them.
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByRole("button", { name: /Bill ₹95\.76/ });
+
+    const controlled = (id: string, name: string) => ({
+      ...MEDICINE_2,
+      id,
+      name,
+      scheduleClass: "H",
+      requiresPrescription: true,
+    });
+
+    get.mockImplementation((url: string) => {
+      if (url === "/inventory/medicines")
+        return Promise.resolve({ data: [controlled("med-2", "Cetirizine 10 mg")] });
+      if (url.includes("med-2")) return Promise.resolve({ data: BATCHES_2 });
+      return Promise.resolve({ data: BATCHES });
+    });
+
+    await user.type(screen.getByLabelText(/Search medicines/i), "cet");
+    await user.click(await screen.findByRole("button", { name: /Cetirizine 10 mg/ }));
+    await user.click(await screen.findByRole("button", { name: /I verified it/i }));
+    await screen.findByText(/on your own word that you have seen the prescription/i);
+
+    await user.click(screen.getByRole("button", { name: /Remove Cetirizine 10 mg/i }));
+
+    // A different controlled drug now joins the same bill.
+    get.mockImplementation((url: string) => {
+      if (url === "/inventory/medicines")
+        return Promise.resolve({ data: [controlled("med-3", "Alprazolam 0.25 mg")] });
+      if (url.includes("med-3")) return Promise.resolve({ data: BATCHES_2 });
+      return Promise.resolve({ data: BATCHES });
+    });
+
+    await user.clear(screen.getByLabelText(/Search medicines/i));
+    await user.type(screen.getByLabelText(/Search medicines/i), "alp");
+    await user.click(await screen.findByRole("button", { name: /Alprazolam 0\.25 mg/ }));
+
+    // Back to square one: the bill is held until someone vouches for this drug.
+    expect(
+      await screen.findByText(/cannot be handed over without a prescription/i),
+    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Bill ₹/ })).toBeDisabled();
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it("runs inline on the counter desk with no dialog around it", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();

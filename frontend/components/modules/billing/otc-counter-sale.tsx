@@ -237,6 +237,15 @@ export function OtcCounterSale({
   // would be rejected at checkout, so do not offer them the button.
   const canAttest = ["super_admin", "admin", "shop_manager"].includes(String(role));
   const rxCleared = !anyControlled || !!prescriptionId || attested;
+
+  // Same rule as the POS terminal: the vouching belongs to the bill, not to the
+  // screen. Take the last controlled line off this sale and the attestation
+  // goes with it, so it can neither be sent on an all-OTC bill (which the
+  // server refuses) nor be inherited by a controlled medicine added afterwards
+  // that nobody vouched for.
+  useEffect(() => {
+    if (!anyControlled) setAttested(false);
+  }, [anyControlled]);
   const loadingBatches = rows.some((r) => r.loading);
   // One rate on the bill reads better as "GST @ 12%"; a mixed bill cannot claim
   // a single rate, so it just says GST.
@@ -299,7 +308,11 @@ export function OtcCounterSale({
         // Attested sale: the manager's name and reason ride on the existing
         // override fields, and rxPending is what keeps the missing paper
         // visible until someone attaches it.
-        ...(attested && !prescriptionId
+        //
+        // anyControlled is re-checked here as well as in the effect above. A
+        // bill with nothing controlled on it has no prescription to owe, and
+        // the server refuses rxPending on one outright.
+        ...(anyControlled && attested && !prescriptionId
           ? {
               rxPending: true,
               overriddenBy: currentUserId ?? undefined,

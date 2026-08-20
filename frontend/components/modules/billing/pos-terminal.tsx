@@ -223,6 +223,20 @@ export function PosTerminal({
   // Either the prescription is here, or someone senior has put their name to
   // having seen it.
   const rxSettled = !needsRx || !!prescriptionId?.trim() || rxAttested;
+
+  // A manager vouches for the bill in front of them, not for the till. Once the
+  // last controlled item is off the cart — removed, cleared, or because the
+  // sale went through — the vouching has nothing left to stand behind, so it
+  // is dropped.
+  //
+  // Two things went wrong without this. The bill after an attested sale still
+  // carried rxPending and the server rejected it ("Nothing on this bill needs
+  // a prescription…"), with no Rx panel on screen to undo it. And swapping one
+  // controlled drug for another would have carried the first drug's
+  // attestation onto a drug nobody vouched for. Re-attesting is the point.
+  useEffect(() => {
+    if (!needsRx) setRxAttested(false);
+  }, [needsRx]);
   const loyaltyDiscount = loyaltyPointsToRedeem / 10;
   const finalTotal = Math.max(0, total - loyaltyDiscount);
 
@@ -630,7 +644,12 @@ ${buildReceiptHeaderHtml({
       // Vouched-for Schedule H sale: the manager's name rides on the existing
       // override fields, and rxPending keeps the missing paper visible until
       // someone attaches it to this bill.
-      ...(rxAttested && !prescriptionId?.trim()
+      //
+      // needsRx is re-checked here as well as in the effect above: a bill with
+      // nothing controlled on it has no prescription to owe, and the server
+      // rejects rxPending on such a bill outright. Belt and braces, because
+      // the cost of getting it wrong is a till that cannot take money.
+      ...(needsRx && rxAttested && !prescriptionId?.trim()
         ? {
             rxPending: true,
             overriddenBy: currentUserId ?? undefined,
@@ -1365,9 +1384,19 @@ ${buildReceiptHeaderHtml({
                             e.stopPropagation();
                             setOtcSupplyTarget(m);
                           }}
-                          className="px-2 py-1 rounded-lg bg-orange-100 hover:bg-orange-500 hover:text-white text-orange-700 text-[10px] font-extrabold transition-colors"
-                          title="Sell over the counter without a prescription — bills it, or record a free hand-out"
+                          disabled={Number(m.totalStock || 0) <= 0}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-extrabold transition-colors ${
+                            Number(m.totalStock || 0) <= 0
+                              ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                              : "bg-emerald-100 hover:bg-emerald-600 hover:text-white text-emerald-700"
+                          }`}
+                          title={
+                            Number(m.totalStock || 0) <= 0
+                              ? "Out of stock — nothing left to sell over the counter"
+                              : "Sell over the counter without a prescription — bills it, or record a free hand-out"
+                          }
                         >
+                          <Plus size={11} strokeWidth={3} />
                           OTC sale
                         </button>
                         )}
@@ -1805,9 +1834,19 @@ ${buildReceiptHeaderHtml({
                           e.stopPropagation();
                           setOtcSupplyTarget(m);
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-orange-100 hover:bg-orange-500 hover:text-white text-orange-700 text-[10px] font-extrabold transition-colors"
-                        title="Sell over the counter without a prescription — bills it, or record a free hand-out"
+                        disabled={Number(m.totalStock || 0) <= 0}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-colors ${
+                          Number(m.totalStock || 0) <= 0
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            : "bg-emerald-100 hover:bg-emerald-600 hover:text-white text-emerald-700"
+                        }`}
+                        title={
+                          Number(m.totalStock || 0) <= 0
+                            ? "Out of stock — nothing left to sell over the counter"
+                            : "Sell over the counter without a prescription — bills it, or record a free hand-out"
+                        }
                       >
+                        <Plus size={11} strokeWidth={3} />
                         OTC sale
                       </button>
                       )}
