@@ -132,7 +132,20 @@ function GrnModal({
       onClose={onClose}
       size="2xl"
     >
-      <form onSubmit={handleSubmit} className="px-6 py-5">
+      <form
+        onSubmit={handleSubmit}
+        className="px-6 py-5"
+        // Batch numbers and expiry dates are keyed in off the physical cartons
+        // and exist nowhere else until the GRN posts, so the background
+        // auto-reload that applies a new app version must wait. PwaRegister
+        // reads this attribute.
+        data-pharmerp-unsaved={
+          mutation.isPending ||
+          lines.some((l) => l.batchNo.trim() !== "" || l.expiryDate !== "")
+            ? "grn"
+            : undefined
+        }
+      >
         {loadingDetail ? (
           <div className="flex items-center justify-center py-12 text-muted-foreground gap-2 text-sm">
             <Loader2 size={16} className="animate-spin" /> Loading order details...

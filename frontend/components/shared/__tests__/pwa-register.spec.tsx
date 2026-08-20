@@ -192,3 +192,113 @@ describe("PwaRegister update handover", () => {
     expect(wentToNewBuild()).toBe(true);
   });
 });
+
+/**
+ * A backgrounded tab applies a pending update on its own, which is how a
+ * counter terminal that stays open for days ever picks up a deploy. That same
+ * reload throws away anything held only in component state, so the idle path
+ * has to be able to tell "nobody is doing anything" from "a half-built bill is
+ * sitting on screen".
+ */
+describe("PwaRegister idle auto-apply", () => {
+  /** Hides the tab and lets the idle timer run out. */
+  async function goIdle() {
+    Object.defineProperty(document, "visibilityState", {
+      value: "hidden",
+      configurable: true,
+    });
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+  }
+
+  /** Puts a node on the page for one assertion and takes it away again. */
+  function withNode(html: string) {
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    document.body.appendChild(host);
+    return () => host.remove();
+  }
+
+  async function armedTab() {
+    await mount();
+    await act(async () => {
+      container.claim(new FakeWorker());
+    });
+    return deployNewBuild();
+  }
+
+  afterEach(() => {
+    Object.defineProperty(document, "visibilityState", {
+      value: "visible",
+      configurable: true,
+    });
+  });
+
+  it("applies the pending update on an idle tab with nothing in flight", async () => {
+    const next = await armedTab();
+
+    await goIdle();
+
+    expect(next.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
+  });
+
+  it("holds off while a screen declares unsaved work", async () => {
+    const next = await armedTab();
+    const cleanup = withNode('<div data-pharmerp-unsaved="otc-counter-sale"></div>');
+
+    await goIdle();
+
+    expect(next.postMessage).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it("holds off while a dialog is open", async () => {
+    const next = await armedTab();
+    const cleanup = withNode('<div role="dialog"><p>Goods Received Note</p></div>');
+
+    await goIdle();
+
+    expect(next.postMessage).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it("holds off while a field holds text the user has not submitted", async () => {
+    const next = await armedTab();
+    const cleanup = withNode('<input type="text" value="BATCH-4471" />');
+
+    await goIdle();
+
+    expect(next.postMessage).not.toHaveBeenCalled();
+    cleanup();
+  });
+
+  it("still applies when the only populated field is a search box", async () => {
+    // Otherwise a search term left in the box would pin a terminal to an old
+    // build indefinitely, which is the failure this whole path exists to avoid.
+    const next = await armedTab();
+    const cleanup = withNode('<input type="search" value="parace" />');
+
+    await goIdle();
+
+    expect(next.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
+    cleanup();
+  });
+
+  it("ignores empty and disabled fields", async () => {
+    const next = await armedTab();
+    const cleanup = withNode(
+      '<input type="text" value="   " /><input type="text" value="x" disabled />' +
+        '<textarea></textarea><select><option selected>box</option></select>',
+    );
+
+    await goIdle();
+
+    expect(next.postMessage).toHaveBeenCalledWith({ type: "SKIP_WAITING" });
+    cleanup();
+  });
+});

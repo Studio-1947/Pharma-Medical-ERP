@@ -474,7 +474,14 @@ export function OtcCounterSale({
         : "OTC sale — no prescription";
 
   return (
-    <div className="space-y-4">
+    <div
+      className="space-y-4"
+      // A half-composed counter sale lives only in this component's state, so
+      // the background auto-reload that applies a new app version has to hold
+      // off while it is on screen. PwaRegister looks for this attribute; the
+      // user is still offered the explicit "Update" prompt.
+      data-pharmerp-unsaved={lines.length > 0 ? "otc-counter-sale" : undefined}
+    >
       {variant === "inline" && (
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">

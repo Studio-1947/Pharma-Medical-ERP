@@ -281,7 +281,15 @@ export function BulkImportModal({ open, onClose }: Props) {
 
   return (
     <Modal title="Bulk Import Medicines" open={open} onClose={handleClose} size="xl">
-      <div className="space-y-5">
+      <div
+        className="space-y-5"
+        // Parsed rows exist only in this modal's state, and an import in flight
+        // must not be cut off mid-way, so both hold back the background
+        // auto-reload that applies a new app version. PwaRegister reads this.
+        data-pharmerp-unsaved={
+          rows.length > 0 || importMutation.isPending ? "bulk-import" : undefined
+        }
+      >
 
         {/* Sample download banner */}
         <div className="flex items-center justify-between bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3">
