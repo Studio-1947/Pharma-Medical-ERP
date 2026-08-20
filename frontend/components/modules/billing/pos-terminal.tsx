@@ -223,6 +223,20 @@ export function PosTerminal({
   // Either the prescription is here, or someone senior has put their name to
   // having seen it.
   const rxSettled = !needsRx || !!prescriptionId?.trim() || rxAttested;
+
+  // A manager vouches for the bill in front of them, not for the till. Once the
+  // last controlled item is off the cart — removed, cleared, or because the
+  // sale went through — the vouching has nothing left to stand behind, so it
+  // is dropped.
+  //
+  // Two things went wrong without this. The bill after an attested sale still
+  // carried rxPending and the server rejected it ("Nothing on this bill needs
+  // a prescription…"), with no Rx panel on screen to undo it. And swapping one
+  // controlled drug for another would have carried the first drug's
+  // attestation onto a drug nobody vouched for. Re-attesting is the point.
+  useEffect(() => {
+    if (!needsRx) setRxAttested(false);
+  }, [needsRx]);
   const loyaltyDiscount = loyaltyPointsToRedeem / 10;
   const finalTotal = Math.max(0, total - loyaltyDiscount);
 
@@ -630,7 +644,12 @@ ${buildReceiptHeaderHtml({
       // Vouched-for Schedule H sale: the manager's name rides on the existing
       // override fields, and rxPending keeps the missing paper visible until
       // someone attaches it to this bill.
-      ...(rxAttested && !prescriptionId?.trim()
+      //
+      // needsRx is re-checked here as well as in the effect above: a bill with
+      // nothing controlled on it has no prescription to owe, and the server
+      // rejects rxPending on such a bill outright. Belt and braces, because
+      // the cost of getting it wrong is a till that cannot take money.
+      ...(needsRx && rxAttested && !prescriptionId?.trim()
         ? {
             rxPending: true,
             overriddenBy: currentUserId ?? undefined,
