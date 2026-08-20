@@ -167,7 +167,15 @@ export function MedicineForm({ initial, onSuccess, onCancel }: Props) {
 
   return (
     <>
-      <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col flex-1 min-h-0">
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        noValidate
+        className="flex flex-col flex-1 min-h-0"
+        // Typed-but-unsaved fields would be thrown away by the background
+        // auto-reload that applies a new app version, so hold it off while the
+        // form is dirty. PwaRegister reads this; the explicit prompt still shows.
+        data-pharmerp-unsaved={isDirty || isSubmitting ? "medicine-form" : undefined}
+      >
         {/* ── Scrollable body ──────────────────────────────────────────── */}
         <div className="overflow-y-auto flex-1 min-h-0">
           {/* Content goes here... but wait, let's keep it wrapped */}

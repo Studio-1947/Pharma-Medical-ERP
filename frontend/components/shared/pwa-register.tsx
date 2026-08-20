@@ -20,6 +20,48 @@ const IDLE_AUTO_APPLY_MS = 60_000;
  */
 const UNSAVED_WORK_SELECTOR = "[data-pharmerp-unsaved]";
 
+/**
+ * An open dialog is someone mid-task by definition, and a screen that opts out
+ * of the explicit marker still gets covered by this.
+ */
+const DIALOG_SELECTOR = "[role=dialog], dialog[open]";
+
+/**
+ * Text a user has keyed in and not yet submitted. Types that carry a value
+ * without anyone typing one (checkbox, radio, hidden, the button family) would
+ * make this always true, and `select` always holds a value, so both are out.
+ * `search` is out too: a stale search box is not work worth blocking a deploy
+ * over, and search fields are the ones most likely to be left populated.
+ */
+const TEXT_ENTRY_SELECTOR =
+  "input:not([type=checkbox]):not([type=radio]):not([type=hidden]):not([type=search])" +
+  ":not([type=submit]):not([type=reset]):not([type=button]):not([type=image])" +
+  ":not([disabled]):not([readonly]), textarea:not([disabled]):not([readonly])";
+
+/**
+ * Whether reloading right now would throw away something the user cannot get
+ * back by other means.
+ *
+ * Explicit markers are the precise signal, but there are dozens of forms in
+ * this app and any one of them can be added without knowing this file exists.
+ * So the marker is backed by two blunt heuristics. They are deliberately
+ * biased towards "yes, there is work": a false positive only means the tab
+ * waits for the user to press Update, while a false negative silently eats a
+ * half-typed GRN or a patient's details.
+ */
+function hasWorkInProgress(): boolean {
+  if (document.querySelector(UNSAVED_WORK_SELECTOR)) return true;
+  if (document.querySelector(DIALOG_SELECTOR)) return true;
+
+  const entries = document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>(
+    TEXT_ENTRY_SELECTOR,
+  );
+  for (const entry of entries) {
+    if (entry.value.trim() !== "") return true;
+  }
+  return false;
+}
+
 /** Timestamp of this tab's last self-heal reload; guards against a reload loop. */
 const RECOVERY_FLAG = "pharmerp:sw-recovered-at";
 
@@ -212,7 +254,7 @@ export function PwaRegister() {
       hiddenTimerRef.current = setTimeout(() => {
         if (!waitingRef.current) return;
         if (document.visibilityState === "visible") return;
-        if (document.querySelector(UNSAVED_WORK_SELECTOR)) return;
+        if (hasWorkInProgress()) return;
         applyUpdate();
       }, IDLE_AUTO_APPLY_MS);
     };

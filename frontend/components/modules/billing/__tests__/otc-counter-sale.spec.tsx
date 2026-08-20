@@ -522,6 +522,23 @@ describe("OTC counter sale", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it("marks a half-built bill as unsaved work so a background update waits", async () => {
+    // PwaRegister auto-applies a pending app version on a tab that has been
+    // hidden for a minute. These lines live only in component state, so without
+    // this marker that reload would quietly throw the bill away.
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { container } = render(
+      <QueryClientProvider client={qc}>
+        <OtcCounterSale medicine={MEDICINE} onClose={vi.fn()} variant="inline" />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByLabelText(/Search medicines/i);
+    expect(
+      container.querySelector("[data-pharmerp-unsaved]"),
+    ).toBeInTheDocument();
+  });
+
   it("hides billing from a user without the billing permission", async () => {
     can.mockImplementation((p: string) => p !== "billing.create");
     renderModal();

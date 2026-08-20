@@ -113,7 +113,20 @@ export function QuickPatientForm({
   }
 
   return (
-    <div className="border border-primary/30 bg-primary/5 rounded-xl p-3.5 space-y-3.5 shadow-2xs">
+    <div
+      className="border border-primary/30 bg-primary/5 rounded-xl p-3.5 space-y-3.5 shadow-2xs"
+      // Registration details are read off the patient standing at the counter
+      // and are gone the moment this unmounts, so they hold off the background
+      // auto-reload that applies a new app version. PwaRegister reads this.
+      data-pharmerp-unsaved={
+        mutation.isPending ||
+        [name, phone, gender, ageYears, dateOfBirth, pincode].some(
+          (v) => v.trim() !== "",
+        )
+          ? "quick-patient-form"
+          : undefined
+      }
+    >
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5">
           <UserPlus size={14} className="text-primary" />
