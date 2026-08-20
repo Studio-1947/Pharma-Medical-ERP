@@ -1384,9 +1384,19 @@ ${buildReceiptHeaderHtml({
                             e.stopPropagation();
                             setOtcSupplyTarget(m);
                           }}
-                          className="px-2 py-1 rounded-lg bg-orange-100 hover:bg-orange-500 hover:text-white text-orange-700 text-[10px] font-extrabold transition-colors"
-                          title="Sell over the counter without a prescription — bills it, or record a free hand-out"
+                          disabled={Number(m.totalStock || 0) <= 0}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-extrabold transition-colors ${
+                            Number(m.totalStock || 0) <= 0
+                              ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                              : "bg-emerald-100 hover:bg-emerald-600 hover:text-white text-emerald-700"
+                          }`}
+                          title={
+                            Number(m.totalStock || 0) <= 0
+                              ? "Out of stock — nothing left to sell over the counter"
+                              : "Sell over the counter without a prescription — bills it, or record a free hand-out"
+                          }
                         >
+                          <Plus size={11} strokeWidth={3} />
                           OTC sale
                         </button>
                         )}
@@ -1824,9 +1834,19 @@ ${buildReceiptHeaderHtml({
                           e.stopPropagation();
                           setOtcSupplyTarget(m);
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-orange-100 hover:bg-orange-500 hover:text-white text-orange-700 text-[10px] font-extrabold transition-colors"
-                        title="Sell over the counter without a prescription — bills it, or record a free hand-out"
+                        disabled={Number(m.totalStock || 0) <= 0}
+                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-colors ${
+                          Number(m.totalStock || 0) <= 0
+                            ? "bg-slate-100 text-slate-400 cursor-not-allowed"
+                            : "bg-emerald-100 hover:bg-emerald-600 hover:text-white text-emerald-700"
+                        }`}
+                        title={
+                          Number(m.totalStock || 0) <= 0
+                            ? "Out of stock — nothing left to sell over the counter"
+                            : "Sell over the counter without a prescription — bills it, or record a free hand-out"
+                        }
                       >
+                        <Plus size={11} strokeWidth={3} />
                         OTC sale
                       </button>
                       )}

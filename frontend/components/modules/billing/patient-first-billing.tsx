@@ -1087,17 +1087,32 @@ export function PatientFirstBilling({
                             >
                               {formatStockUnit(Number(m.totalStock || 0), m)}
                             </span>
-                            {canOtc && (
-                              <button
-                                type="button"
-                                onClick={() => setOtcSupplyTarget(m)}
-                                className="w-[104px] shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full bg-orange-500 hover:bg-orange-600 text-white text-[11px] font-bold transition-colors shadow-sm"
-                                title="Sell over the counter without a prescription — bills it, or record a free hand-out"
-                              >
-                                <Pill size={11} />
-                                OTC sale
-                              </button>
-                            )}
+                            {canOtc && (() => {
+                              // Nothing on the shelf means nothing to sell, so
+                              // the button goes grey and stops taking clicks
+                              // rather than opening a sale that cannot be filled.
+                              const outOfStock = Number(m.totalStock || 0) <= 0;
+                              return (
+                                <button
+                                  type="button"
+                                  onClick={() => setOtcSupplyTarget(m)}
+                                  disabled={outOfStock}
+                                  className={`w-[104px] shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-colors shadow-sm ${
+                                    outOfStock
+                                      ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+                                      : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  }`}
+                                  title={
+                                    outOfStock
+                                      ? "Out of stock — nothing left to sell over the counter"
+                                      : "Sell over the counter without a prescription — bills it, or record a free hand-out"
+                                  }
+                                >
+                                  <Plus size={12} strokeWidth={3} />
+                                  OTC sale
+                                </button>
+                              );
+                            })()}
                           </div>
                         ))}
                       </div>
