@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Pill, Stethoscope, AlertCircle } from "lucide-react";
+import { Loader2, Pill, Stethoscope, AlertCircle, Plus } from "lucide-react";
 import { useDoctorMedicines } from "@/queries/clinic.queries";
 import {
   isControlledRow,
@@ -29,6 +29,8 @@ interface Props {
   addingId?: string | null;
   /** Open the full per-doctor panel (existing DoctorMedicinesPanel flow). */
   onOpenDoctor?: (doctor: Doctor) => void;
+  /** Open the medicine manager so the operator can curate this doctor's list. */
+  onManageMedicines?: (doctor: Doctor) => void;
 }
 
 /**
@@ -48,6 +50,7 @@ export function DoctorsOverview({
   onAddMedicine,
   addingId,
   onOpenDoctor,
+  onManageMedicines,
 }: Props) {
   if (doctors.length === 0) return null;
 
@@ -72,6 +75,7 @@ export function DoctorsOverview({
             onAddMedicine={onAddMedicine}
             addingId={addingId}
             onOpenDoctor={onOpenDoctor}
+            onManageMedicines={onManageMedicines}
           />
         ))}
       </div>
@@ -85,6 +89,7 @@ interface CardProps {
   onAddMedicine?: (row: DoctorMedicineRow) => void | Promise<void>;
   addingId?: string | null;
   onOpenDoctor?: (doctor: Doctor) => void;
+  onManageMedicines?: (doctor: Doctor) => void;
 }
 
 function DoctorOverviewCard({
@@ -93,6 +98,7 @@ function DoctorOverviewCard({
   onAddMedicine,
   addingId,
   onOpenDoctor,
+  onManageMedicines,
 }: CardProps) {
   const { data: raw, isLoading, isError } = useDoctorMedicines(
     doctor.id,
@@ -133,15 +139,22 @@ function DoctorOverviewCard({
             </p>
           </div>
         </div>
-        {onOpenDoctor && rows.length > 0 && (
-          <button
-            type="button"
-            onClick={() => onOpenDoctor(doctor)}
-            className="text-[11px] font-semibold text-purple-600 hover:text-purple-800 shrink-0"
-          >
-            Open list
-          </button>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {!isLoading && rows.length > 0 && (
+            <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-extrabold rounded-full bg-purple-100 text-purple-700 border border-purple-200">
+              #{rows.length}
+            </span>
+          )}
+          {onOpenDoctor && rows.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onOpenDoctor(doctor)}
+              className="text-[11px] font-semibold text-purple-600 hover:text-purple-800"
+            >
+              Open list
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mt-2.5 min-h-[38px]">
@@ -156,9 +169,21 @@ function DoctorOverviewCard({
             Could not load
           </div>
         ) : rows.length === 0 ? (
-          <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-            <Pill size={11} />
-            No medicines listed yet
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+              <Pill size={11} />
+              No medicines listed yet
+            </div>
+            {onManageMedicines && (
+              <button
+                type="button"
+                onClick={() => onManageMedicines(doctor)}
+                className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 transition-colors"
+              >
+                <Plus size={10} />
+                Add medicine
+              </button>
+            )}
           </div>
         ) : (
           <div className="flex flex-wrap gap-1.5">
@@ -177,6 +202,16 @@ function DoctorOverviewCard({
                 className="inline-flex items-center px-2 py-1 text-[11px] font-bold rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200"
               >
                 +{remaining} more
+              </button>
+            )}
+            {onManageMedicines && (
+              <button
+                type="button"
+                onClick={() => onManageMedicines(doctor)}
+                className="inline-flex items-center px-2 py-1 text-[11px] font-bold rounded-lg bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 transition-colors"
+                title="Add or remove medicines for this doctor"
+              >
+                <Plus size={10} />
               </button>
             )}
           </div>

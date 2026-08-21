@@ -39,6 +39,7 @@ import { QuickPatientForm, QuickPatient } from "@/components/modules/patients/qu
 import { CounterDeskModals, DeskModalView } from "@/components/modules/billing/counter-desk-modals";
 import { DoctorMedicinesPanel } from "@/components/modules/billing/doctor-medicines-panel";
 import { DoctorsOverview } from "@/components/modules/billing/doctors-overview";
+import { DoctorMedicineManager } from "@/components/modules/clinic/doctor-medicine-manager";
 import { OtcCounterSale } from "@/components/modules/billing/otc-counter-sale";
 import { InvoiceDetailModal } from "@/components/modules/billing/invoice-detail-modal";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
@@ -517,6 +518,9 @@ export function PatientFirstBilling({
   // Rendered as a modal so it can appear from the top-of-page overview strip
   // without needing the path picker to be visible.
   const [browsingDoctor, setBrowsingDoctor] = useState<any | null>(null);
+  // Which doctor's medicine list the operator is curating from the overview strip.
+  const [managingMedicinesFor, setManagingMedicinesFor] = useState<any | null>(null);
+  const canManageDoctorLists = user?.role !== "doctor";
 
   const bookDoctor = async (doc: any) => {
     const dp = doc?.doctorProfile;
@@ -953,6 +957,7 @@ export function PatientFirstBilling({
                           onAddMedicine={addDoctorMedicineFromOverview}
                           addingId={medLoadingId}
                           onOpenDoctor={(doc) => setBrowsingDoctor(doc)}
+                          onManageMedicines={canManageDoctorLists ? (doc) => setManagingMedicinesFor(doc) : undefined}
                         />
                       </div>
                     )}
@@ -1789,6 +1794,19 @@ export function PatientFirstBilling({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Curate a doctor's medicine list from the overview strip. Only
+          admins/shop managers may edit — doctors see a read-only view. */}
+      {managingMedicinesFor && (
+        <DoctorMedicineManager
+          open
+          onClose={() => setManagingMedicinesFor(null)}
+          doctorId={managingMedicinesFor.id}
+          doctorName={[managingMedicinesFor.firstName, managingMedicinesFor.lastName].filter(Boolean).join(" ") || managingMedicinesFor.email || "Doctor"}
+          branchId={activeBranchId}
+          canEdit={canManageDoctorLists}
+        />
       )}
     </div>
   );
