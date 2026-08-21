@@ -181,11 +181,11 @@ describe("counter desk — closing stock gaps from the search results", () => {
 
     await waitFor(() => expect(screen.getByText("Paracetamol 500mg")).toBeInTheDocument());
 
-    // Two rows, two OTC buttons — the out-of-stock one is the disabled one.
+    // An empty shelf offers no sale at all — the OTC button belongs only to
+    // the row that can actually be filled, so there is exactly one.
     const otcButtons = screen.getAllByRole("button", { name: /OTC sale/i });
-    expect(otcButtons).toHaveLength(2);
-    expect(otcButtons[0]).toBeDisabled();
-    expect(otcButtons[1]).toBeEnabled();
+    expect(otcButtons).toHaveLength(1);
+    expect(otcButtons[0]).toBeEnabled();
 
     // The empty row is the one that spells out the fix in words; the stocked
     // row carries only the quiet icon, whose title names it differently.

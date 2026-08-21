@@ -1144,55 +1144,57 @@ export function PatientFirstBilling({
                             </span>
                             {(() => {
                               // Nothing on the shelf means nothing to sell, so
-                              // the button goes grey and stops taking clicks
-                              // rather than opening a sale that cannot be filled.
+                              // the sale button is dropped entirely rather than
+                              // shown greyed out — the row offers the one action
+                              // that actually helps: receiving a batch.
                               const outOfStock = Number(m.totalStock || 0) <= 0;
                               return (
-                                <>
-                                  {canOtc && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setOtcSupplyTarget(m)}
-                                      disabled={outOfStock}
-                                      className={`w-[104px] shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-colors shadow-sm ${
-                                        outOfStock
-                                          ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
-                                          : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                                      }`}
-                                      title={
-                                        outOfStock
-                                          ? "Out of stock — add stock before selling this over the counter"
-                                          : "Sell over the counter without a prescription — bills it, or record a free hand-out"
-                                      }
-                                    >
-                                      <Plus size={12} strokeWidth={3} />
-                                      OTC sale
-                                    </button>
-                                  )}
-                                  {/* The counter is where staff find out the
-                                      shelf is empty, so the fix lives here too.
-                                      Out of stock makes it the loud button;
-                                      otherwise it stays a quiet top-up. */}
-                                  {canAddStock && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setStockTarget(m)}
-                                      className={`shrink-0 inline-flex items-center justify-center gap-1.5 rounded-full text-[11px] font-bold transition-colors ${
-                                        outOfStock
-                                          ? "px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white shadow-sm"
-                                          : "p-1.5 border border-slate-200 text-slate-400 hover:text-orange-600 hover:border-orange-300 hover:bg-orange-50"
-                                      }`}
-                                      title={
-                                        outOfStock
-                                          ? `Receive a new batch of ${m.name} into this branch`
-                                          : "Add stock — receive another batch"
-                                      }
-                                    >
-                                      <PackagePlus size={outOfStock ? 12 : 14} />
-                                      {outOfStock && "Add stock"}
-                                    </button>
-                                  )}
-                                </>
+                                // Two fixed action slots keep every row's
+                                // buttons on the same two vertical lines, no
+                                // matter which of them a row happens to show.
+                                <div className="flex items-center justify-end gap-2 shrink-0">
+                                  <div className="w-[104px] shrink-0 flex justify-end">
+                                    {outOfStock
+                                      ? canAddStock && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setStockTarget(m)}
+                                            className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-colors bg-orange-500 hover:bg-orange-600 text-white shadow-sm"
+                                            title={`Receive a new batch of ${m.name} into this branch`}
+                                          >
+                                            <PackagePlus size={12} />
+                                            Add stock
+                                          </button>
+                                        )
+                                      : canOtc && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setOtcSupplyTarget(m)}
+                                            className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-colors bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                                            title="Sell over the counter without a prescription — bills it, or record a free hand-out"
+                                          >
+                                            <Plus size={12} strokeWidth={3} />
+                                            OTC sale
+                                          </button>
+                                        )}
+                                  </div>
+                                  {/* Trailing slot: the quiet top-up on a
+                                      stocked row. Held open as a spacer on the
+                                      empty row so the primary buttons stay
+                                      aligned column-to-column. */}
+                                  <div className="w-7 h-7 shrink-0 flex items-center justify-center">
+                                    {!outOfStock && canAddStock && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setStockTarget(m)}
+                                        className="w-7 h-7 inline-flex items-center justify-center rounded-full border border-slate-200 text-slate-400 transition-colors hover:text-orange-600 hover:border-orange-300 hover:bg-orange-50"
+                                        title="Add stock — receive another batch"
+                                      >
+                                        <PackagePlus size={14} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
                               );
                             })()}
                           </div>
