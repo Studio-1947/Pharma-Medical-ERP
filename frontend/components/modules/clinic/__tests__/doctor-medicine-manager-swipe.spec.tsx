@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 /**
@@ -213,5 +213,53 @@ describe("DoctorMedicineManager — swipe-to-delete", () => {
     // Wait for the list to load
     await screen.findByText("Dolo 650");
     expect(screen.queryByText("Add a medicine")).not.toBeInTheDocument();
+  });
+
+  it("closes on outside click (backdrop)", async () => {
+    const onClose = vi.fn();
+    render(
+      <QueryClientProvider client={qc()}>
+        <DoctorMedicineManager
+          open
+          onClose={onClose}
+          doctorId="doc-1"
+          doctorName="Dr. Anu Sardar"
+          branchId="branch-1"
+          canEdit
+        />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByText(/Medicine list/);
+
+    // The Modal renders a backdrop div with onClick={onClose}.
+    // Click the backdrop (the element behind the panel).
+    const backdrop = document.querySelector("[class*='bg-slate-950/60']") as HTMLElement;
+    expect(backdrop).toBeTruthy();
+    fireEvent.click(backdrop);
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("closes on Escape key", async () => {
+    const onClose = vi.fn();
+    render(
+      <QueryClientProvider client={qc()}>
+        <DoctorMedicineManager
+          open
+          onClose={onClose}
+          doctorId="doc-1"
+          doctorName="Dr. Anu Sardar"
+          branchId="branch-1"
+          canEdit
+        />
+      </QueryClientProvider>,
+    );
+
+    await screen.findByText(/Medicine list/);
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

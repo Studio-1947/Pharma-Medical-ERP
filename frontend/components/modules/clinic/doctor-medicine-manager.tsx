@@ -2,7 +2,6 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
-  X,
   Plus,
   Trash2,
   ChevronUp,
@@ -12,6 +11,7 @@ import {
   AlertCircle,
   Loader2,
 } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
 import {
   useDoctorMedicines,
   useAddDoctorMedicine,
@@ -177,212 +177,194 @@ export function DoctorMedicineManager({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
-      <div className="bg-card w-full max-w-2xl rounded-2xl shadow-xl border max-h-[90vh] flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b shrink-0">
-          <div className="min-w-0">
-            <h2 className="text-base font-bold flex items-center gap-2">
-              <Pill size={17} className="text-emerald-600 shrink-0" />
-              <span className="truncate">Medicine list — {doctorName}</span>
-            </h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {rows.length} listed. The counter desk sees this when it opens this
-              doctor.
-            </p>
-          </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg hover:bg-muted shrink-0"
-            aria-label="Close"
-          >
-            <X size={18} />
-          </button>
-        </div>
-
-        <div className="p-4 overflow-y-auto flex-1 space-y-4">
-          {canEdit && (
-            <div className="rounded-xl border bg-muted/30 p-3 space-y-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                  Add a medicine
-                </p>
-                <button
-                  type="button"
-                  onClick={handleImport}
-                  disabled={importMutation.isPending}
-                  className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-60 transition-colors"
-                >
-                  {importMutation.isPending ? (
-                    <Loader2 size={13} className="animate-spin" />
-                  ) : (
-                    <Sparkles size={13} />
-                  )}
-                  Import from history
-                </button>
-              </div>
-
-              <MedicineAutocomplete
-                value={search}
-                onChange={(t) => {
-                  setSearch(t);
-                  if (picked) setPicked(null);
-                }}
-                onSelect={(m) => {
-                  setPicked(m);
-                  setSearch(m.name);
-                }}
-                linked={!!picked}
-                branchId={branchId}
-                placeholder="Search the catalogue by name, brand or SKU…"
-              />
-
-              <div className="grid grid-cols-3 gap-2">
-                <input
-                  value={dosage}
-                  onChange={(e) => setDosage(e.target.value)}
-                  placeholder="Dosage (1-0-1)"
-                  className="px-2.5 py-2 text-sm rounded-lg border bg-background"
-                />
-                <input
-                  value={frequency}
-                  onChange={(e) => setFrequency(e.target.value)}
-                  placeholder="Frequency"
-                  className="px-2.5 py-2 text-sm rounded-lg border bg-background"
-                />
-                <input
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  placeholder="Duration (5 days)"
-                  className="px-2.5 py-2 text-sm rounded-lg border bg-background"
-                />
-              </div>
-
+    <Modal
+      title={`Medicine list — ${doctorName}`}
+      subtitle={`${rows.length} listed. The counter desk sees this when it opens this doctor.`}
+      icon={<Pill size={18} className="text-emerald-600" />}
+      open={open}
+      onClose={onClose}
+      size="lg"
+    >
+      <div className="px-5 sm:px-6 py-5 space-y-4">
+        {/* Add medicine form */}
+        {canEdit && (
+          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-black text-slate-800 uppercase tracking-wider">
+                Add a medicine
+              </p>
               <button
                 type="button"
-                onClick={handleAdd}
-                disabled={!picked || addMutation.isPending}
-                className="w-full inline-flex items-center justify-center gap-1.5 text-sm font-bold px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:bg-muted disabled:text-muted-foreground transition-colors"
+                onClick={handleImport}
+                disabled={importMutation.isPending}
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg border border-emerald-200 text-emerald-700 hover:bg-emerald-50 disabled:opacity-60 transition-colors"
               >
-                {addMutation.isPending ? (
-                  <Loader2 size={14} className="animate-spin" />
+                {importMutation.isPending ? (
+                  <Loader2 size={13} className="animate-spin" />
                 ) : (
-                  <Plus size={14} />
+                  <Sparkles size={13} />
                 )}
-                Add to list
+                Import from history
               </button>
             </div>
-          )}
 
-          {isLoading ? (
-            <div className="py-8 text-center">
-              <Loader2 size={20} className="mx-auto animate-spin text-muted-foreground" />
+            <MedicineAutocomplete
+              value={search}
+              onChange={(t) => {
+                setSearch(t);
+                if (picked) setPicked(null);
+              }}
+              onSelect={(m) => {
+                setPicked(m);
+                setSearch(m.name);
+              }}
+              linked={!!picked}
+              branchId={branchId}
+              placeholder="Search the catalogue by name, brand or SKU…"
+            />
+
+            <div className="grid grid-cols-3 gap-2">
+              <input
+                value={dosage}
+                onChange={(e) => setDosage(e.target.value)}
+                placeholder="Dosage (1-0-1)"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-slate-800 font-medium"
+              />
+              <input
+                value={frequency}
+                onChange={(e) => setFrequency(e.target.value)}
+                placeholder="Frequency"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-slate-800 font-medium"
+              />
+              <input
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                placeholder="Duration (5 days)"
+                className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30 text-slate-800 font-medium"
+              />
             </div>
-          ) : rows.length === 0 ? (
-            <div className="py-8 text-center">
-              <Pill size={26} className="mx-auto text-muted-foreground/40" />
-              <p className="mt-2 text-sm font-semibold">Nothing on the list yet</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {canEdit
-                  ? "Add medicines above, or import them from past consultations in one click."
-                  : "This doctor has not built their list yet."}
-              </p>
+
+            <button
+              type="button"
+              onClick={handleAdd}
+              disabled={!picked || addMutation.isPending}
+              className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl shadow-md transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {addMutation.isPending ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Plus size={14} />
+              )}
+              Add to list
+            </button>
+          </div>
+        )}
+
+        {/* Medicine list */}
+        {isLoading ? (
+          <div className="py-10 text-center">
+            <Loader2 size={22} className="mx-auto animate-spin text-slate-400" />
+            <p className="text-xs text-slate-500 mt-2 font-medium">Loading list…</p>
+          </div>
+        ) : rows.length === 0 ? (
+          <div className="py-10 text-center">
+            <div className="w-14 h-14 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+              <Pill size={24} />
             </div>
-          ) : (
-            <div className="space-y-2">
-              {rows.map((m: any, i: number) => (
-                <SwipeableMedicineRow
-                  key={m.id}
-                  onDelete={() => handleRemove(m)}
-                  disabled={removeMutation.isPending}
-                  canEdit={canEdit}
-                >
-                  <div className="flex items-center gap-2">
-                  {canEdit && (
-                    <div className="flex flex-col shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => move(i, -1)}
-                        disabled={i === 0 || updateMutation.isPending}
-                        className="p-0.5 rounded hover:bg-muted disabled:opacity-30"
-                        aria-label="Move up"
-                      >
-                        <ChevronUp size={14} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => move(i, 1)}
-                        disabled={i === rows.length - 1 || updateMutation.isPending}
-                        className="p-0.5 rounded hover:bg-muted disabled:opacity-30"
-                        aria-label="Move down"
-                      >
-                        <ChevronDown size={14} />
-                      </button>
-                    </div>
-                  )}
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-bold truncate">
-                        {m.name}
-                        {m.strength ? (
-                          <span className="text-muted-foreground font-semibold">
-                            {" "}
-                            {m.strength}
-                          </span>
-                        ) : null}
-                      </p>
-                      {isControlledRow(m) && (
-                        <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-100">
-                          <AlertCircle size={10} />
-                          {normalizeSchedule(m.scheduleClass) ?? "Rx"}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {[m.brandName, m.genericName].filter(Boolean).join(" · ") ||
-                        m.sku}
-                    </p>
-                    {(m.defaultDosage || m.defaultFrequency || m.defaultDuration) && (
-                      <p className="text-[11px] text-emerald-700 font-semibold mt-0.5">
-                        {[m.defaultDosage, m.defaultFrequency, m.defaultDuration]
-                          .filter(Boolean)
-                          .join(" · ")}
-                      </p>
-                    )}
-                  </div>
-
-                  {canEdit && (
+            <p className="text-sm font-bold text-slate-700">Nothing on the list yet</p>
+            <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
+              {canEdit
+                ? "Add medicines above, or import them from past consultations in one click."
+                : "This doctor has not built their list yet."}
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {rows.map((m: any, i: number) => (
+              <SwipeableMedicineRow
+                key={m.id}
+                onDelete={() => handleRemove(m)}
+                disabled={removeMutation.isPending}
+                canEdit={canEdit}
+              >
+                <div className="flex items-center gap-2">
+                {canEdit && (
+                  <div className="flex flex-col shrink-0">
                     <button
                       type="button"
-                      onClick={() => handleRemove(m)}
-                      disabled={removeMutation.isPending}
-                      className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-40 shrink-0 hidden md:flex"
-                      aria-label={`Remove ${m.name}`}
+                      onClick={() => move(i, -1)}
+                      disabled={i === 0 || updateMutation.isPending}
+                      className="p-0.5 rounded hover:bg-slate-100 disabled:opacity-30 text-slate-500"
+                      aria-label="Move up"
                     >
-                      <Trash2 size={15} />
+                      <ChevronUp size={14} />
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      onClick={() => move(i, 1)}
+                      disabled={i === rows.length - 1 || updateMutation.isPending}
+                      className="p-0.5 rounded hover:bg-slate-100 disabled:opacity-30 text-slate-500"
+                      aria-label="Move down"
+                    >
+                      <ChevronDown size={14} />
+                    </button>
                   </div>
-                </SwipeableMedicineRow>
-              ))}
-            </div>
-          )}
-        </div>
+                )}
 
-        <div className="p-3 border-t shrink-0 flex items-center justify-between gap-2">
-          <p className="text-[11px] text-muted-foreground">
-            Being on this list is not a prescription — Schedule H items still
-            need one to be dispensed.
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-bold text-slate-800 truncate">
+                      {m.name}
+                      {m.strength ? (
+                        <span className="text-slate-500 font-semibold">
+                          {" "}{m.strength}
+                        </span>
+                      ) : null}
+                    </p>
+                    {isControlledRow(m) && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-1.5 py-0.5 rounded bg-red-50 text-red-600 border border-red-200">
+                        <AlertCircle size={10} />
+                        {normalizeSchedule(m.scheduleClass) ?? "Rx"}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 truncate">
+                    {[m.brandName, m.genericName].filter(Boolean).join(" · ") || m.sku}
+                  </p>
+                  {(m.defaultDosage || m.defaultFrequency || m.defaultDuration) && (
+                    <p className="text-[11px] text-emerald-700 font-semibold mt-0.5">
+                      {[m.defaultDosage, m.defaultFrequency, m.defaultDuration]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  )}
+                </div>
+
+                {canEdit && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemove(m)}
+                    disabled={removeMutation.isPending}
+                    className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-40 shrink-0 hidden md:flex"
+                    aria-label={`Remove ${m.name}`}
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                )}
+                </div>
+              </SwipeableMedicineRow>
+            ))}
+          </div>
+        )}
+
+        {/* Footer note */}
+        <div className="pt-3 border-t border-slate-100">
+          <p className="text-[11px] text-slate-500">
+            Being on this list is not a prescription — Schedule H items still need one to be dispensed.
           </p>
-          <button
-            onClick={onClose}
-            className="text-sm font-semibold px-4 py-2 rounded-lg border hover:bg-muted shrink-0"
-          >
-            Done
-          </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -448,7 +430,7 @@ function SwipeableMedicineRow({
       {/* Draggable content */}
       <div
         data-testid="swipeable-row"
-        className="relative z-10 bg-background border rounded-xl p-2.5"
+        className="relative z-10 bg-white border border-slate-200/80 rounded-xl p-2.5"
         style={{
           transform: `translateX(${offset}px)`,
           transition: tracking.current ? "none" : "transform 200ms ease-out",
