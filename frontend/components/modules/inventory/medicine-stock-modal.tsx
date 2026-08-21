@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Pill,
@@ -29,9 +29,12 @@ interface Props {
   onClose: () => void;
   medicineId: string | null;
   medicineName?: string;
+  /** Opens straight into the receive-batch form — used by the counter desk,
+   *  where the only reason to open this modal is that the shelf is empty. */
+  autoOpenAddStock?: boolean;
 }
 
-export function MedicineStockModal({ open, onClose, medicineId, medicineName }: Props) {
+export function MedicineStockModal({ open, onClose, medicineId, medicineName, autoOpenAddStock }: Props) {
   const { branchId: activeBranchId } = useActiveBranchId();
   const { success: toastSuccess, error: toastError } = useToast();
   const queryClient = useQueryClient();
@@ -95,11 +98,44 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName }: 
     },
   });
 
+  // Opening from the counter desk means "this is out of stock, fix it now", so
+  // the receive form is already expanded. Closing resets it, so the next open
+  // never inherits the previous medicine's half-typed batch.
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (!open) {
+      seededRef.current = false;
+      setAddStockOpen(false);
+      // Field values too, not just the panel: the modal stays mounted between
+      // medicines, so a batch number typed for one and abandoned would still
+      // be sitting there when the next medicine's form opens.
+      setNewBatchNo("");
+      setNewExpiry("");
+      setNewQty(50);
+      setNewPurchasePrice("");
+      setNewMrp("");
+      return;
+    }
+    if (autoOpenAddStock) setAddStockOpen(true);
+  }, [open, autoOpenAddStock]);
+
+  // Prices are seeded once per open, after the medicine record lands — the
+  // manual toggle seeds them on click, but an auto-opened form has no click.
+  useEffect(() => {
+    if (!addStockOpen || seededRef.current || !medicine) return;
+    seededRef.current = true;
+    setNewPurchasePrice((v) => v || medicine.purchaseRate || "");
+    setNewMrp((v) => v || medicine.priceMrp || "");
+  }, [addStockOpen, medicine]);
+
   const handleAddStockSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!medicineId || !newBatchNo.trim() || !newExpiry) return;
 
-    const cost = parseFloat(newPurchasePrice || medicine?.purchasePrice || "0").toFixed(2);
+    // The medicine record carries the cost as purchaseRate (purchase_rate);
+    // reading purchasePrice always missed, so every direct-receive batch was
+    // being costed at zero and skewing stock valuation.
+    const cost = parseFloat(newPurchasePrice || medicine?.purchaseRate || "0").toFixed(2);
     const mrp = parseFloat(newMrp || medicine?.priceMrp || "0").toFixed(2);
 
     addBatchMutation.mutate({
@@ -177,7 +213,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName }: 
             </h4>
             <button
               onClick={() => {
-                setNewPurchasePrice(medicine?.purchasePrice ?? "");
+                setNewPurchasePrice(medicine?.purchaseRate ?? "");
                 setNewMrp(medicine?.priceMrp ?? "");
                 setAddStockOpen((prev) => !prev);
               }}
