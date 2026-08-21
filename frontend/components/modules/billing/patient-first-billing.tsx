@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search,
   UserPlus,
@@ -24,8 +24,12 @@ import {
   IndianRupee,
   RefreshCw,
   LayoutList,
+  PackagePlus,
 } from "lucide-react";
-import { apiClient } from "@/lib/api-client";
+import { apiClient, queryKeys } from "@/lib/api-client";
+import { Modal } from "@/components/ui/modal";
+import { MedicineForm } from "@/components/modules/inventory/medicine-form";
+import { MedicineStockModal } from "@/components/modules/inventory/medicine-stock-modal";
 import { useCreateClinicToken } from "@/queries/clinic.queries";
 import { useNavigation } from "@/lib/navigation-context";
 import { useDebounce } from "@/hooks/use-debounce";
@@ -76,6 +80,12 @@ export function PatientFirstBilling({
   // The OTC modal now bills by default and only falls back to a free hand-out,
   // so either permission opens it — the modal disables the path you lack.
   const canOtc = canPerm("billing.create") || canPerm("inventory.adjust");
+  // A medicine the counter cannot sell is a counter problem, so the two fixes
+  // live on this screen too: receive a batch for something that ran out, and
+  // register something the catalogue has never heard of.
+  const canAddStock = canPerm("inventory.write");
+  const canAddMedicine = canPerm("products.write");
+  const queryClient = useQueryClient();
   const [nowTick, setNowTick] = useState(Date.now());
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
@@ -296,6 +306,19 @@ export function PatientFirstBilling({
   // its MRP, tax rate and strip size.
   const [otcSupplyTarget, setOtcSupplyTarget] = useState<any | null>(null);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
+  // Restock target for the counter desk's inline "Add stock" action.
+  const [stockTarget, setStockTarget] = useState<any | null>(null);
+  // Set to the typed search text when registering a medicine that isn't in the
+  // catalogue yet, so the form opens with the name already filled.
+  const [newMedicineName, setNewMedicineName] = useState<string | null>(null);
+
+  // The counter search keeps its own query keys, so the inventory modals'
+  // invalidations don't reach it — refresh it by hand after either fix.
+  const refreshMedicineSearch = () => {
+    queryClient.invalidateQueries({ queryKey: ["medicine-search-counter"] });
+    queryClient.invalidateQueries({ queryKey: ["counter-medicine-search"] });
+    queryClient.invalidateQueries({ queryKey: queryKeys.medicines.all() });
+  };
 
   const selectedPatientRaw = cart.patientId
     ? patients.find((p) => p.id === cart.patientId)
@@ -1022,6 +1045,17 @@ export function PatientFirstBilling({
                           No matching patient or medicine. Register the patient
                           with <strong>+ Add New</strong>.
                         </p>
+                        {canAddMedicine && (
+                          <button
+                            type="button"
+                            onClick={() => setNewMedicineName((submitted || query).trim())}
+                            className="mt-3 inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition-colors shadow-sm"
+                            title="Register this medicine in the catalogue without leaving the counter"
+                          >
+                            <Plus size={13} strokeWidth={3} />
+                            Add &ldquo;{(submitted || query).trim()}&rdquo; to catalogue
+                          </button>
+                        )}
                       </div>
                     )}
 
@@ -1057,6 +1091,27 @@ export function PatientFirstBilling({
                       </div>
                     )}
 
+                    {/* Searched a medicine name the catalogue has never seen —
+                        offer to register it instead of sending staff to the
+                        Inventory module and back. The both-empty case is
+                        already covered by the "Nothing found" panel above. */}
+                    {!isFetching && !medSearching && patients.length > 0 && medResults.length === 0 && canAddMedicine && (
+                      <div className="flex items-center justify-between gap-3 px-4 py-3 border-t border-slate-100 bg-slate-50/60">
+                        <p className="text-xs text-slate-500 min-w-0">
+                          No medicine matches{" "}
+                          <span className="font-bold text-slate-700">&ldquo;{submitted || query}&rdquo;</span>.
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setNewMedicineName((submitted || query).trim())}
+                          className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold transition-colors shadow-sm"
+                        >
+                          <Plus size={12} strokeWidth={3} />
+                          Add medicine
+                        </button>
+                      </div>
+                    )}
+
                     {/* Medicines group — OTC counter sale (billed by default) */}
                     {medResults.length > 0 && (
                       <div className="divide-y divide-slate-100 border-t border-slate-100">
@@ -1087,30 +1142,57 @@ export function PatientFirstBilling({
                             >
                               {formatStockUnit(Number(m.totalStock || 0), m)}
                             </span>
-                            {canOtc && (() => {
+                            {(() => {
                               // Nothing on the shelf means nothing to sell, so
                               // the button goes grey and stops taking clicks
                               // rather than opening a sale that cannot be filled.
                               const outOfStock = Number(m.totalStock || 0) <= 0;
                               return (
-                                <button
-                                  type="button"
-                                  onClick={() => setOtcSupplyTarget(m)}
-                                  disabled={outOfStock}
-                                  className={`w-[104px] shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-colors shadow-sm ${
-                                    outOfStock
-                                      ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
-                                      : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                                  }`}
-                                  title={
-                                    outOfStock
-                                      ? "Out of stock — nothing left to sell over the counter"
-                                      : "Sell over the counter without a prescription — bills it, or record a free hand-out"
-                                  }
-                                >
-                                  <Plus size={12} strokeWidth={3} />
-                                  OTC sale
-                                </button>
+                                <>
+                                  {canOtc && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setOtcSupplyTarget(m)}
+                                      disabled={outOfStock}
+                                      className={`w-[104px] shrink-0 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-colors shadow-sm ${
+                                        outOfStock
+                                          ? "bg-slate-200 text-slate-400 cursor-not-allowed shadow-none"
+                                          : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                      }`}
+                                      title={
+                                        outOfStock
+                                          ? "Out of stock — add stock before selling this over the counter"
+                                          : "Sell over the counter without a prescription — bills it, or record a free hand-out"
+                                      }
+                                    >
+                                      <Plus size={12} strokeWidth={3} />
+                                      OTC sale
+                                    </button>
+                                  )}
+                                  {/* The counter is where staff find out the
+                                      shelf is empty, so the fix lives here too.
+                                      Out of stock makes it the loud button;
+                                      otherwise it stays a quiet top-up. */}
+                                  {canAddStock && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setStockTarget(m)}
+                                      className={`shrink-0 inline-flex items-center justify-center gap-1.5 rounded-full text-[11px] font-bold transition-colors ${
+                                        outOfStock
+                                          ? "px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white shadow-sm"
+                                          : "p-1.5 border border-slate-200 text-slate-400 hover:text-orange-600 hover:border-orange-300 hover:bg-orange-50"
+                                      }`}
+                                      title={
+                                        outOfStock
+                                          ? `Receive a new batch of ${m.name} into this branch`
+                                          : "Add stock — receive another batch"
+                                      }
+                                    >
+                                      <PackagePlus size={outOfStock ? 12 : 14} />
+                                      {outOfStock && "Add stock"}
+                                    </button>
+                                  )}
+                                </>
                               );
                             })()}
                           </div>
@@ -1610,6 +1692,71 @@ export function PatientFirstBilling({
           )}
         </div>
       )}
+
+      {/* Restock a medicine that ran out, without leaving the counter. Opens
+          straight into the receive-batch form; the counter search is refreshed
+          on close so the row's stock count and its OTC button catch up. */}
+      <MedicineStockModal
+        open={!!stockTarget}
+        onClose={() => {
+          setStockTarget(null);
+          refreshMedicineSearch();
+        }}
+        medicineId={stockTarget?.id ?? null}
+        medicineName={stockTarget?.name}
+        autoOpenAddStock
+      />
+
+      {/* Register a medicine the catalogue has never seen. Defaults to
+          prescription-required, same fail-safe the barcode-scan add uses: a
+          rushed entry must not register a Schedule H drug as OTC and slip past
+          the Rx gate. The manager unticks it for a genuine OTC item. */}
+      <Modal
+        title="Add New Medicine"
+        subtitle={
+          newMedicineName
+            ? `"${newMedicineName}" isn't in the catalogue yet — enter price and GST to register it.`
+            : undefined
+        }
+        icon={<Pill size={16} />}
+        open={!!newMedicineName}
+        onClose={() => setNewMedicineName(null)}
+        size="xl"
+      >
+        {newMedicineName && (
+          <>
+            <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              <span className="font-bold shrink-0">Schedule check:</span>
+              <span>
+                This item defaults to <b>prescription required</b>. If it is a Schedule H / H1 / X drug,
+                set the correct schedule class below. If it is genuinely OTC, untick &ldquo;Requires Prescription&rdquo;.
+              </span>
+            </div>
+            <MedicineForm
+              initial={{
+                name: newMedicineName,
+                unit: "strip",
+                stripSize: 1,
+                taxPercent: "12",
+                reorderLevel: 10,
+                reorderQty: 50,
+                requiresPrescription: true,
+                isControlled: false,
+                isActive: true,
+              } as any}
+              onSuccess={() => {
+                setNewMedicineName(null);
+                refreshMedicineSearch();
+                toastSuccess(
+                  "Medicine added",
+                  "It is in the catalogue now. Add a batch before selling it — the search row has an Add stock button.",
+                );
+              }}
+              onCancel={() => setNewMedicineName(null)}
+            />
+          </>
+        )}
+      </Modal>
 
       {/* Stat-card drill-down modals — never leave the desk */}
       <CounterDeskModals view={deskModal} onClose={() => setDeskModal(null)} />
