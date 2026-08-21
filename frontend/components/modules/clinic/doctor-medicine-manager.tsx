@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   X,
   Plus,
@@ -177,7 +177,7 @@ export function DoctorMedicineManager({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" role="dialog" aria-modal="true">
       <div className="bg-card w-full max-w-2xl rounded-2xl shadow-xl border max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between p-4 border-b shrink-0">
           <div className="min-w-0">
@@ -290,10 +290,13 @@ export function DoctorMedicineManager({
           ) : (
             <div className="space-y-2">
               {rows.map((m: any, i: number) => (
-                <div
+                <SwipeableMedicineRow
                   key={m.id}
-                  className="flex items-center gap-2 rounded-xl border p-2.5"
+                  onDelete={() => handleRemove(m)}
+                  disabled={removeMutation.isPending}
+                  canEdit={canEdit}
                 >
+                  <div className="flex items-center gap-2">
                   {canEdit && (
                     <div className="flex flex-col shrink-0">
                       <button
@@ -353,13 +356,14 @@ export function DoctorMedicineManager({
                       type="button"
                       onClick={() => handleRemove(m)}
                       disabled={removeMutation.isPending}
-                      className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-40 shrink-0"
+                      className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 disabled:opacity-40 shrink-0 hidden md:flex"
                       aria-label={`Remove ${m.name}`}
                     >
                       <Trash2 size={15} />
                     </button>
                   )}
-                </div>
+                  </div>
+                </SwipeableMedicineRow>
               ))}
             </div>
           )}
@@ -377,6 +381,83 @@ export function DoctorMedicineManager({
             Done
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Swipe-to-delete (mobile only) ─────────────────────────────────────────
+ *
+ * On touch devices a left-swipe reveals a red "Delete" zone behind the
+ * medicine row. On desktop the wrapper is a transparent passthrough — the
+ * trash button inside the row handles deletion.
+ *
+ * Threshold: 80 px of leftward drag. Releasing past it triggers onDelete;
+ * releasing before it snaps back.
+ */
+const SWIPE_THRESHOLD = 80;
+
+function SwipeableMedicineRow({
+  onDelete,
+  disabled,
+  canEdit,
+  children,
+}: {
+  onDelete: () => void;
+  disabled?: boolean;
+  canEdit: boolean;
+  children: React.ReactNode;
+}) {
+  const [offset, setOffset] = useState(0);
+  const startX = useRef(0);
+  const tracking = useRef(false);
+
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!canEdit || disabled) return;
+    startX.current = e.touches[0]!.clientX;
+    tracking.current = true;
+  }, [canEdit, disabled]);
+
+  const onTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!tracking.current) return;
+    const dx = e.touches[0]!.clientX - startX.current;
+    const clamped = Math.min(0, Math.max(-(SWIPE_THRESHOLD + 20), dx));
+    setOffset(clamped);
+  }, []);
+
+  const onTouchEnd = useCallback(() => {
+    tracking.current = false;
+    if (offset < -SWIPE_THRESHOLD) {
+      onDelete();
+    }
+    setOffset(0);
+  }, [offset, onDelete]);
+
+  return (
+    <div className="relative overflow-hidden rounded-xl" style={{ touchAction: "pan-y" }}>
+      {/* Red delete zone revealed behind the content */}
+      {canEdit && (
+        <div
+          className="absolute inset-y-0 right-0 flex items-center gap-1.5 px-3 bg-red-500 text-white text-xs font-bold rounded-r-xl"
+          style={{ width: SWIPE_THRESHOLD }}
+          aria-hidden="true"
+        >
+          <Trash2 size={14} />
+        </div>
+      )}
+      {/* Draggable content */}
+      <div
+        data-testid="swipeable-row"
+        className="relative z-10 bg-background border rounded-xl p-2.5"
+        style={{
+          transform: `translateX(${offset}px)`,
+          transition: tracking.current ? "none" : "transform 200ms ease-out",
+        }}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        {children}
       </div>
     </div>
   );
