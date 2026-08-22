@@ -296,6 +296,29 @@ export class BillingService {
         }
       }
 
+      // A doctor tag is an attribution, so the id has to name a doctor. The FK
+      // alone would happily accept any user — the cashier's own id included —
+      // and the per-doctor figures would then be quietly wrong rather than
+      // rejected at the counter.
+      if (dto.referredByDoctorId) {
+        const [doctor] = await tx
+          .select({ id: schema.users.id })
+          .from(schema.users)
+          .where(
+            and(
+              eq(schema.users.id, dto.referredByDoctorId),
+              eq(schema.users.role, "doctor"),
+              eq(schema.users.isActive, true),
+            ),
+          )
+          .limit(1);
+        if (!doctor) {
+          throw new UnprocessableEntityException(
+            "The doctor this sale was tagged to is not an active doctor at this practice",
+          );
+        }
+      }
+
       // 2. FEFO Batch Selection — one query for every line item instead of
       // one query per item.
       const allAllocations: RawAllocation[] = [];
@@ -550,6 +573,7 @@ export class BillingService {
         staffId,
         branchId,
         prescriptionId: dto.prescriptionId,
+        referredByDoctorId: dto.referredByDoctorId ?? null,
         subtotal: subtotalWithFee.toFixed(2),
         discountAmount: discountAmount.toFixed(2),
         taxAmount: discountedTax.toFixed(2),
@@ -612,6 +636,12 @@ export class BillingService {
 
       // Insert multiple payment rows
       for (const p of dto.payments) {
+        // A sale handed over entirely on credit still has to declare how it was
+        // settled — the counter sends one `credit` entry of zero so the invoice
+        // carries paymentMode "credit" — but no money moved, so there is nothing
+        // to record in the payments ledger. A zero row here would show on the
+        // bill as a ₹0.00 receipt and count as a collection that never happened.
+        if (new Decimal(p.amount).lte(0)) continue;
         await tx.insert(schema.payments).values({
           invoiceId: invoice.id,
           amount: p.amount,

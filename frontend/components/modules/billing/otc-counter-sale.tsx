@@ -18,6 +18,7 @@ import {
   X,
   ArrowLeft,
   ShoppingCart,
+  UserRound,
 } from "lucide-react";
 import { useToast } from "@/components/ui/toast";
 import { apiClient, queryKeys } from "@/lib/api-client";
@@ -25,6 +26,7 @@ import { useActiveBranchId } from "@/hooks/use-branch";
 import { useDebounce } from "@/hooks/use-debounce";
 import { usePermissions } from "@/hooks/use-permissions";
 import { formatStockUnit, getUnitLabel } from "@/lib/stock-unit-formatter";
+import { isValidPhoneNumber } from "@/lib/phone-validation";
 import { quoteOtcSaleLines } from "@/lib/otc-quote";
 import { scheduleLabel } from "@/lib/schedule-class";
 import { useAuthStore } from "@/stores/auth.store";
@@ -88,6 +90,18 @@ function newLine(medicine: OtcMedicine): OtcLine {
   return { medicine, saleUnit: "pack", quantity: 1, discountPct: 0, batchId: "" };
 }
 
+/** Phone numbers are typed with spaces, hyphens and a country code as often as not. */
+function digitsOf(phone: string) {
+  return phone.replace(/\D/g, "");
+}
+
+/** Same number, however it was written down — compare on the last ten digits. */
+function samePhone(a: string, b: string) {
+  const x = digitsOf(a);
+  const y = digitsOf(b);
+  return x.length >= 10 && y.length >= 10 && x.slice(-10) === y.slice(-10);
+}
+
 function asArray(raw: any): any[] {
   if (Array.isArray(raw)) return raw;
   if (Array.isArray(raw?.data?.data)) return raw.data.data;
@@ -116,8 +130,20 @@ export function OtcCounterSale({
 
   const [lines, setLines] = useState<OtcLine[]>([]);
   const [mode, setMode] = useState<"bill" | "free">("bill");
-  const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "card">("cash");
+  // "credit" is the counter's due sale: the medicines go out now and the money
+  // is collected later. It is the only mode that needs a name and a number,
+  // because a debt with nobody's name on it cannot be chased.
+  const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "card" | "credit">("cash");
   const [referenceNo, setReferenceNo] = useState("");
+  // Who owes it. Kept out of the walk-in path entirely — these are only read
+  // when the sale is on credit, and only then are they required.
+  const [dueName, setDueName] = useState("");
+  const [duePhone, setDuePhone] = useState("");
+  /** Part payment taken at the counter against a credit sale. "" = nothing paid now. */
+  const [duePaidNow, setDuePaidNow] = useState("");
+  const [duePaidMode, setDuePaidMode] = useState<"cash" | "upi" | "card">("cash");
+  /** Doctor this counter sale is credited to, when it is one of theirs. */
+  const [referredByDoctorId, setReferredByDoctorId] = useState("");
   const [notes, setNotes] = useState("");
   const [billedInvoiceId, setBilledInvoiceId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -136,6 +162,12 @@ export function OtcCounterSale({
   useEffect(() => {
     setLines(medicine ? [newLine(medicine)] : []);
     setReferenceNo("");
+    setPaymentMode("cash");
+    setDueName("");
+    setDuePhone("");
+    setDuePaidNow("");
+    setDuePaidMode("cash");
+    setReferredByDoctorId("");
     setNotes("");
     setSearch("");
     setBilledInvoiceId(null);
@@ -247,6 +279,27 @@ export function OtcCounterSale({
     if (!anyControlled) setAttested(false);
   }, [anyControlled]);
   const loadingBatches = rows.some((r) => r.loading);
+
+  // ── Credit / due sale ─────────────────────────────────────────────────────
+  // The bill is issued in full either way; what changes is how much of it is
+  // collected now. Whatever is left becomes the customer's outstanding balance,
+  // which the server will only accept against a named patient — hence the two
+  // required fields, and hence "find them or register them" before billing.
+  const onCredit = paymentMode === "credit";
+  const paidNow = Math.min(
+    quote.total,
+    Math.max(0, Number.parseFloat(duePaidNow) || 0),
+  );
+  const dueAmount = Number((quote.total - paidNow).toFixed(2));
+  const duePhoneValid = isValidPhoneNumber(duePhone);
+  const creditReady = !onCredit || (dueName.trim().length > 0 && duePhoneValid);
+  // A part payment that clears the whole bill is not a credit sale at all — it
+  // still bills fine, it just leaves nothing owing.
+  const leavesDebt = onCredit && dueAmount > 0;
+  // The reference box belongs to whichever tender is actually being taken.
+  const refMode = onCredit ? duePaidMode : paymentMode;
+  const showReference = onCredit ? paidNow > 0 && duePaidMode !== "cash" : paymentMode !== "cash";
+
   // One rate on the bill reads better as "GST @ 12%"; a mixed bill cannot claim
   // a single rate, so it just says GST.
   const singleTaxPct =
@@ -277,34 +330,130 @@ export function OtcCounterSale({
     setSearch("");
   };
 
+  // ── Doctor this counter sale belongs to ───────────────────────────────────
+  // A walk-in with no paper is often still a doctor's patient: seen upstairs,
+  // came down and asked for what they were told to take. Tagging the doctor
+  // keeps that sale in their dispensing history instead of losing it to
+  // anonymous OTC. It is attribution only — it opens no Schedule H gate.
+  //
+  // Only offered when no prescription is attached, since one already names its
+  // own doctor, and only to the roles the doctors route admits: everyone else
+  // would collect a 403 for a field they cannot use.
+  const canTagDoctor = ["super_admin", "admin", "shop_manager", "doctor"].includes(
+    String(role),
+  );
+  const { data: doctorsRaw } = useQuery({
+    queryKey: ["otc-referring-doctors", activeBranchId],
+    queryFn: () =>
+      apiClient.get("/clinic/doctors", {
+        ...(activeBranchId ? { params: { branchId: activeBranchId } } : {}),
+      }) as any,
+    enabled: open && mode === "bill" && canTagDoctor,
+    staleTime: 5 * 60 * 1000,
+  });
+  const doctors = asArray(doctorsRaw);
+  const doctorName = (d: any) =>
+    [d?.firstName, d?.lastName].filter(Boolean).join(" ").trim() || d?.email || "Doctor";
+  const taggedDoctor = doctors.find((d: any) => d.id === referredByDoctorId) ?? null;
+
   const resetAndClose = () => {
     setBilledInvoiceId(null);
     setLines([]);
     setReferenceNo("");
+    setPaymentMode("cash");
+    setDueName("");
+    setDuePhone("");
+    setDuePaidNow("");
+    setDuePaidMode("cash");
+    setReferredByDoctorId("");
     setNotes("");
     setSearch("");
     onClose();
   };
 
+  /** Whoever is already on file under this number, or null. */
+  const findPatientByPhone = async (phone: string): Promise<string | null> => {
+    const digits = digitsOf(phone);
+    if (digits.length < 10) return null;
+    const res: any = await apiClient.get("/patients", {
+      params: { search: digits.slice(-10), limit: 10 },
+    });
+    const match = asArray(res).find((p: any) => samePhone(String(p?.phone ?? ""), phone));
+    return match?.id ?? null;
+  };
+
+  /**
+   * The patient the debt is recorded against, registering them if this is the
+   * first time they have bought on credit.
+   *
+   * Search first rather than create-then-handle-409: a returning customer must
+   * end up on their existing account, or their dues would be spread over a new
+   * record every visit and nobody would see the real balance.
+   */
+  const resolveDuePatientId = async (): Promise<string> => {
+    const existing = await findPatientByPhone(duePhone);
+    if (existing) return existing;
+    try {
+      const res: any = await apiClient.post("/patients", {
+        name: dueName.trim(),
+        phone: duePhone.trim(),
+      });
+      const created = res?.data?.data ?? res?.data ?? res;
+      if (created?.id) return created.id;
+    } catch (err: any) {
+      // 409 means the number was registered between the search and the insert,
+      // or under a spelling the search missed — look again rather than fail.
+      if (err?.response?.status !== 409) throw err;
+    }
+    const retry = await findPatientByPhone(duePhone);
+    if (retry) return retry;
+    throw new Error(
+      "Could not put this sale on an account — check the phone number, or register the customer on the Patients screen first.",
+    );
+  };
+
   // ── Billed OTC sale — the normal invoice route ────────────────────────────
   const billMutation = useMutation({
-    mutationFn: () =>
-      apiClient.post("/billing/invoices", {
+    mutationFn: async () => {
+      // A due has to belong to someone: the server refuses to leave a balance
+      // owing on an anonymous walk-in, so the account is settled before the
+      // invoice is written.
+      const patientId = onCredit ? await resolveDuePatientId() : null;
+      return apiClient.post("/billing/invoices", {
+        ...(patientId ? { patientId } : {}),
         branchId: activeBranchId,
         items: rows.map((r) => ({
           medicineId: r.line.medicine.id,
           quantity: r.baseUnits,
           discountPct: r.line.discountPct.toFixed(2),
         })),
-        payments: [
-          {
-            mode: paymentMode,
-            amount: quote.total.toFixed(2),
-            ...(referenceNo.trim() ? { referenceNo: referenceNo.trim() } : {}),
-          },
-        ],
+        // A credit sale still declares how it was settled. When nothing is paid
+        // at the counter that is a single zero-value `credit` entry — the whole
+        // bill becomes the customer's outstanding balance. A part payment is
+        // sent as the tender that was actually taken, and the server turns the
+        // shortfall into the due by itself.
+        payments: onCredit
+          ? paidNow > 0
+            ? [
+                {
+                  mode: duePaidMode,
+                  amount: paidNow.toFixed(2),
+                  ...(referenceNo.trim() ? { referenceNo: referenceNo.trim() } : {}),
+                },
+              ]
+            : [{ mode: "credit", amount: "0.00" }]
+          : [
+              {
+                mode: paymentMode,
+                amount: quote.total.toFixed(2),
+                ...(referenceNo.trim() ? { referenceNo: referenceNo.trim() } : {}),
+              },
+            ],
         discountAmount: "0",
         ...(prescriptionId ? { prescriptionId } : {}),
+        // Attribution only, and only when there is no prescription to carry the
+        // doctor already.
+        ...(!prescriptionId && referredByDoctorId ? { referredByDoctorId } : {}),
         // Attested sale: the manager's name and reason ride on the existing
         // override fields, and rxPending is what keeps the missing paper
         // visible until someone attaches it.
@@ -330,6 +479,14 @@ export function OtcCounterSale({
             : attested
               ? "OTC counter sale — prescription attested, still to be attached"
               : "OTC counter sale — no prescription",
+          // What the bill itself should say about the money, so the debt is
+          // legible on the printed copy the customer walks away with.
+          leavesDebt
+            ? `On credit — ₹${dueAmount.toFixed(2)} due from ${dueName.trim()} (${duePhone.trim()})`
+            : "",
+          // On the printed bill too, so the customer's copy says whose
+          // medicines these were.
+          !prescriptionId && taggedDoctor ? `Doctor: ${doctorName(taggedDoctor)}` : "",
           notes.trim(),
         ]
           .filter(Boolean)
@@ -337,7 +494,8 @@ export function OtcCounterSale({
         // Same idempotency guard the POS uses: a retry after a lost response
         // returns the invoice already written instead of billing it twice.
         clientRef: `OTC-${Date.now()}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`,
-      }) as any,
+      }) as any;
+    },
     onSuccess: (res: any) => {
       const invoice = res?.data?.invoice ?? res?.data?.data ?? res?.data ?? res;
       qc.invalidateQueries({ queryKey: ["otc-supply-batches"] });
@@ -346,9 +504,19 @@ export function OtcCounterSale({
       qc.invalidateQueries({ queryKey: ["medicine-batches-detail"] });
       qc.invalidateQueries({ queryKey: queryKeys.invoices.all() });
       qc.invalidateQueries({ queryKey: queryKeys.medicines.list({}) });
+      // A credit sale's outstanding balance shows on the patient and on the
+      // receivables list, neither of which would refresh on their own.
+      if (onCredit) {
+        qc.invalidateQueries({ queryKey: queryKeys.patients.all() });
+        qc.invalidateQueries({ queryKey: ["receivables-aging"] });
+      }
+      const billRef = invoice?.invoiceNo ? `Bill ${invoice.invoiceNo}` : "Bill created";
+      const medicineCount = `${lines.length} medicine${lines.length === 1 ? "" : "s"}`;
       toastSuccess(
-        "OTC sale billed",
-        `${invoice?.invoiceNo ? `Bill ${invoice.invoiceNo}` : "Bill created"} — ${lines.length} medicine${lines.length === 1 ? "" : "s"}, ${inr(quote.total)} received by ${paymentMode.toUpperCase()}.`,
+        leavesDebt ? "OTC sale billed on credit" : "OTC sale billed",
+        leavesDebt
+          ? `${billRef} — ${medicineCount}, ${inr(dueAmount)} now owed by ${dueName.trim()}${paidNow > 0 ? ` after ${inr(paidNow)} paid by ${duePaidMode.toUpperCase()}` : ""}. Collect it from their outstanding balance.`
+          : `${billRef} — ${medicineCount}, ${inr(quote.total)} received by ${refMode.toUpperCase()}.`,
       );
       // The bill itself is the useful thing to look at next — the counter
       // prints or shares it straight from here.
@@ -430,6 +598,8 @@ export function OtcCounterSale({
     }
     if (quote.short > 0 || quote.total <= 0) return;
     if (!rxCleared) return;
+    // Nobody's name on the debt, nobody to collect it from.
+    if (!creditReady) return;
     billMutation.mutate();
   };
 
@@ -994,34 +1164,182 @@ export function OtcCounterSale({
 
           {mode === "bill" && (
             <>
+              {/* Whose sale this is, clinically */}
+              {canTagDoctor && !prescriptionId && doctors.length > 0 && (
+                <div>
+                  <label
+                    htmlFor="otc-referring-doctor"
+                    className="block text-xs font-bold text-slate-700 mb-1.5"
+                  >
+                    Doctor <span className="font-normal text-slate-400">(optional)</span>
+                  </label>
+                  <select
+                    id="otc-referring-doctor"
+                    value={referredByDoctorId}
+                    onChange={(e) => setReferredByDoctorId(e.target.value)}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                  >
+                    <option value="">No doctor — plain counter sale</option>
+                    {doctors.map((d: any) => (
+                      <option key={d.id} value={d.id}>
+                        {doctorName(d)}
+                        {d.doctorProfile?.specialty ? ` · ${d.doctorProfile.specialty}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-1 text-[11px] text-slate-400">
+                    Tags this sale to the doctor it came from, so it shows in their
+                    history. It is not a prescription and does not clear a Schedule
+                    H medicine.
+                  </p>
+                </div>
+              )}
+
               {/* Payment */}
               <div>
                 <p id="otc-payment-label" className="block text-xs font-bold text-slate-700 mb-1.5">
                   Payment received by
                 </p>
                 <div
-                  className="grid grid-cols-3 gap-2"
+                  className="grid grid-cols-2 sm:grid-cols-4 gap-2"
                   role="group"
                   aria-labelledby="otc-payment-label"
                 >
-                  {(["cash", "upi", "card"] as const).map((m) => (
+                  {(["cash", "upi", "card", "credit"] as const).map((m) => (
                     <button
                       key={m}
                       type="button"
                       onClick={() => setPaymentMode(m)}
                       className={`px-3 py-2 rounded-lg text-xs font-bold uppercase border transition-colors ${
                         paymentMode === m
-                          ? "bg-emerald-600 text-white border-emerald-600"
+                          ? m === "credit"
+                            ? "bg-amber-600 text-white border-amber-600"
+                            : "bg-emerald-600 text-white border-emerald-600"
                           : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                       }`}
                     >
-                      {m}
+                      {m === "credit" ? "Due / Credit" : m}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {paymentMode !== "cash" && (
+              {/* Who owes it — only asked for on a credit sale */}
+              {onCredit && (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-3 space-y-3">
+                  <div className="flex items-start gap-2">
+                    <UserRound size={14} className="text-amber-700 shrink-0 mt-0.5" />
+                    <p className="text-[11px] text-amber-900 leading-snug">
+                      Nothing is collected now — the medicines go out and the amount
+                      is recorded against this customer&apos;s account. A name and a
+                      working phone number are required, because a due with nobody&apos;s
+                      name on it cannot be collected later. If they are already
+                      registered under this number, the amount is added to that
+                      account instead of creating a second one.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label
+                        htmlFor="otc-due-name"
+                        className="block text-xs font-bold text-slate-700 mb-1.5"
+                      >
+                        Customer name <span className="text-red-600">*</span>
+                      </label>
+                      <input
+                        id="otc-due-name"
+                        value={dueName}
+                        onChange={(e) => setDueName(e.target.value)}
+                        placeholder="e.g. Ramesh Das"
+                        autoComplete="off"
+                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor="otc-due-phone"
+                        className="block text-xs font-bold text-slate-700 mb-1.5"
+                      >
+                        Phone number <span className="text-red-600">*</span>
+                      </label>
+                      <input
+                        id="otc-due-phone"
+                        value={duePhone}
+                        onChange={(e) => setDuePhone(e.target.value)}
+                        placeholder="10-digit mobile number"
+                        inputMode="tel"
+                        autoComplete="off"
+                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                      />
+                      {duePhone.trim().length > 0 && !duePhoneValid && (
+                        <p className="mt-1 text-[11px] font-semibold text-red-600">
+                          Enter a valid 10-digit mobile number.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Part payment — "due" is often "paid some of it now" */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label
+                        htmlFor="otc-due-paid-now"
+                        className="block text-xs font-bold text-slate-700 mb-1.5"
+                      >
+                        Paying now{" "}
+                        <span className="font-normal text-slate-400">(optional)</span>
+                      </label>
+                      <input
+                        id="otc-due-paid-now"
+                        type="number"
+                        min={0}
+                        max={quote.total}
+                        step="0.01"
+                        value={duePaidNow}
+                        onChange={(e) => setDuePaidNow(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/30"
+                      />
+                      <p className="mt-1 text-[11px] text-slate-500">
+                        Leave blank if the whole bill is on credit
+                      </p>
+                    </div>
+                    {paidNow > 0 && (
+                      <div>
+                        <p
+                          id="otc-due-paid-mode-label"
+                          className="block text-xs font-bold text-slate-700 mb-1.5"
+                        >
+                          Part payment taken by
+                        </p>
+                        <div
+                          className="grid grid-cols-3 gap-2"
+                          role="group"
+                          aria-labelledby="otc-due-paid-mode-label"
+                        >
+                          {(["cash", "upi", "card"] as const).map((m) => (
+                            <button
+                              key={m}
+                              type="button"
+                              onClick={() => setDuePaidMode(m)}
+                              className={`px-2 py-2 rounded-lg text-[11px] font-bold uppercase border transition-colors ${
+                                duePaidMode === m
+                                  ? "bg-emerald-600 text-white border-emerald-600"
+                                  : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
+                              }`}
+                            >
+                              {m}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {showReference && (
                 <div>
                   <label
                     htmlFor="otc-reference"
@@ -1033,16 +1351,20 @@ export function OtcCounterSale({
                     id="otc-reference"
                     value={referenceNo}
                     onChange={(e) => setReferenceNo(e.target.value)}
-                    placeholder={
-                      paymentMode === "upi" ? "UPI transaction ID" : "Card last 4 digits"
-                    }
+                    placeholder={refMode === "upi" ? "UPI transaction ID" : "Card last 4 digits"}
                     className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/30"
                   />
                 </div>
               )}
 
               {/* Amount */}
-              <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 space-y-1">
+              <div
+                className={`rounded-xl border px-3 py-2.5 space-y-1 ${
+                  leavesDebt
+                    ? "border-amber-200 bg-amber-50/70"
+                    : "border-emerald-200 bg-emerald-50/60"
+                }`}
+              >
                 <div className="flex justify-between text-xs text-slate-600">
                   <span>
                     Taxable value
@@ -1054,14 +1376,39 @@ export function OtcCounterSale({
                   <span>GST{singleTaxPct !== null ? ` @ ${singleTaxPct}%` : ""}</span>
                   <span className="font-semibold">{inr(quote.tax)}</span>
                 </div>
-                <div className="flex justify-between text-sm font-extrabold text-emerald-800 pt-1 border-t border-emerald-200">
+                <div
+                  className={`flex justify-between text-sm font-extrabold pt-1 border-t ${
+                    leavesDebt
+                      ? "text-amber-900 border-amber-200"
+                      : "text-emerald-800 border-emerald-200"
+                  }`}
+                >
                   <span className="flex items-center gap-1">
-                    <IndianRupee size={13} /> To collect
+                    <IndianRupee size={13} /> {onCredit ? "Bill total" : "To collect"}
                     {lines.length > 1 ? ` (${lines.length} medicines)` : ""}
                   </span>
                   <span>{inr(quote.total)}</span>
                 </div>
+                {onCredit && (
+                  <>
+                    <div className="flex justify-between text-xs text-slate-600 pt-1">
+                      <span>Collected now</span>
+                      <span className="font-semibold">{inr(paidNow)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-extrabold text-amber-900">
+                      <span>Goes on the customer&apos;s account</span>
+                      <span>{inr(dueAmount)}</span>
+                    </div>
+                  </>
+                )}
               </div>
+
+              {onCredit && !creditReady && (
+                <p className="text-xs font-semibold text-amber-700">
+                  Enter the customer&apos;s name and phone number before billing this
+                  sale on credit.
+                </p>
+              )}
 
               {quote.short > 0 && (
                 <p className="text-xs font-semibold text-red-600">
@@ -1075,16 +1422,19 @@ export function OtcCounterSale({
           {/* Notes */}
           <div>
             <label htmlFor="otc-notes" className="block text-xs font-bold text-slate-700 mb-1.5">
-              Notes <span className="font-normal text-slate-400">(optional)</span>
+              {leavesDebt ? "Note for this due" : "Notes"}{" "}
+              <span className="font-normal text-slate-400">(optional)</span>
             </label>
             <input
               id="otc-notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder={
-                mode === "bill"
-                  ? "e.g. walk-in customer, phone order…"
-                  : "e.g. free sample, staff medicine, counter hand-out…"
+                mode === "free"
+                  ? "e.g. free sample, staff medicine, counter hand-out…"
+                  : leavesDebt
+                    ? "e.g. regular customer, will settle on Friday…"
+                    : "e.g. walk-in customer, phone order…"
               }
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/30"
             />
@@ -1104,12 +1454,18 @@ export function OtcCounterSale({
                 pending ||
                 loadingBatches ||
                 (mode === "bill"
-                  ? !rxCleared || !canBill || quote.short > 0 || quote.total <= 0
+                  ? !rxCleared ||
+                    !canBill ||
+                    !creditReady ||
+                    quote.short > 0 ||
+                    quote.total <= 0
                   : freeBlocked)
               }
               className={`flex items-center gap-2 px-5 py-2 text-white text-xs font-extrabold rounded-lg disabled:opacity-50 transition-colors shadow-sm ${
                 mode === "bill"
-                  ? "bg-emerald-600 hover:bg-emerald-700"
+                  ? leavesDebt
+                    ? "bg-amber-600 hover:bg-amber-700"
+                    : "bg-emerald-600 hover:bg-emerald-700"
                   : "bg-slate-800 hover:bg-slate-900"
               }`}
             >
@@ -1121,7 +1477,9 @@ export function OtcCounterSale({
               ) : mode === "bill" ? (
                 <>
                   <Receipt size={14} />
-                  Bill {inr(quote.total)}
+                  {leavesDebt
+                    ? `Bill ${inr(quote.total)} — ${inr(dueAmount)} on account`
+                    : `Bill ${inr(quote.total)}`}
                 </>
               ) : (
                 <>

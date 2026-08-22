@@ -27,6 +27,13 @@ export const createInvoiceSchema = z
   .object({
     patientId: z.string().uuid().optional(),
     prescriptionId: z.string().uuid().optional(),
+    /**
+     * Doctor this sale is credited to when it carries no prescription — the
+     * counter tagging "these are Dr X's medicines" on an OTC hand-over.
+     * Attribution only: it does not stand in for a prescription and does not
+     * open the Schedule H gate.
+     */
+    referredByDoctorId: z.string().uuid().optional(),
     // Honoured only for super_admin, who has no branch of their own; every other
     // role is pinned to its own branch server-side regardless of what is sent.
     branchId: z.string().uuid().optional(),

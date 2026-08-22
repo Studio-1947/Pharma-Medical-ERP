@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -143,11 +143,40 @@ beforeEach(() => {
   // client — answer by URL so a two-medicine bill prices each line correctly.
   get.mockImplementation((url: string) => {
     if (url === "/inventory/medicines") return Promise.resolve({ data: [MEDICINE_2] });
+    if (url === "/clinic/doctors") return Promise.resolve({ data: DOCTORS });
+    // Nobody on file under the number by default, so a credit sale registers
+    // the customer; the "already a patient" test overrides this.
+    if (url === "/patients") return Promise.resolve({ data: [] });
     if (url.includes("med-2")) return Promise.resolve({ data: BATCHES_2 });
     return Promise.resolve({ data: BATCHES });
   });
   post.mockResolvedValue({ data: { invoice: { id: "inv-9", invoiceNo: "BRN01-1" } } });
 });
+
+const DOCTORS = [
+  {
+    id: "doc-1",
+    firstName: "Asha",
+    lastName: "Rao",
+    doctorProfile: { specialty: "Physician" },
+  },
+];
+
+/** Registering the walk-in, then billing them — two different POSTs. */
+function postByUrl(patient: any = { id: "pat-9", name: "Ramesh Das", phone: "9876543210" }) {
+  post.mockImplementation((url: string) =>
+    url === "/patients"
+      ? Promise.resolve({ data: patient })
+      : Promise.resolve({ data: { invoice: { id: "inv-9", invoiceNo: "BRN01-1" } } }),
+  );
+}
+
+/** Fill in who owes it and hand back nothing at the counter. */
+async function takeOnCredit(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: /Due \/ Credit/i }));
+  await user.type(screen.getByLabelText(/Customer name/i), "Ramesh Das");
+  await user.type(screen.getByLabelText(/Phone number/i), "9876543210");
+}
 
 describe("OTC counter sale", () => {
   it("bills the sale by default and tenders exactly the amount it displays", async () => {
@@ -537,6 +566,139 @@ describe("OTC counter sale", () => {
     expect(
       container.querySelector("[data-pharmerp-unsaved]"),
     ).toBeInTheDocument();
+  });
+
+  // ── Credit / due sales ───────────────────────────────────────────────────
+  //
+  // The counter hands the medicines over and collects later. The server will
+  // only carry a balance against a named patient, so the two fields are the
+  // feature, not decoration.
+
+  it("puts the whole bill on the customer's account when taken on credit", async () => {
+    const user = userEvent.setup();
+    postByUrl();
+    renderModal();
+    await screen.findByRole("button", { name: /Bill ₹95\.76/ });
+
+    await takeOnCredit(user);
+    await user.click(await screen.findByRole("button", { name: /on account/i }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    // The walk-in is registered first — a due needs an account to sit on.
+    const [patientUrl, patientBody] = post.mock.calls[0] as [string, any];
+    expect(patientUrl).toBe("/patients");
+    expect(patientBody).toMatchObject({ name: "Ramesh Das", phone: "9876543210" });
+
+    const [invoiceUrl, payload] = post.mock.calls[1] as [string, any];
+    expect(invoiceUrl).toBe("/billing/invoices");
+    expect(payload.patientId).toBe("pat-9");
+    // Nothing collected: one zero-value credit entry, which the server turns
+    // into a full outstanding balance rather than a receipt.
+    expect(payload.payments).toEqual([{ mode: "credit", amount: "0.00" }]);
+    expect(payload.notes).toMatch(/On credit .* ₹95\.76 due from Ramesh Das/);
+  });
+
+  it("will not bill on credit until the customer is named and reachable", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByRole("button", { name: /Bill ₹/ });
+
+    await user.click(screen.getByRole("button", { name: /Due \/ Credit/i }));
+    expect(await screen.findByRole("button", { name: /on account/i })).toBeDisabled();
+
+    await user.type(screen.getByLabelText(/Customer name/i), "Ramesh Das");
+    // A short number is no more collectable than no number at all.
+    await user.type(screen.getByLabelText(/Phone number/i), "98765");
+    expect(screen.getByRole("button", { name: /on account/i })).toBeDisabled();
+
+    await user.type(screen.getByLabelText(/Phone number/i), "43210");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /on account/i })).toBeEnabled(),
+    );
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("adds the due to an existing account instead of registering a second one", async () => {
+    const user = userEvent.setup();
+    postByUrl();
+    get.mockImplementation((url: string) => {
+      if (url === "/patients")
+        // Same person, number written with a country code and a space.
+        return Promise.resolve({
+          data: [{ id: "pat-existing", name: "Ramesh Das", phone: "+91 98765 43210" }],
+        });
+      if (url === "/inventory/medicines") return Promise.resolve({ data: [MEDICINE_2] });
+      if (url === "/clinic/doctors") return Promise.resolve({ data: DOCTORS });
+      if (url.includes("med-2")) return Promise.resolve({ data: BATCHES_2 });
+      return Promise.resolve({ data: BATCHES });
+    });
+    renderModal();
+    await screen.findByRole("button", { name: /Bill ₹/ });
+
+    await takeOnCredit(user);
+    await user.click(await screen.findByRole("button", { name: /on account/i }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [url, payload] = post.mock.calls[0] as [string, any];
+    expect(url).toBe("/billing/invoices");
+    expect(payload.patientId).toBe("pat-existing");
+    // A second record would split this customer's dues across two accounts.
+    expect(post.mock.calls.some(([u]: [string]) => u === "/patients")).toBe(false);
+  });
+
+  it("sends only the part payment actually taken at the counter", async () => {
+    const user = userEvent.setup();
+    postByUrl();
+    renderModal();
+    await screen.findByRole("button", { name: /Bill ₹95\.76/ });
+
+    await takeOnCredit(user);
+    fireEvent.change(screen.getByLabelText(/Paying now/i), { target: { value: "50" } });
+    // The tender for the part payment, not the mode of the sale as a whole.
+    const partPayment = await screen.findByRole("group", { name: /Part payment taken by/i });
+    await user.click(within(partPayment).getByRole("button", { name: "upi" }));
+
+    // 95.76 billed, 50.00 tendered, 45.76 owed.
+    const bill = await screen.findByRole("button", { name: /₹45\.76 on account/ });
+    await user.click(bill);
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    const [, payload] = post.mock.calls[1] as [string, any];
+    expect(payload.payments).toEqual([{ mode: "upi", amount: "50.00" }]);
+  });
+
+  // ── Doctor attribution ───────────────────────────────────────────────────
+
+  it("tags an untagged counter sale to the doctor it came from", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByRole("button", { name: /Bill ₹/ });
+
+    await user.selectOptions(await screen.findByLabelText(/^Doctor/i), "doc-1");
+    await user.click(screen.getByRole("button", { name: /Bill ₹/ }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [, payload] = post.mock.calls[0] as [string, any];
+    expect(payload.referredByDoctorId).toBe("doc-1");
+    // Attribution, not authorisation — the bill still carries no prescription.
+    expect(payload.prescriptionId).toBeUndefined();
+    expect(payload.notes).toMatch(/Doctor: Asha Rao/);
+  });
+
+  it("drops the doctor tag once a prescription is attached, since that names one", async () => {
+    const user = userEvent.setup();
+    renderModal({ ...MEDICINE, requiresPrescription: true, scheduleClass: "H" });
+
+    await user.click(await screen.findByRole("button", { name: /Scan \/ attach prescription/i }));
+    await user.click(await screen.findByRole("button", { name: "pick-rx" }));
+
+    expect(screen.queryByLabelText(/^Doctor/i)).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: /Bill ₹/ }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [, payload] = post.mock.calls[0] as [string, any];
+    expect(payload.prescriptionId).toBe("rx-77");
+    expect(payload.referredByDoctorId).toBeUndefined();
   });
 
   it("hides billing from a user without the billing permission", async () => {
