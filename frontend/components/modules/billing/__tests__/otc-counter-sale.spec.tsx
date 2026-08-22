@@ -646,6 +646,136 @@ describe("OTC counter sale", () => {
     expect(post.mock.calls.some(([u]) => u === "/patients")).toBe(false);
   });
 
+  it("finds a registered customer by name, so the number need not be known", async () => {
+    const user = userEvent.setup();
+    postByUrl();
+    get.mockImplementation((url: string) => {
+      if (url === "/patients")
+        return Promise.resolve({
+          data: [
+            {
+              id: "pat-existing",
+              name: "Ramesh Das",
+              phone: "9876543210",
+              outstandingBalance: "520.00",
+            },
+          ],
+        });
+      if (url === "/inventory/medicines") return Promise.resolve({ data: [MEDICINE_2] });
+      if (url === "/clinic/doctors") return Promise.resolve({ data: DOCTORS });
+      if (url.includes("med-2")) return Promise.resolve({ data: BATCHES_2 });
+      return Promise.resolve({ data: BATCHES });
+    });
+    renderModal();
+    await screen.findByRole("button", { name: /Bill ₹/ });
+
+    await user.click(screen.getByRole("button", { name: /Due \/ Credit/i }));
+    // Name only. The submit-time match was on phone alone, which is exactly
+    // what an operator does not have when a regular walks back in.
+    await user.type(screen.getByLabelText(/Customer name/i), "Ramesh");
+
+    const hit = await screen.findByRole("button", { name: /Ramesh Das/ });
+    // What they already owe belongs on a credit decision, not two screens away.
+    expect(hit).toHaveTextContent(/owes/i);
+
+    await user.click(hit);
+    expect(await screen.findByText(/Adding to the account of/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Phone number/i)).toHaveValue("9876543210");
+
+    await user.click(await screen.findByRole("button", { name: /on account/i }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [url, payload] = post.mock.calls[0] as [string, any];
+    expect(url).toBe("/billing/invoices");
+    expect(payload.patientId).toBe("pat-existing");
+    // A second record would split this customer's dues across two accounts.
+    expect(post.mock.calls.some(([u]) => u === "/patients")).toBe(false);
+  });
+
+  it("bills the account the operator picked, not the first phone match", async () => {
+    const user = userEvent.setup();
+    postByUrl();
+    // Duplicate registrations under one number are a fact of a counter that
+    // has been running for years. Matching on the number alone cannot choose
+    // between them; the operator can, and their choice has to be the one that
+    // is billed or the due lands on a stranger's account.
+    get.mockImplementation((url: string) => {
+      if (url === "/patients")
+        return Promise.resolve({
+          data: [
+            { id: "pat-duplicate", name: "R. Das", phone: "9876543210" },
+            { id: "pat-real", name: "Ramesh Das", phone: "9876543210" },
+          ],
+        });
+      if (url === "/inventory/medicines") return Promise.resolve({ data: [MEDICINE_2] });
+      if (url === "/clinic/doctors") return Promise.resolve({ data: DOCTORS });
+      if (url.includes("med-2")) return Promise.resolve({ data: BATCHES_2 });
+      return Promise.resolve({ data: BATCHES });
+    });
+    renderModal();
+    await screen.findByRole("button", { name: /Bill ₹/ });
+
+    await user.click(screen.getByRole("button", { name: /Due \/ Credit/i }));
+    await user.type(screen.getByLabelText(/Customer name/i), "Das");
+    await user.click(await screen.findByRole("button", { name: /Ramesh Das/ }));
+
+    await user.click(await screen.findByRole("button", { name: /on account/i }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [, payload] = post.mock.calls[0] as [string, any];
+    // pat-duplicate is what a phone-only match returns first.
+    expect(payload.patientId).toBe("pat-real");
+  });
+
+  it("drops the pinned account when the name is typed over", async () => {
+    const user = userEvent.setup();
+    postByUrl();
+    get.mockImplementation((url: string) => {
+      if (url === "/patients")
+        return Promise.resolve({
+          data: [{ id: "pat-existing", name: "Ramesh Das", phone: "9876543210" }],
+        });
+      if (url === "/inventory/medicines") return Promise.resolve({ data: [MEDICINE_2] });
+      if (url === "/clinic/doctors") return Promise.resolve({ data: DOCTORS });
+      if (url.includes("med-2")) return Promise.resolve({ data: BATCHES_2 });
+      return Promise.resolve({ data: BATCHES });
+    });
+    renderModal();
+    await screen.findByRole("button", { name: /Bill ₹/ });
+
+    await user.click(screen.getByRole("button", { name: /Due \/ Credit/i }));
+    await user.type(screen.getByLabelText(/Customer name/i), "Ramesh");
+    await user.click(await screen.findByRole("button", { name: /Ramesh Das/ }));
+    expect(await screen.findByText(/Adding to the account of/i)).toBeInTheDocument();
+
+    // Editing the name means this is somebody else. Holding the pin would put
+    // the due on the account of whoever was picked, under a different name.
+    await user.type(screen.getByLabelText(/Customer name/i), " Kumar");
+    await waitFor(() =>
+      expect(screen.queryByText(/Adding to the account of/i)).not.toBeInTheDocument(),
+    );
+  });
+
+  it("says plainly when nobody matches, so a new account is not a surprise", async () => {
+    const user = userEvent.setup();
+    postByUrl();
+    get.mockImplementation((url: string) => {
+      if (url === "/patients") return Promise.resolve({ data: [] });
+      if (url === "/inventory/medicines") return Promise.resolve({ data: [MEDICINE_2] });
+      if (url === "/clinic/doctors") return Promise.resolve({ data: DOCTORS });
+      if (url.includes("med-2")) return Promise.resolve({ data: BATCHES_2 });
+      return Promise.resolve({ data: BATCHES });
+    });
+    renderModal();
+    await screen.findByRole("button", { name: /Bill ₹/ });
+
+    await user.click(screen.getByRole("button", { name: /Due \/ Credit/i }));
+    await user.type(screen.getByLabelText(/Customer name/i), "Brand New Person");
+
+    // The name is in its own <span>, so the sentence is not one text node.
+    expect(await screen.findByText(/No existing customer matches/i)).toBeInTheDocument();
+  });
+
   it("sends only the part payment actually taken at the counter", async () => {
     const user = userEvent.setup();
     postByUrl();
