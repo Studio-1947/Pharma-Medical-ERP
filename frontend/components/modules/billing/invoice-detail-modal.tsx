@@ -101,6 +101,18 @@ export function InvoiceDetailModal({
               <p className="text-[11px] text-muted-foreground">Due</p>
               <p className="font-medium tabular-nums">{inr(inv.amountDue)}</p>
             </div>
+            {/* Counter sales carry no prescription, so this is the only place
+                the doctor behind one is recorded. */}
+            {inv.referredByDoctor && (
+              <div>
+                <p className="text-[11px] text-muted-foreground">Doctor</p>
+                <p className="font-medium truncate">
+                  {[inv.referredByDoctor.firstName, inv.referredByDoctor.lastName]
+                    .filter(Boolean)
+                    .join(" ") || "Doctor"}
+                </p>
+              </div>
+            )}
           </div>
 
           <div>

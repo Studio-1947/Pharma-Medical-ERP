@@ -74,6 +74,23 @@ export const salesInvoices = pgTable(
       .notNull()
       .references(() => branches.id, { onDelete: "restrict" }),
     prescriptionId: uuid("prescription_id"),
+    /**
+     * The doctor a sale is credited to when no prescription carries that link.
+     *
+     * A counter sale is often still a doctor's sale: the patient was seen
+     * upstairs, walked down without the paper, and asked for what they were
+     * told to take. Left untagged, that medicine reads as anonymous OTC and the
+     * doctor's own dispensing history is missing exactly the sales the clinic
+     * generated. Nullable and purely informational — it is an attribution, not
+     * a prescription, and it never satisfies the Schedule H gate, which still
+     * demands a real prescription or a manager's attestation.
+     *
+     * `set null` on delete: losing the doctor's account must not take the
+     * invoice with it — the sale happened either way.
+     */
+    referredByDoctorId: uuid("referred_by_doctor_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     subtotal: numeric("subtotal", { precision: 12, scale: 2 }).notNull(),
     discountAmount: numeric("discount_amount", { precision: 12, scale: 2 })
       .notNull()
@@ -148,6 +165,12 @@ export const salesInvoices = pgTable(
       t.branchId,
       t.createdAt,
     ),
+    // "What did this doctor's patients buy, and when" — the only way this
+    // column is ever read.
+    referringDoctorIdx: index("invoices_referred_by_doctor_idx").on(
+      t.referredByDoctorId,
+      t.createdAt,
+    ),
     // Partial: only rows that carry a key take part, so the many invoices
     // without one do not collide with each other on NULL.
     clientRefUniq: uniqueIndex("invoices_client_ref_uniq")
@@ -214,6 +237,12 @@ export const salesInvoicesRelations = relations(
     }),
     staff: one(users, {
       fields: [salesInvoices.staffId],
+      references: [users.id],
+    }),
+    // Who the sale is credited to clinically, when anyone. Separate from
+    // `staff`, who is whoever stood at the till.
+    referredByDoctor: one(users, {
+      fields: [salesInvoices.referredByDoctorId],
       references: [users.id],
     }),
     items: many(salesInvoiceItems),

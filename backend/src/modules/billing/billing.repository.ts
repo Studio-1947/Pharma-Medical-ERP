@@ -268,6 +268,11 @@ export class BillingRepository {
         items: { with: { medicine: true, batch: true } },
         patient: true,
         payments: true,
+        // Named columns only — this row is a user account, and the password
+        // hash and 2FA secret must never travel out on an invoice.
+        referredByDoctor: {
+          columns: { id: true, firstName: true, lastName: true },
+        },
       },
     });
   }

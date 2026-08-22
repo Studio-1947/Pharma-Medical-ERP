@@ -44,6 +44,11 @@ export class InvoicePdfService {
         items: { with: { medicine: true, batch: true } },
         patient: true,
         payments: true,
+        // Named columns only — this is a user account row, and nothing beyond
+        // the doctor's name may travel onto a customer's bill.
+        referredByDoctor: {
+          columns: { id: true, firstName: true, lastName: true },
+        },
       },
     });
 
@@ -141,6 +146,22 @@ export class InvoicePdfService {
       fieldLabel("Invoice No:", invoice.invoiceNo, metaY + 6);
       fieldLabel("Date:", dateStr(invoice.createdAt), metaY + 18);
       fieldLabel("Status:", (invoice.status ?? "").toUpperCase(), metaY + 30);
+      // Counter sales carry no prescription, so the doctor behind one is
+      // recorded nowhere else — and the customer's copy is where it is most
+      // often needed back at the clinic.
+      const referringDoctor = [
+        (invoice as any).referredByDoctor?.firstName,
+        (invoice as any).referredByDoctor?.lastName,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .trim();
+      if (referringDoctor) {
+        doc.fontSize(7.5).font("Helvetica-Bold").fillColor(GRAY)
+          .text("DOCTOR", col1X, metaY + 38, { lineBreak: false });
+        doc.fontSize(8.5).font("Helvetica").fillColor(BLACK)
+          .text(referringDoctor, col1X + 46, metaY + 38, { width: PW * 0.4, lineBreak: false });
+      }
 
       const colWidths = [PW * 0.33, PW * 0.14, PW * 0.1, PW * 0.1, PW * 0.1, PW * 0.1, PW * 0.13];
       const headers = ["Medicine", "Batch / Expiry", "Qty", "MRP", "GST%", "Tax", "Total"];
