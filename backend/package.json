@@ -13,7 +13,8 @@
     "drizzle-kit": "drizzle-kit",
     "db:seed": "tsx src/database/seed.ts",
     "db:seed:inventory": "tsx src/database/seed-inventory.ts",
-    "db:seed:prod": "tsx src/database/seed-admin.ts"
+    "db:seed:prod": "tsx src/database/seed-admin.ts",
+    "db:purge-inactive": "node scripts/purge-inactive-medicines.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1039.0",

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { booleanFlag } from "./query-flags";
 
 export const createPatientSchema = z.object({
   name: z.string().min(1, "Patient name is required").max(255),
@@ -20,14 +21,6 @@ export const createPatientSchema = z.object({
 });
 
 export const updatePatientSchema = createPatientSchema.partial();
-
-// z.coerce.boolean() maps the string "false" to true — every non-empty string
-// is truthy in JS — so a `?hasDues=false` query would filter instead of not
-// filtering. Parse the literal query-string spellings instead.
-const booleanFlag = z.preprocess(
-  (v) => (typeof v === "string" ? ["true", "1", "yes"].includes(v.trim().toLowerCase()) : v),
-  z.boolean(),
-);
 
 export const queryPatientSchema = z.object({
   search: z.string().optional(),

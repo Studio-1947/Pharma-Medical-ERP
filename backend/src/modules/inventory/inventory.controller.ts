@@ -25,6 +25,7 @@ import {
   createMedicineSchema,
   updateMedicineSchema,
   queryMedicineSchema,
+  purgeInactiveMedicinesSchema,
 } from "@pharmerp/types";
 
 @ApiTags("inventory")
@@ -164,6 +165,20 @@ export class InventoryController {
       branchId: resolveBranchScope(user, branchId),
       dryRun: isDryRun,
     });
+  }
+
+  @Post("purge-inactive")
+  // Destructive and bulk, so shop_manager is deliberately excluded here even
+  // though it may run a bulk import. super_admin passes via RolesGuard.
+  @Roles("admin")
+  @ApiOperation({
+    summary:
+      "Preview or delete catalogue rows a CSV import parked inactive for want of an MRP. " +
+      "Defaults to a preview; deleting requires echoing back the previewed count.",
+  })
+  purgeInactive(@Body() body: unknown) {
+    const dto = purgeInactiveMedicinesSchema.parse(body ?? {});
+    return this.service.purgeInactive(dto);
   }
 
   @Post()
