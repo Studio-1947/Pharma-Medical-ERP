@@ -304,6 +304,62 @@ describe("OTC counter sale", () => {
     expect(payload.rxPending).toBeUndefined();
   });
 
+  it("attaches a prescription to a plain OTC sale when the customer brings one", async () => {
+    const user = userEvent.setup();
+    // Nothing controlled on this bill. Customers routinely bring a
+    // prescription for medicines that do not legally need one, and the paper
+    // used to go home with them leaving the sale with no record of why.
+    renderModal();
+
+    await user.click(
+      await screen.findByRole("button", { name: /Scan \/ upload prescription/i }),
+    );
+    await user.click(await screen.findByRole("button", { name: "pick-rx" }));
+
+    expect(await screen.findByText(/is attached to this sale/i)).toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: /Bill ₹/ }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [, payload] = post.mock.calls[0] as [string, any];
+    expect(payload.prescriptionId).toBe("rx-77");
+    // Nothing was owed, so nothing is pending: rxPending belongs only to a
+    // controlled sale billed on a manager's word, and the server refuses it
+    // on a bill with nothing controlled on it.
+    expect(payload.rxPending).toBeUndefined();
+  });
+
+  it("does not demand a prescription on a plain OTC sale", async () => {
+    renderModal();
+
+    // Optional means optional: the offer is there, the red "cannot be handed
+    // over without a prescription" block is not, and billing is not blocked.
+    expect(
+      await screen.findByRole("button", { name: /Scan \/ upload prescription/i }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/cannot be handed over without a prescription/i)).not.toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Bill ₹/ })).toBeEnabled();
+  });
+
+  it("lets an attached prescription be removed again", async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(
+      await screen.findByRole("button", { name: /Scan \/ upload prescription/i }),
+    );
+    await user.click(await screen.findByRole("button", { name: "pick-rx" }));
+    await screen.findByText(/is attached to this sale/i);
+
+    await user.click(screen.getByRole("button", { name: /^Remove$/ }));
+
+    await user.click(await screen.findByRole("button", { name: /Bill ₹/ }));
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [, payload] = post.mock.calls[0] as [string, any];
+    // Attaching the wrong customer's prescription must be undoable, or the
+    // only way out is to abandon the sale.
+    expect(payload.prescriptionId).toBeUndefined();
+  });
+
   it("will not give a prescription-only medicine away for free", async () => {
     const user = userEvent.setup();
     renderModal({ ...MEDICINE, requiresPrescription: true, scheduleClass: "H" });
