@@ -139,6 +139,24 @@ const IN_STOCK = {
   unit: "strip",
 };
 
+/**
+ * The shape a CSV import leaves behind when the MRP column failed to parse:
+ * a real catalogue row, priced at zero and parked inactive. It is not
+ * sellable and staff could not even find it, because the counter search used
+ * to ask only for active medicines.
+ */
+const INACTIVE = {
+  id: "med-3",
+  name: "Cholecalciferol Capsules USP",
+  sku: "MED26001",
+  scheduleClass: null,
+  totalStock: 0,
+  stripSize: 1,
+  unit: "strip",
+  priceMrp: "0.00",
+  isActive: false,
+};
+
 /** Routes every counter-desk query; only the two search calls carry data. */
 function stubApi({ medicines = [] as any[], patients = [] as any[] } = {}) {
   get.mockImplementation((url: string) => {
@@ -248,6 +266,57 @@ describe("counter desk — closing stock gaps from the search results", () => {
     await userEvent.click(add);
 
     expect(await screen.findByTestId("medicine-form")).toHaveAttribute("data-name", "zocaline");
+  });
+
+  it("finds a medicine the import left inactive, and says why it cannot be sold", async () => {
+    stubApi({ medicines: [INACTIVE] });
+    renderDesk();
+    await search("cholecalciferol");
+
+    await waitFor(() =>
+      expect(screen.getByText("Cholecalciferol Capsules USP")).toBeInTheDocument(),
+    );
+
+    // The whole point: the desk asked for every status, not just active ones.
+    const medCall = get.mock.calls.find(
+      (c: any[]) => c[0] === "/inventory/medicines" && c[1]?.params?.limit === 6,
+    );
+    expect(medCall?.[1]?.params?.isActive).toBe("all");
+
+    // Named as inactive rather than silently unsellable, and the only action
+    // offered is the one that fixes it.
+    expect(screen.getByText("Inactive")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /OTC sale/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Activate" })).toBeInTheDocument();
+  });
+
+  it("routes an inactive medicine into the batch form that reprices it", async () => {
+    stubApi({ medicines: [INACTIVE] });
+    renderDesk();
+    await search("cholecalciferol");
+
+    await waitFor(() =>
+      expect(screen.getByText("Cholecalciferol Capsules USP")).toBeInTheDocument(),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Activate" }));
+
+    const modal = await screen.findByTestId("stock-modal");
+    expect(modal).toHaveAttribute("data-medicine-id", "med-3");
+    expect(modal).toHaveAttribute("data-auto-open", "true");
+  });
+
+  it("will not offer to sell an inactive medicine that still shows stock", async () => {
+    // Stock without a price is still unsellable: the POS prices the line off
+    // priceMrp, so the row has to go through the batch form regardless.
+    stubApi({ medicines: [{ ...INACTIVE, totalStock: 120 }] });
+    renderDesk();
+    await search("cholecalciferol");
+
+    await waitFor(() =>
+      expect(screen.getByText("Cholecalciferol Capsules USP")).toBeInTheDocument(),
+    );
+    expect(screen.queryByRole("button", { name: /OTC sale/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Activate" })).toBeInTheDocument();
   });
 
   it("hides both fixes from a user without the inventory and catalogue grants", async () => {

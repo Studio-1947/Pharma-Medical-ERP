@@ -278,11 +278,18 @@ export function PatientFirstBilling({
 
   // Medicines share the same search box — the counter desk also supplies OTC
   // medicines without a bill, so staff can look up any medicine right here.
+  //
+  // isActive: "all" is deliberate. The CSV import parks every row whose MRP
+  // failed to parse as inactive, and the default filter is isActive=true, so
+  // those rows were invisible here — the desk reported "Nothing found" for a
+  // medicine that is sitting in the catalogue. Surfacing them lets staff fix
+  // the row in place: receiving a batch with an MRP promotes it back to
+  // active (batch.service.ts does the promotion server-side).
   const { data: medSearchRaw, isFetching: medSearching } = useQuery({
     queryKey: ["medicine-search-counter", debounced, activeBranchId],
     queryFn: () =>
       apiClient.get("/inventory/medicines", {
-        params: { search: debounced, limit: 6 },
+        params: { search: debounced, limit: 6, isActive: "all" },
       }) as any,
     enabled: searchActive,
   });
@@ -1168,10 +1175,22 @@ export function PatientFirstBilling({
                             className="w-full flex items-center gap-3 px-4 py-3 hover:bg-orange-50/40 transition-colors"
                           >
                             <div className="min-w-0 flex-1">
-                              <p className="text-sm font-bold text-slate-800 truncate">{m.name}</p>
+                              <p className="text-sm font-bold text-slate-800 truncate">
+                                {m.name}
+                                {m.isActive === false && (
+                                  <span className="ml-2 align-middle text-[9px] bg-amber-100 text-amber-700 font-extrabold px-1.5 py-0.5 rounded border border-amber-200">
+                                    Inactive
+                                  </span>
+                                )}
+                              </p>
                               <p className="text-xs text-slate-400 font-mono truncate">
                                 {m.sku}
                                 {m.scheduleClass ? ` · ${m.scheduleClass}` : ""}
+                                {m.isActive === false && (
+                                  <span className="ml-1 font-sans text-amber-600 font-semibold">
+                                    · no MRP — add a batch to activate
+                                  </span>
+                                )}
                               </p>
                             </div>
                             {/* Stock gets its own fixed column so the sale
@@ -1191,7 +1210,13 @@ export function PatientFirstBilling({
                               // the sale button is dropped entirely rather than
                               // shown greyed out — the row offers the one action
                               // that actually helps: receiving a batch.
-                              const outOfStock = Number(m.totalStock || 0) <= 0;
+                              //
+                              // An inactive row takes the same route regardless
+                              // of its stock count: it has no usable MRP, so it
+                              // cannot be priced onto a bill. Receiving a batch
+                              // with an MRP is what makes it sellable again.
+                              const inactive = m.isActive === false;
+                              const outOfStock = inactive || Number(m.totalStock || 0) <= 0;
                               return (
                                 // Two fixed action slots keep every row's
                                 // buttons on the same two vertical lines, no
@@ -1204,10 +1229,14 @@ export function PatientFirstBilling({
                                             type="button"
                                             onClick={() => setStockTarget(m)}
                                             className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-bold transition-colors bg-orange-500 hover:bg-orange-600 text-white shadow-sm"
-                                            title={`Receive a new batch of ${m.name} into this branch`}
+                                            title={
+                                              inactive
+                                                ? `${m.name} is inactive — receive a batch with its MRP to activate it`
+                                                : `Receive a new batch of ${m.name} into this branch`
+                                            }
                                           >
                                             <PackagePlus size={12} />
-                                            Add stock
+                                            {inactive ? "Activate" : "Add stock"}
                                           </button>
                                         )
                                       : canOtc && (
