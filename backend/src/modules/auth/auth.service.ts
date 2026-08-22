@@ -102,17 +102,71 @@ export class AuthService {
   ) {
     const hash = this.hashToken(rawToken);
     const stored = await this.repo.findValidRefreshToken(hash);
-    if (!stored) {
-      await this.handleRefreshTokenReuse(hash);
-      throw new UnauthorizedException("Invalid or expired token");
+
+    if (stored) {
+      const user = await this.repo.findUserById(stored.userId);
+      if (!user || !user.isActive) throw new UnauthorizedException();
+      // Rotate: retire the old token, issue new, and record the link between
+      // them so a request still in flight against the old one can be told
+      // apart from a replay.
+      return this.issueTokens(user, meta, stored.id);
     }
 
-    const user = await this.repo.findUserById(stored.userId);
-    if (!user || !user.isActive) throw new UnauthorizedException();
+    // The token is not currently valid. That is either a client whose second
+    // request lost a race with its own first one, or a stolen token being
+    // replayed. Only the first is forgiven, and only for a few seconds.
+    const graced = await this.userWithinRotationGrace(hash);
+    if (graced) {
+      this.logger.log(
+        `Refresh presented just after rotation for user ${graced.id} — treated as a concurrent retry, not reuse`,
+      );
+      return this.issueTokens(graced, meta);
+    }
 
-    // Rotate: revoke old, issue new
-    await this.repo.revokeRefreshToken(stored.id);
-    return this.issueTokens(user, meta);
+    await this.handleRefreshTokenReuse(hash);
+    throw new UnauthorizedException("Invalid or expired token");
+  }
+
+  /**
+   * Decides whether a token that is no longer valid was simply overtaken by
+   * the client's own concurrent refresh.
+   *
+   * A single page load fires two refreshes with the same token: the session
+   * bootstrap, and the 401 interceptor behind an expired access token. Two
+   * open tabs do the same. One wins and rotates; without this the loser was
+   * read as theft, `handleRefreshTokenReuse` revoked the whole family
+   * including the token just issued, and the operator was signed out — which
+   * is what made every deploy look like a forced logout.
+   *
+   * Three conditions must all hold, so nothing else gets in:
+   *  — the row was retired BY ROTATION (replacedByTokenId is set). Logout, a
+   *    role change and a deactivation all revoke without it, and stay dead.
+   *  — the rotation happened within the grace window. A replay minutes later
+   *    is still theft.
+   *  — the successor is itself still alive. If the family was revoked after
+   *    the rotation — a logout seconds later — the grace must not resurrect it.
+   */
+  private async userWithinRotationGrace(hash: string) {
+    const replayed = await this.repo.findRefreshTokenByHash(hash);
+    if (!replayed?.replacedByTokenId || !replayed.revokedAt) return null;
+
+    const graceMs = this.rotationGraceMs();
+    if (Date.now() - replayed.revokedAt.getTime() > graceMs) return null;
+
+    const successor = await this.repo.findRefreshTokenById(replayed.replacedByTokenId);
+    if (!successor || successor.revokedAt) return null;
+    if (successor.expiresAt.getTime() <= Date.now()) return null;
+
+    const user = await this.repo.findUserById(replayed.userId);
+    if (!user || !user.isActive) return null;
+    return user;
+  }
+
+  /** Seconds, not minutes: the race this covers is two requests from one page
+   *  load. Anything slower than this is not a client racing itself. */
+  private rotationGraceMs(): number {
+    const raw = Number(this.config.get("REFRESH_ROTATION_GRACE_MS"));
+    return Number.isFinite(raw) && raw >= 0 ? raw : 10_000;
   }
 
   async logout(userId: string) {
@@ -144,6 +198,9 @@ export class AuthService {
   private async issueTokens(
     user: { id: string; email: string; role: string; branchId?: string | null },
     meta: { ip?: string; userAgent?: string },
+    /** Set when this pair replaces a token being rotated away, so the retired
+     *  row can point at its successor. */
+    rotatedFrom?: string,
   ) {
     const payload: Omit<JwtPayload, "iat" | "exp"> = {
       sub: user.id,
@@ -160,13 +217,20 @@ export class AuthService {
       Date.now() + this.parseDuration(expiresIn),
     );
 
-    await this.repo.saveRefreshToken({
+    const saved = await this.repo.saveRefreshToken({
       userId: user.id,
       tokenHash: this.hashToken(rawRefresh),
       expiresAt,
       ipAddress: meta.ip,
       userAgent: meta.userAgent,
     });
+
+    // Retire the old token only once its replacement exists, and in the same
+    // step that records the link. Revoking first would leave a window where a
+    // crash between the two statements loses the session outright.
+    if (rotatedFrom) {
+      await this.repo.markRefreshTokenReplacedBy(rotatedFrom, saved.id);
+    }
 
     return {
       accessToken,
