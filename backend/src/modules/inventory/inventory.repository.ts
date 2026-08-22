@@ -104,35 +104,55 @@ export class InventoryRepository {
         new Set([...wordTokens, ...splitLetterDigitTokens, rawSearch]),
       ).filter((t) => t.length > 0);
 
-      // Build tokenized AND condition: every token must appear in at least one field
-      const tokenConditions = tokens.map((t) =>
+      // Every field a person might reasonably type at the counter, in one
+      // list so the raw pass, the punctuation-stripped pass and the per-token
+      // pass can never drift apart the way they had — manufacturer and
+      // barcode were matched by tokens but not by the whole phrase.
+      //
+      // The list goes past name and salt on purpose. Staff search the way
+      // they speak: "cetirizine syrup", "pan 40 tablet", "amoxy 500 cap".
+      // Without dosageForm and strength in here the trailing word matches
+      // nothing, and because tokens are ANDed, one unmatched word threw the
+      // whole search away and the desk reported nothing found.
+      const searchFields = [
+        schema.medicines.name,
+        schema.medicines.brandName,
+        schema.medicines.genericName,
+        schema.medicines.composition,
+        schema.medicines.manufacturer,
+        schema.medicines.sku,
+        schema.medicines.barcode,
+        schema.medicines.strength,
+        schema.medicines.dosageForm,
+        schema.medicines.therapeuticClass,
+        schema.medicines.packSize,
+        schema.medicines.hsnCode,
+        // Where the pack physically lives. "top drawer 3" is a real way to
+        // ask for something when the name has been forgotten.
+        schema.medicines.drawerMapping,
+      ];
+
+      const anyFieldLike = (needle: string) =>
+        or(...searchFields.map((f) => ilike(f, `%${needle}%`)));
+
+      // Punctuation-blind pass, so "pan-40", "pan 40" and "pan40" are one
+      // query, and a barcode read with stray separators still lands.
+      const anyFieldNormalized = (needle: string) =>
         or(
-          ilike(schema.medicines.name, `%${t}%`),
-          ilike(schema.medicines.brandName, `%${t}%`),
-          ilike(schema.medicines.genericName, `%${t}%`),
-          ilike(schema.medicines.composition, `%${t}%`),
-          ilike(schema.medicines.manufacturer, `%${t}%`),
-          ilike(schema.medicines.sku, `%${t}%`),
-          ilike(schema.medicines.barcode, `%${t}%`),
-        ),
-      );
+          ...searchFields.map(
+            (f) =>
+              sql`LOWER(REGEXP_REPLACE(${f}, '[^a-zA-Z0-9]', '', 'g')) LIKE ${'%' + needle + '%'}`,
+          ),
+        );
+
+      // Build tokenized AND condition: every token must appear in at least
+      // one field, so word order never matters — "syrup cetirizine" and
+      // "cetirizine syrup" find the same bottle.
+      const tokenConditions = tokens.map((t) => anyFieldLike(t));
 
       const searchFilter = or(
-        ilike(schema.medicines.name, `%${rawSearch}%`),
-        ilike(schema.medicines.brandName, `%${rawSearch}%`),
-        ilike(schema.medicines.genericName, `%${rawSearch}%`),
-        ilike(schema.medicines.composition, `%${rawSearch}%`),
-        ilike(schema.medicines.sku, `%${rawSearch}%`),
-        ilike(schema.medicines.barcode, `%${rawSearch}%`),
-        ...(normalizedSearch
-          ? [
-              sql`LOWER(REGEXP_REPLACE(${schema.medicines.name}, '[^a-zA-Z0-9]', '', 'g')) LIKE ${'%' + normalizedSearch + '%'}`,
-              sql`LOWER(REGEXP_REPLACE(${schema.medicines.brandName}, '[^a-zA-Z0-9]', '', 'g')) LIKE ${'%' + normalizedSearch + '%'}`,
-              sql`LOWER(REGEXP_REPLACE(${schema.medicines.genericName}, '[^a-zA-Z0-9]', '', 'g')) LIKE ${'%' + normalizedSearch + '%'}`,
-              sql`LOWER(REGEXP_REPLACE(${schema.medicines.composition}, '[^a-zA-Z0-9]', '', 'g')) LIKE ${'%' + normalizedSearch + '%'}`,
-              sql`LOWER(REGEXP_REPLACE(${schema.medicines.sku}, '[^a-zA-Z0-9]', '', 'g')) LIKE ${'%' + normalizedSearch + '%'}`,
-            ]
-          : []),
+        anyFieldLike(rawSearch),
+        ...(normalizedSearch ? [anyFieldNormalized(normalizedSearch)] : []),
         ...(tokenConditions.length > 0 ? [and(...tokenConditions)] : []),
       );
 

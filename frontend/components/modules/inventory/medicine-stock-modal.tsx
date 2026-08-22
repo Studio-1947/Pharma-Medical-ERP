@@ -81,8 +81,16 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
   const addBatchMutation = useMutation({
     mutationFn: (payload: object) => apiClient.post("/inventory/batches", payload) as any,
     onSuccess: () => {
-      toastSuccess("Stock Added", `Successfully added new batch to ${medicine?.name ?? "inventory"}.`);
+      toastSuccess(
+        medicineInactive ? "Stock added & medicine activated" : "Stock Added",
+        medicineInactive
+          ? `${medicine?.name ?? "The medicine"} now has an MRP and is sellable at the counter.`
+          : `Successfully added new batch to ${medicine?.name ?? "inventory"}.`,
+      );
       queryClient.invalidateQueries({ queryKey: ["medicine-batches-detail", medicineId] });
+      // The medicine row itself changed (priceMrp + isActive) when the batch
+      // promoted it, so the profile this modal shows has to be refetched too.
+      queryClient.invalidateQueries({ queryKey: ["medicine-detail", medicineId] });
       queryClient.invalidateQueries({ queryKey: ["low-stock"] });
       queryClient.invalidateQueries({ queryKey: ["expiring-batches"] });
       queryClient.invalidateQueries({ queryKey: queryKeys.medicines.list({}) });
@@ -125,12 +133,28 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
     if (!addStockOpen || seededRef.current || !medicine) return;
     seededRef.current = true;
     setNewPurchasePrice((v) => v || medicine.purchaseRate || "");
-    setNewMrp((v) => v || medicine.priceMrp || "");
+    // A zero priceMrp is the import's placeholder, not a price. Seeding it
+    // would pre-fill the field with "0", which submits happily and leaves the
+    // medicine inactive — leave it blank so the operator has to type one.
+    setNewMrp((v) => v || (parseFloat(medicine.priceMrp ?? "0") > 0 ? medicine.priceMrp : ""));
   }, [addStockOpen, medicine]);
+
+  // Rows the CSV import parked without a price. They are in the catalogue but
+  // unsellable, and receiving a priced batch is what brings them back.
+  const medicineInactive = medicine?.isActive === false;
 
   const handleAddStockSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!medicineId || !newBatchNo.trim() || !newExpiry) return;
+
+    // An inactive medicine is only promoted back to active by a batch that
+    // carries a real MRP (batch.service.ts). Receiving one at zero would
+    // create stock the POS still cannot price, so refuse it here rather than
+    // let the operator think the medicine has been fixed.
+    if (medicineInactive && !(parseFloat(newMrp || "0") > 0)) {
+      toastError("MRP required", `"${medicine?.name ?? "This medicine"}" is inactive — enter its MRP to activate it.`);
+      return;
+    }
 
     // The medicine record carries the cost as purchaseRate (purchase_rate);
     // reading purchasePrice always missed, so every direct-receive batch was
@@ -187,7 +211,12 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
             </div>
             <div className="space-y-0.5">
               <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider">Schedule Class</span>
-              <div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {medicineInactive && (
+                  <span className="inline-block px-2 py-0.5 rounded text-xs font-extrabold bg-amber-100 text-amber-700 border border-amber-200">
+                    Inactive
+                  </span>
+                )}
                 {medicine?.scheduleClass ? (
                   <span className="inline-block px-2 py-0.5 rounded text-xs font-extrabold bg-rose-100 text-rose-700 border border-rose-200">
                     {medicine.scheduleClass}
@@ -214,7 +243,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
             <button
               onClick={() => {
                 setNewPurchasePrice(medicine?.purchaseRate ?? "");
-                setNewMrp(medicine?.priceMrp ?? "");
+                setNewMrp(parseFloat(medicine?.priceMrp ?? "0") > 0 ? (medicine?.priceMrp ?? "") : "");
                 setAddStockOpen((prev) => !prev);
               }}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all"
@@ -233,6 +262,17 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                 </span>
                 <span className="text-[11px] text-emerald-700 font-medium">Instantly updates branch inventory</span>
               </div>
+
+              {medicineInactive && (
+                <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                  <AlertTriangle size={13} className="shrink-0 mt-0.5" />
+                  <span>
+                    <b>This medicine is inactive</b> — it was imported without a price, so the
+                    counter cannot sell it. Enter the <b>MRP</b> below and it is activated at that
+                    price the moment this batch is received.
+                  </span>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
@@ -267,14 +307,21 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">MRP (₹)</label>
+                  <label htmlFor="receive-batch-mrp" className="block text-[11px] font-bold text-slate-700 mb-1">
+                    MRP (₹){medicineInactive ? " *" : ""}
+                  </label>
                   <input
+                    id="receive-batch-mrp"
                     type="number"
                     step="0.01"
-                    placeholder={medicine?.priceMrp ?? "0.00"}
+                    min={medicineInactive ? "0.01" : undefined}
+                    required={medicineInactive}
+                    placeholder={parseFloat(medicine?.priceMrp ?? "0") > 0 ? medicine?.priceMrp : "0.00"}
                     value={newMrp}
                     onChange={(e) => setNewMrp(e.target.value)}
-                    className="w-full text-xs font-bold text-emerald-700 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    className={`w-full text-xs font-bold text-emerald-700 bg-white border rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none ${
+                      medicineInactive ? "border-amber-300" : "border-slate-200"
+                    }`}
                   />
                 </div>
               </div>
