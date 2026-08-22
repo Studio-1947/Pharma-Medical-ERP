@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { and, asc, desc, eq, gt, gte, ilike, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, ilike, isNull, ne, notExists, or, sql } from "drizzle-orm";
 import { DrizzleService } from "../../database/drizzle.service";
 import * as schema from "../../database/schema";
 import type { CreateMedicineDto, UpdateMedicineDto, QueryMedicineDto } from "@pharmerp/types";
@@ -81,10 +81,14 @@ export class InventoryRepository {
   }
 
   async findMedicinesPaginated(params: QueryMedicineDto) {
-    const conditions = [
-      isNull(schema.medicines.deletedAt),
-      eq(schema.medicines.isActive, params.isActive ?? true),
-    ];
+    const conditions = [isNull(schema.medicines.deletedAt)];
+    // Active-only unless asked otherwise, so the POS, counter and transfer
+    // searches keep the behaviour they rely on. "all" drops the condition
+    // outright: it is the only way to reach a medicine a bulk import parked
+    // inactive, which is otherwise invisible from every screen in the app.
+    if (params.isActive !== "all") {
+      conditions.push(eq(schema.medicines.isActive, params.isActive ?? true));
+    }
     if (params.search) {
       const rawSearch = params.search.trim();
       const normalizedSearch = rawSearch.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
@@ -534,6 +538,141 @@ export class InventoryRepository {
         tx,
       );
       return { idsBySku, batchesCreated };
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // Inactive-catalogue purge
+  //
+  // Removes rows a CSV import created but left unusable. bulkImport writes
+  // `priceMrp: priceMrp ?? "0"` and `isActive: priceMrp !== undefined`, so
+  // inactive + zero price is the exact signature of a row whose MRP failed to
+  // parse. Anything else — a priced medicine an admin deactivated on purpose —
+  // is out of scope by construction.
+  //
+  // Hard delete is deliberate. medicines_sku_idx is a plain uniqueIndex, unlike
+  // medicines_barcode_unique which is scoped to deleted_at IS NULL, so a
+  // soft-deleted row keeps its SKU in the index and the corrected re-import
+  // would fail on 23505. Only a real DELETE frees the SKU.
+  //
+  // Kept in step with backend/scripts/purge-inactive-medicines.js, which does
+  // the same thing over raw pg for when the app itself is not reachable.
+  // -------------------------------------------------------------------------
+
+  /** FKs to medicines that are ON DELETE RESTRICT. A medicine any of these
+   *  reference has real history — stock, a sale, a transfer, a PO — and is
+   *  excluded up front rather than left to abort the statement. */
+  private purgeBlockers() {
+    return [
+      { label: "stock batches", table: schema.inventoryBatches, col: schema.inventoryBatches.medicineId },
+      { label: "stock ledger entries", table: schema.stockMovements, col: schema.stockMovements.medicineId },
+      { label: "invoice lines", table: schema.salesInvoiceItems, col: schema.salesInvoiceItems.medicineId },
+      { label: "transfer lines", table: schema.stockTransferItems, col: schema.stockTransferItems.medicineId },
+      { label: "purchase order lines", table: schema.purchaseOrderItems, col: schema.purchaseOrderItems.medicineId },
+    ];
+  }
+
+  private purgeCandidate(createdAfter?: Date) {
+    const parts = [
+      isNull(schema.medicines.deletedAt),
+      eq(schema.medicines.isActive, false),
+      eq(schema.medicines.priceMrp, "0"),
+    ];
+    if (createdAfter) parts.push(gte(schema.medicines.createdAt, createdAfter));
+    return and(...parts)!;
+  }
+
+  private purgeUnblocked() {
+    return this.purgeBlockers().map((b) =>
+      notExists(
+        this.db.select({ one: sql`1` }).from(b.table).where(eq(b.col, schema.medicines.id)),
+      ),
+    );
+  }
+
+  /** Everything an operator needs to decide, without writing anything. */
+  async previewInactivePurge(createdAfter?: Date) {
+    const candidate = this.purgeCandidate(createdAfter);
+    const unblocked = this.purgeUnblocked();
+    const deletableWhere = and(candidate, ...unblocked)!;
+
+    const [totals] = await this.db
+      .select({
+        candidates: sql<number>`count(*)::int`,
+        deletable: sql<number>`count(*) FILTER (WHERE ${and(...unblocked)})::int`,
+      })
+      .from(schema.medicines)
+      .where(candidate);
+
+    const blockedBy = await Promise.all(
+      this.purgeBlockers().map(async (b) => {
+        const [r] = await this.db
+          .select({ n: sql<number>`count(DISTINCT ${schema.medicines.id})::int` })
+          .from(schema.medicines)
+          .innerJoin(b.table, eq(b.col, schema.medicines.id))
+          .where(candidate);
+        return { label: b.label, count: r?.n ?? 0 };
+      }),
+    );
+
+    // The two FKs that act silently rather than blocking. Surfaced so the
+    // confirmation dialog can state them instead of the operator finding out
+    // afterwards.
+    const [rxLinks] = await this.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(schema.prescriptionItems)
+      .innerJoin(schema.medicines, eq(schema.prescriptionItems.medicineId, schema.medicines.id))
+      .where(deletableWhere);
+    const [doctorLinks] = await this.db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(schema.doctorMedicines)
+      .innerJoin(schema.medicines, eq(schema.doctorMedicines.medicineId, schema.medicines.id))
+      .where(deletableWhere);
+
+    const sample = await this.db
+      .select({
+        sku: schema.medicines.sku,
+        name: schema.medicines.name,
+        manufacturer: schema.medicines.manufacturer,
+        createdAt: schema.medicines.createdAt,
+      })
+      .from(schema.medicines)
+      .where(deletableWhere)
+      .orderBy(desc(schema.medicines.createdAt))
+      .limit(20);
+
+    return {
+      candidates: totals?.candidates ?? 0,
+      deletable: totals?.deletable ?? 0,
+      blocked: (totals?.candidates ?? 0) - (totals?.deletable ?? 0),
+      blockedBy: blockedBy.filter((b) => b.count > 0),
+      sideEffects: {
+        prescriptionLinksCleared: rxLinks?.n ?? 0,
+        doctorFavouritesRemoved: doctorLinks?.n ?? 0,
+      },
+      sample,
+    };
+  }
+
+  /** Re-counts and deletes in ONE transaction, so a preview left open in a tab
+   *  can never authorise deleting more rows than it displayed. Returns a
+   *  mismatch instead of deleting when the number has moved. */
+  async purgeInactiveMedicines(createdAfter: Date | undefined, expectedCount: number) {
+    return this.db.transaction(async (tx) => {
+      const where = and(this.purgeCandidate(createdAfter), ...this.purgeUnblocked())!;
+      const [row] = await tx
+        .select({ n: sql<number>`count(*)::int` })
+        .from(schema.medicines)
+        .where(where);
+      const actual = row?.n ?? 0;
+      if (actual !== expectedCount) {
+        return { deleted: 0, actual, mismatch: true as const };
+      }
+      const rows = await tx
+        .delete(schema.medicines)
+        .where(where)
+        .returning({ id: schema.medicines.id });
+      return { deleted: rows.length, actual, mismatch: false as const };
     });
   }
 

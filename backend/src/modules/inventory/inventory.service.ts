@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import { InventoryRepository, normalizedIdentity } from "./inventory.repository";
 import { createMedicineSchema } from "@pharmerp/types";
 import type { CreateMedicineDto, UpdateMedicineDto, QueryMedicineDto } from "@pharmerp/types";
@@ -664,6 +669,42 @@ export class InventoryService {
       userId,
     });
     return { created: idsBySku.size, skipped, batchesCreated, errors, warnings };
+  }
+
+  /**
+   * Preview or execute the removal of import debris — catalogue rows parked
+   * inactive because their CSV row carried no usable MRP.
+   *
+   * Preview is the default. Executing requires the caller to echo back the
+   * deletable count it was shown; the repository re-counts inside the delete's
+   * own transaction and refuses if the number moved, so a stale preview cannot
+   * authorise a larger delete than it displayed.
+   */
+  async purgeInactive(opts: {
+    dryRun: boolean;
+    createdAfter?: Date;
+    expectedCount?: number;
+  }) {
+    const preview = await this.repo.previewInactivePurge(opts.createdAfter);
+    if (opts.dryRun) return { ...preview, dryRun: true as const, deleted: 0 };
+
+    if (opts.expectedCount === undefined) {
+      throw new BadRequestException(
+        "Deleting requires expectedCount — the deletable count from the preview.",
+      );
+    }
+
+    const result = await this.repo.purgeInactiveMedicines(
+      opts.createdAfter,
+      opts.expectedCount,
+    );
+    if (result.mismatch) {
+      throw new ConflictException(
+        `The catalogue changed since the preview: ${result.actual} medicines now match, ` +
+          `not ${opts.expectedCount}. Nothing was deleted — preview again before retrying.`,
+      );
+    }
+    return { ...preview, dryRun: false as const, deleted: result.deleted };
   }
 
   getLowStock(branchId?: string) {

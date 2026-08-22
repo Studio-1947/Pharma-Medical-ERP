@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Search, Barcode, Pill, Trash2, Upload, Camera } from "lucide-react";
+import { Plus, Search, Barcode, Pill, Trash2, Upload, Camera, ShieldAlert } from "lucide-react";
 import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
@@ -10,6 +10,7 @@ import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
 import { MedicineForm } from "./medicine-form";
 import { BulkImportModal } from "./bulk-import-modal";
+import { PurgeInactiveModal } from "./purge-inactive-modal";
 import { MedicineStockModal } from "./medicine-stock-modal";
 import { Layers } from "lucide-react";
 import type { CreateMedicineDto } from "@pharmerp/types";
@@ -39,10 +40,15 @@ export function MedicineList() {
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
   const [search, setSearch] = useState("");
+  // Active-only by default, matching what the counter sees. "false" surfaces
+  // the medicines a bulk import parked inactive for want of an MRP — they are
+  // in the catalogue but sellable nowhere until someone prices them.
+  const [status, setStatus] = useState<"true" | "false" | "all">("true");
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitial, setCreateInitial] = useState<Partial<CreateMedicineDto> | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [purgeOpen, setPurgeOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Medicine | null>(null);
   const [viewStockTarget, setViewStockTarget] = useState<Medicine | null>(null);
@@ -79,7 +85,7 @@ export function MedicineList() {
     }
   };
 
-  const params = { search, page, limit: 20 };
+  const params = { search, page, limit: 20, isActive: status };
 
   const { data, isLoading, isError } = useQuery<ApiListResponse>({
     queryKey: queryKeys.medicines.list(params),
@@ -114,6 +120,26 @@ export function MedicineList() {
             <Camera size={16} />
           </button>
         </div>
+        <select
+          value={status}
+          onChange={(e) => { setStatus(e.target.value as typeof status); setPage(1); }}
+          className="border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary text-slate-700"
+          title="Filter by status"
+        >
+          <option value="true">Active only</option>
+          <option value="false">Inactive only</option>
+          <option value="all">All statuses</option>
+        </select>
+        {isAdmin && status === "false" && (
+          <button
+            onClick={() => setPurgeOpen(true)}
+            className="flex items-center gap-2 px-4 py-2 border border-red-200 text-red-700 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors"
+            title="Permanently delete unpriced inactive medicines so a corrected CSV can be re-imported"
+          >
+            <ShieldAlert size={16} />
+            Delete inactive
+          </button>
+        )}
         <button
           onClick={() => setImportOpen(true)}
           className="flex items-center gap-2 px-4 py-2 border border-slate-200 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors text-slate-700"
@@ -302,6 +328,9 @@ export function MedicineList() {
 
       {/* Bulk import modal */}
       <BulkImportModal open={importOpen} onClose={() => setImportOpen(false)} />
+
+      {/* Purge inactive catalogue rows */}
+      <PurgeInactiveModal open={purgeOpen} onClose={() => setPurgeOpen(false)} />
 
       {/* Create modal */}
       <Modal

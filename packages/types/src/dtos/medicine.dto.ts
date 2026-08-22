@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { booleanFilter, booleanFlag } from "./query-flags";
 
 // Duplicated from @pharmerp/utils (isValidEAN13) — types is the bottom-level
 // package and cannot depend on utils.
@@ -70,11 +71,38 @@ export const queryMedicineSchema = z.object({
   search: z.string().optional(),
   categoryId: z.string().uuid().optional(),
   branchId: z.string().uuid().optional(),
-  isActive: z.coerce.boolean().optional(),
-  requiresPrescription: z.coerce.boolean().optional(),
+  // Tri-state. Absent means active-only, which is what every POS, counter and
+  // transfer search wants. "all" or "false" are what let an admin reach the
+  // medicines a bulk import parked inactive for want of an MRP; before this
+  // they were unreachable through the API entirely.
+  isActive: booleanFilter.optional(),
+  requiresPrescription: booleanFlag.optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(1000).default(20),
 });
+
+/**
+ * Bulk removal of catalogue rows a CSV import created but left unusable — no
+ * MRP, so they were parked inactive and are sellable nowhere.
+ *
+ * Deliberately hard delete, not the usual soft delete: medicines_sku_idx is a
+ * plain uniqueIndex rather than one scoped to deleted_at IS NULL, so a
+ * soft-deleted row keeps its SKU in the index and the corrected re-import would
+ * collide on it.
+ */
+export const purgeInactiveMedicinesSchema = z.object({
+  // Safe by default. A caller that omits this gets a preview, never a delete.
+  dryRun: z.boolean().default(true),
+  // Pins the purge to one import's rows so it cannot reach a medicine somebody
+  // deactivated by hand months ago.
+  createdAfter: z.coerce.date().optional(),
+  // The deletable count the operator was shown. The delete re-counts inside its
+  // own transaction and refuses if the number moved, so a stale preview left
+  // open in a tab can never delete more than it displayed.
+  expectedCount: z.coerce.number().int().min(0).optional(),
+});
+
+export type PurgeInactiveMedicinesDto = z.infer<typeof purgeInactiveMedicinesSchema>;
 
 export type CreateMedicineDto = z.infer<typeof createMedicineSchema>;
 export type UpdateMedicineDto = z.infer<typeof updateMedicineSchema>;
