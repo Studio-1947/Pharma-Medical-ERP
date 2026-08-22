@@ -53,6 +53,23 @@ export function MedicineList() {
   const [editTarget, setEditTarget] = useState<Medicine | null>(null);
   const [viewStockTarget, setViewStockTarget] = useState<Medicine | null>(null);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  // Inline MRP editing
+  const [editingMrpId, setEditingMrpId] = useState<string | null>(null);
+  const [editingMrpValue, setEditingMrpValue] = useState("");
+
+  const mrpMutation = useMutation({
+    mutationFn: ({ id, priceMrp, isActive }: { id: string; priceMrp: string; isActive?: boolean }) =>
+      apiClient.patch(`/inventory/medicines/${id}`, { priceMrp, ...(isActive !== undefined ? { isActive } : {}) }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.medicines.list({}) });
+      toastSuccess("MRP updated", "The price has been saved.");
+      setEditingMrpId(null);
+      setEditingMrpValue("");
+    },
+    onError: (err: any) => {
+      toastError("Update failed", err?.response?.data?.message ?? "Could not update MRP.");
+    },
+  });
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/inventory/medicines/${id}`),
@@ -197,8 +214,61 @@ export function MedicineList() {
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-slate-600">{m.sku}</td>
                     <td className="px-4 py-3 text-slate-700">{m.unit}</td>
-                    <td className="px-4 py-3 text-right font-bold text-emerald-700">
-                      ₹{parseFloat(m.priceMrp).toFixed(2)}
+                    <td className="px-4 py-3 text-right">
+                      {editingMrpId === m.id ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <span className="text-muted-foreground text-xs">₹</span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            value={editingMrpValue}
+                            onChange={(e) => setEditingMrpValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && editingMrpValue) {
+                                const mrp = parseFloat(editingMrpValue);
+                                if (mrp > 0) {
+                                  const updates: any = { id: m.id, priceMrp: mrp.toFixed(2) };
+                                  // If the medicine is inactive and MRP > 0, also activate it
+                                  if (!m.isActive && mrp > 0) updates.isActive = true;
+                                  mrpMutation.mutate(updates);
+                                }
+                              }
+                              if (e.key === "Escape") { setEditingMrpId(null); setEditingMrpValue(""); }
+                            }}
+                            onBlur={() => {
+                              if (editingMrpValue) {
+                                const mrp = parseFloat(editingMrpValue);
+                                if (mrp > 0 && mrp !== parseFloat(m.priceMrp)) {
+                                  const updates: any = { id: m.id, priceMrp: mrp.toFixed(2) };
+                                  if (!m.isActive && mrp > 0) updates.isActive = true;
+                                  mrpMutation.mutate(updates);
+                                }
+                              }
+                              setEditingMrpId(null);
+                              setEditingMrpValue("");
+                            }}
+                            autoFocus
+                            className="w-24 border rounded px-2 py-1 text-right text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                          />
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { setEditingMrpId(m.id); setEditingMrpValue(parseFloat(m.priceMrp).toFixed(2)); }}
+                          className={`font-bold hover:underline transition-colors ${
+                            m.isActive
+                              ? "text-emerald-700"
+                              : "text-amber-600"
+                          } ${parseFloat(m.priceMrp) === 0 ? "text-red-600" : ""}`}
+                          title="Click to edit MRP"
+                        >
+                          ₹{parseFloat(m.priceMrp).toFixed(2)}
+                          {!m.isActive && parseFloat(m.priceMrp) === 0 && (
+                            <span className="ml-1 text-[9px] text-amber-600 font-normal">— set to activate</span>
+                          )}
+                        </button>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button

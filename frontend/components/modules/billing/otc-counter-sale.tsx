@@ -32,6 +32,7 @@ import { scheduleLabel } from "@/lib/schedule-class";
 import { useAuthStore } from "@/stores/auth.store";
 import { RxPickerModal } from "./rx-picker-modal";
 import { InvoiceDetailModal } from "./invoice-detail-modal";
+import { Modal } from "@/components/ui/modal";
 
 /**
  * OTC counter supply — medicines handed over without a prescription.
@@ -146,6 +147,37 @@ export function OtcCounterSale({
   const [referredByDoctorId, setReferredByDoctorId] = useState("");
   const [notes, setNotes] = useState("");
   const [billedInvoiceId, setBilledInvoiceId] = useState<string | null>(null);
+  // Inactive medicine MRP edit state
+  const [inactiveMrpTarget, setInactiveMrpTarget] = useState<any | null>(null);
+  const [inactiveMrpValue, setInactiveMrpValue] = useState("");
+  const [inactiveMrpLoading, setInactiveMrpLoading] = useState(false);
+  const [inactiveMrpError, setInactiveMrpError] = useState<string | null>(null);
+
+  const confirmInactiveMrp = async () => {
+    if (!inactiveMrpTarget) return;
+    const mrp = parseFloat(inactiveMrpValue);
+    if (!mrp || mrp <= 0) {
+      setInactiveMrpError("Enter a valid MRP greater than zero.");
+      return;
+    }
+    setInactiveMrpLoading(true);
+    setInactiveMrpError(null);
+    try {
+      await apiClient.patch(`/inventory/medicines/${inactiveMrpTarget.id}`, {
+        priceMrp: mrp.toFixed(2),
+        isActive: true,
+      });
+      const patched = { ...inactiveMrpTarget, priceMrp: mrp.toFixed(2), isActive: true };
+      setInactiveMrpTarget(null);
+      setInactiveMrpValue("");
+      toastSuccess("Medicine activated", `"${patched.name}" is now active at MRP ₹${mrp.toFixed(2)}.`);
+      addMedicine(patched);
+    } catch (err: any) {
+      setInactiveMrpError(err?.response?.data?.message ?? "Failed to update MRP. Try again.");
+    } finally {
+      setInactiveMrpLoading(false);
+    }
+  };
   const [search, setSearch] = useState("");
   // Schedule H at the counter: either a prescription is attached now, or a
   // manager vouches for one and the bill carries the debt until it arrives.
@@ -318,7 +350,7 @@ export function OtcCounterSale({
     queryKey: ["otc-add-medicine-search", debouncedSearch, activeBranchId],
     queryFn: () =>
       apiClient.get("/inventory/medicines", {
-        params: { search: debouncedSearch.trim(), limit: 8 },
+        params: { search: debouncedSearch.trim(), limit: 8, isActive: "all" },
       }) as any,
     enabled: searchActive,
   });
@@ -326,6 +358,14 @@ export function OtcCounterSale({
   const searchResults: OtcMedicine[] = asArray(searchRaw).filter((m: any) => !onBill.has(m.id));
 
   const addMedicine = (m: OtcMedicine) => {
+    // Inactive medicines cannot be sold — prompt for MRP first.
+    if ((m as any).isActive === false) {
+      setInactiveMrpTarget(m);
+      const mrp = m.priceMrp != null ? String(m.priceMrp) : "";
+      setInactiveMrpValue(mrp && parseFloat(mrp) > 0 ? mrp : "");
+      setInactiveMrpError(null);
+      return;
+    }
     setLines((prev) => (prev.some((l) => l.medicine.id === m.id) ? prev : [...prev, newLine(m)]));
     setSearch("");
   };
@@ -736,6 +776,11 @@ export function OtcCounterSale({
                       <span className="min-w-0 flex-1">
                         <span className="block text-[13px] font-bold text-slate-800 truncate">
                           {m.name}
+                          {(m as any).isActive === false && (
+                            <span className="ml-1.5 text-[9px] bg-amber-100 text-amber-700 font-extrabold px-1.5 py-0.2 rounded border border-amber-200">
+                              Inactive
+                            </span>
+                          )}
                         </span>
                         <span className="block text-[11px] text-slate-400 font-mono truncate">
                           {m.sku ?? ""}
@@ -1491,6 +1536,62 @@ export function OtcCounterSale({
           </div>
         </div>
       </form>
+
+      {/* Inactive medicine MRP edit — set price and reactivate before adding */}
+      <Modal
+        title="Set MRP & Activate"
+        subtitle={inactiveMrpTarget ? `"${inactiveMrpTarget.name}" is currently inactive — enter its MRP to make it sellable.` : undefined}
+        open={!!inactiveMrpTarget}
+        onClose={() => { setInactiveMrpTarget(null); setInactiveMrpValue(""); setInactiveMrpError(null); }}
+        size="sm"
+      >
+        <div className="px-6 py-5 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            This medicine has no MRP set, so it cannot be sold. Enter the MRP below to activate it and add it to the bill.
+          </p>
+          <div className="space-y-1">
+            <label className="text-sm font-semibold">MRP (INR) <span className="text-red-500">*</span></label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">₹</span>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                value={inactiveMrpValue}
+                onChange={(e) => { setInactiveMrpValue(e.target.value); setInactiveMrpError(null); }}
+                placeholder="e.g. 85.50"
+                autoFocus
+                onKeyDown={(e) => { if (e.key === "Enter" && inactiveMrpValue && !inactiveMrpLoading) confirmInactiveMrp(); }}
+                className="w-full border rounded-lg pl-7 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+              />
+            </div>
+          </div>
+          {inactiveMrpError && (
+            <div className="flex items-center gap-2 text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+              {inactiveMrpError}
+            </div>
+          )}
+          <div className="flex justify-end gap-2 pt-1">
+            <button
+              onClick={() => { setInactiveMrpTarget(null); setInactiveMrpValue(""); setInactiveMrpError(null); }}
+              className="px-4 py-2 border rounded-lg text-sm font-medium hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={confirmInactiveMrp}
+              disabled={!inactiveMrpValue || inactiveMrpLoading}
+              className="flex items-center gap-2 px-5 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+            >
+              {inactiveMrpLoading ? (
+                <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Activating…</>
+              ) : (
+                <>Set MRP & Add to Bill</>
+              )}
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

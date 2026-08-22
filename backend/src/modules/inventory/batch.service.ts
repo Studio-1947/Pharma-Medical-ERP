@@ -85,6 +85,18 @@ export class BatchService {
       resolvedLocationId,
     });
 
+    // If the medicine was inactive (no MRP set during CSV import) and this
+    // batch carries a valid MRP, promote it: set the medicine's priceMrp and
+    // flip isActive so it becomes sellable through the POS without a separate
+    // edit step.
+    const batchMrp = parseFloat(dto.mrpAtEntry ?? "0");
+    if (!medicine.isActive && batchMrp > 0) {
+      await this.inventoryRepo.updateMedicine(medicine.id, {
+        priceMrp: batchMrp.toFixed(2),
+        isActive: true,
+      });
+    }
+
     // Log the inbound stock movement
     await this.movementRepo.log({
       batchId: batch.id,
