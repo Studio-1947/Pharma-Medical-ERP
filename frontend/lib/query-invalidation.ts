@@ -32,3 +32,22 @@ export function invalidateMedicineViews(queryClient: QueryClient) {
     },
   });
 }
+
+/**
+ * The counter desk's own live counters: today's sale, low stock, prescriptions
+ * filled, free hand-outs, who has been served, the clinic queue. They all key
+ * off "counter-".
+ *
+ * Separate from the medicine views on purpose. These are a snapshot of the
+ * day rather than a consequence of something this tab did, so they are what a
+ * "Refresh" button and the desk's poll should reach — refetching the whole
+ * medicine catalogue on a timer would be a different and much heavier thing.
+ */
+export function invalidateCounterDesk(queryClient: QueryClient) {
+  return queryClient.invalidateQueries({
+    predicate: (query) => {
+      const root = query.queryKey[0];
+      return typeof root === "string" && root.startsWith("counter-");
+    },
+  });
+}

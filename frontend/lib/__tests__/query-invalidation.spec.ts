@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
-import { invalidateMedicineViews } from "@/lib/query-invalidation";
+import { invalidateMedicineViews, invalidateCounterDesk } from "@/lib/query-invalidation";
 
 /**
  * Medicine query keys grew per screen — "medicine-search-counter",
@@ -94,5 +94,46 @@ describe("invalidateMedicineViews", () => {
 
     await expect(invalidateMedicineViews(qc)).resolves.not.toThrow();
     expect(staleKeys()).toContain(JSON.stringify(["medicine-detail", "med-1"]));
+  });
+});
+
+/**
+ * The desk counters describe the shop, not this tab: another till bills, stock
+ * is received, a doctor calls the next token. They poll, and the Refresh
+ * button reaches them on demand.
+ */
+describe("invalidateCounterDesk", () => {
+  const DESK_KEYS = [
+    ["counter-today-sale", "2026-08-22", "branch-1"],
+    ["counter-low-stock", "branch-1"],
+    ["counter-rx-today", "branch-1"],
+    ["counter-otc-today", "2026-08-22", "branch-1"],
+    ["counter-served-today", "2026-08-22", "branch-1"],
+    ["counter-clinic-queue", "2026-08-22", "branch-1"],
+  ];
+
+  it("refreshes every counter on the desk", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    DESK_KEYS.forEach((k, i) => qc.setQueryData(k, { seeded: i }));
+    await invalidateCounterDesk(qc);
+
+    const stale = qc.getQueryCache().getAll().filter((q) => q.state.isInvalidated).length;
+    expect(stale).toBe(DESK_KEYS.length);
+  });
+
+  it("does not drag the medicine catalogue along on every poll", async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(["counter-today-sale", "x"], { seeded: true });
+    qc.setQueryData(["medicines", "list", { search: "dolo" }], { seeded: true });
+    await invalidateCounterDesk(qc);
+
+    // A minute-by-minute poll that also refetched the catalogue would be a
+    // very different and much heavier thing than a counter refresh.
+    const stale = qc
+      .getQueryCache()
+      .getAll()
+      .filter((q) => q.state.isInvalidated)
+      .map((q) => q.queryKey[0]);
+    expect(stale).toEqual(["counter-today-sale"]);
   });
 });
