@@ -632,7 +632,12 @@ ${buildReceiptHeaderHtml({
   const debouncedSearch = useDebounce(search, 300);
   const { data: searchResults, isFetching } = useQuery({
     queryKey: ["medicine-search", debouncedSearch],
-    queryFn: () => apiClient.get("/inventory/medicines", { params: { search: debouncedSearch, limit: 8, isActive: "all" } }) as any,
+    queryFn: () =>
+      apiClient.get("/inventory/medicines", {
+        // Raised from 8. Relevance ordering ignores status, so the short list
+        // was routinely all-active and inactive matches never appeared.
+        params: { search: debouncedSearch, limit: 25, isActive: "all" },
+      }) as any,
     enabled: (debouncedSearch?.length ?? 0) >= 2,
   });
 

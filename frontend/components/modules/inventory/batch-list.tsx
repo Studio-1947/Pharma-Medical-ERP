@@ -122,7 +122,9 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
     queryKey: ["medicine-search-form", medicineSearch],
     queryFn: () =>
       apiClient.get("/inventory/medicines", {
-        params: { search: medicineSearch, limit: 8, isActive: "all" },
+        // Raised from 8: this picker exists to put stock against a medicine,
+        // including the inactive ones a short list used to hide.
+        params: { search: medicineSearch, limit: 25, isActive: "all" },
       }) as any,
     enabled: medicineSearch.length >= 2 && !selectedMedicine,
   });

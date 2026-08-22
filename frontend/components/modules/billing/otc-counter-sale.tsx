@@ -350,7 +350,9 @@ export function OtcCounterSale({
     queryKey: ["otc-add-medicine-search", debouncedSearch, activeBranchId],
     queryFn: () =>
       apiClient.get("/inventory/medicines", {
-        params: { search: debouncedSearch.trim(), limit: 8, isActive: "all" },
+        // Raised from 8 for the same reason as the counter desk: a short
+        // list filled up with active rows and hid the inactive matches.
+        params: { search: debouncedSearch.trim(), limit: 25, isActive: "all" },
       }) as any,
     enabled: searchActive,
   });
