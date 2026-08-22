@@ -29,6 +29,7 @@ import { formatStockUnit, getUnitLabel } from "@/lib/stock-unit-formatter";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
 import { quoteOtcSaleLines } from "@/lib/otc-quote";
 import { scheduleLabel } from "@/lib/schedule-class";
+import { invalidateMedicineViews } from "@/lib/query-invalidation";
 import { useAuthStore } from "@/stores/auth.store";
 import { RxPickerModal } from "./rx-picker-modal";
 import { InvoiceDetailModal } from "./invoice-detail-modal";
@@ -167,6 +168,10 @@ export function OtcCounterSale({
         priceMrp: mrp.toFixed(2),
         isActive: true,
       });
+      // The row was just activated. Every cached list still has it as
+      // Inactive at the old price, and nothing else will correct them — this
+      // is what used to make a manual page refresh necessary.
+      await invalidateMedicineViews(qc);
       const patched = { ...inactiveMrpTarget, priceMrp: mrp.toFixed(2), isActive: true };
       setInactiveMrpTarget(null);
       setInactiveMrpValue("");

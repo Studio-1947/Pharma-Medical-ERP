@@ -48,6 +48,7 @@ import { useCartStore } from "@/stores/cart.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { usePermissions } from "@/hooks/use-permissions";
 import { formatStockUnit } from "@/lib/stock-unit-formatter";
+import { invalidateMedicineViews } from "@/lib/query-invalidation";
 
 type DeskPath = "prescription" | "doctor" | "otc" | null;
 
@@ -624,6 +625,10 @@ export function PatientFirstBilling({
         priceMrp: mrp.toFixed(2),
         isActive: true,
       });
+      // The row was just activated. Every cached list still has it as
+      // Inactive at the old price, and nothing else will correct them — this
+      // is what used to make a manual page refresh necessary.
+      await invalidateMedicineViews(queryClient);
       const patched = { ...inactiveMrpTarget, priceMrp: mrp.toFixed(2), isActive: true };
       setInactiveMrpTarget(null);
       setInactiveMrpValue("");
