@@ -104,55 +104,29 @@ export class InventoryRepository {
         new Set([...wordTokens, ...splitLetterDigitTokens, rawSearch]),
       ).filter((t) => t.length > 0);
 
-      // Every field a person might reasonably type at the counter, in one
-      // list so the raw pass, the punctuation-stripped pass and the per-token
-      // pass can never drift apart the way they had — manufacturer and
-      // barcode were matched by tokens but not by the whole phrase.
+      // One indexed predicate over medicines.search_text, which is every
+      // searchable field folded together and stored twice — once lower-cased,
+      // once with punctuation stripped. Both forms live in the same column, so
+      // "pan-40", "pan 40" and "pan40" are the same lookup.
       //
-      // The list goes past name and salt on purpose. Staff search the way
-      // they speak: "cetirizine syrup", "pan 40 tablet", "amoxy 500 cap".
-      // Without dosageForm and strength in here the trailing word matches
-      // nothing, and because tokens are ANDed, one unmatched word threw the
-      // whole search away and the desk reported nothing found.
-      const searchFields = [
-        schema.medicines.name,
-        schema.medicines.brandName,
-        schema.medicines.genericName,
-        schema.medicines.composition,
-        schema.medicines.manufacturer,
-        schema.medicines.sku,
-        schema.medicines.barcode,
-        schema.medicines.strength,
-        schema.medicines.dosageForm,
-        schema.medicines.therapeuticClass,
-        schema.medicines.packSize,
-        schema.medicines.hsnCode,
-        // Where the pack physically lives. "top drawer 3" is a real way to
-        // ask for something when the name has been forgotten.
-        schema.medicines.drawerMapping,
-      ];
+      // This replaced thirteen ILIKEs per pass across thirteen columns. That
+      // shape could only ever be a sequential scan: measured at 140ms against
+      // 6,795 rows and linear in the table, so it got worse as the catalogue
+      // grew. Against medicines_search_trgm_idx the same search is a bitmap
+      // index scan at 1.5ms, and now scales with matches rather than rows.
+      //
+      // If this ever goes slow again, check the index still exists — without
+      // it these LIKEs silently fall back to the old sequential scan.
+      const blobLike = (needle: string) =>
+        sql`${schema.medicines.searchText} LIKE ${"%" + needle.toLowerCase() + "%"}`;
 
-      const anyFieldLike = (needle: string) =>
-        or(...searchFields.map((f) => ilike(f, `%${needle}%`)));
-
-      // Punctuation-blind pass, so "pan-40", "pan 40" and "pan40" are one
-      // query, and a barcode read with stray separators still lands.
-      const anyFieldNormalized = (needle: string) =>
-        or(
-          ...searchFields.map(
-            (f) =>
-              sql`LOWER(REGEXP_REPLACE(${f}, '[^a-zA-Z0-9]', '', 'g')) LIKE ${'%' + needle + '%'}`,
-          ),
-        );
-
-      // Build tokenized AND condition: every token must appear in at least
-      // one field, so word order never matters — "syrup cetirizine" and
-      // "cetirizine syrup" find the same bottle.
-      const tokenConditions = tokens.map((t) => anyFieldLike(t));
+      // Every token must appear somewhere, so word order never matters:
+      // "syrup cetirizine" and "cetirizine syrup" find the same bottle.
+      const tokenConditions = tokens.map((t) => blobLike(t));
 
       const searchFilter = or(
-        anyFieldLike(rawSearch),
-        ...(normalizedSearch ? [anyFieldNormalized(normalizedSearch)] : []),
+        blobLike(rawSearch),
+        ...(normalizedSearch ? [blobLike(normalizedSearch)] : []),
         ...(tokenConditions.length > 0 ? [and(...tokenConditions)] : []),
       );
 

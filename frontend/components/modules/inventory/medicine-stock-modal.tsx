@@ -21,6 +21,7 @@ import {
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { apiClient, queryKeys } from "@/lib/api-client";
+import { invalidateMedicineViews } from "@/lib/query-invalidation";
 import { useActiveBranchId } from "@/hooks/use-branch";
 import { BarcodeLabelModal } from "./barcode-label-modal";
 
@@ -87,10 +88,9 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
           ? `${medicine?.name ?? "The medicine"} now has an MRP and is sellable at the counter.`
           : `Successfully added new batch to ${medicine?.name ?? "inventory"}.`,
       );
-      queryClient.invalidateQueries({ queryKey: ["medicine-batches-detail", medicineId] });
-      // The medicine row itself changed (priceMrp + isActive) when the batch
-      // promoted it, so the profile this modal shows has to be refetched too.
-      queryClient.invalidateQueries({ queryKey: ["medicine-detail", medicineId] });
+      // Receiving a priced batch can promote an inactive medicine, so every
+      // cached view of it is stale, not just this modal's own queries.
+      void invalidateMedicineViews(queryClient);
       queryClient.invalidateQueries({ queryKey: ["low-stock"] });
       queryClient.invalidateQueries({ queryKey: ["expiring-batches"] });
       queryClient.invalidateQueries({ queryKey: queryKeys.medicines.list({}) });

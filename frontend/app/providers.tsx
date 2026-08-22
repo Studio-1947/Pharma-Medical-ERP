@@ -104,7 +104,18 @@ export function Providers({ children }: { children: React.ReactNode }) {
             staleTime: 1000 * 60 * 5,
             gcTime: 1000 * 60 * 10,
             retry: 1,
-            refetchOnWindowFocus: false,
+            // Coming back to the tab refetches anything older than staleTime.
+            //
+            // This is a shared counter: stock is received on the inventory
+            // screen, a medicine is activated at another till, a bill is taken
+            // on the second device. With this off, a tab that had been sitting
+            // open served whatever it had cached until someone reloaded by
+            // hand, and staff had no way to tell the difference between "no
+            // change" and "stale".
+            //
+            // Bounded by staleTime, so an alt-tab does not re-fetch a screen
+            // that was refreshed a minute ago, and only ever issues GETs.
+            refetchOnWindowFocus: true,
           },
         },
       }),

@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { readFileSync, readdirSync } from "fs";
+import { join } from "path";
 import { Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "../../../database/schema";
@@ -12,14 +14,39 @@ import { InventoryRepository } from "../inventory.repository";
  *
  * Tokens are ANDed, which makes an unsearched field actively harmful rather
  * than merely unhelpful: one word that matches nothing throws the whole query
- * away and the desk reports "nothing found" for a medicine that is sitting on
- * the shelf. That is why this asserts on columns and not just on results.
+ * away and the desk reports "nothing found" for a medicine that is on the
+ * shelf. That is why this asserts on columns and not just on results.
  *
- * Assertions run against the SQL the repository really emits, captured at the
- * pg driver, because the three passes (whole phrase, punctuation-stripped,
- * per-token) are built separately and had already drifted apart once —
- * manufacturer and barcode were in the token pass and missing from the others.
+ * Those columns now live in the generated `medicines.search_text` rather than
+ * in thirteen ILIKEs, so coverage is asserted against the column's definition
+ * and speed is asserted against the query plan the repository can produce.
  */
+
+const MIGRATIONS = join(__dirname, "..", "..", "..", "..", "drizzle", "migrations");
+
+/** The migration that defines search_text and its trigram index. */
+function searchMigrationSql() {
+  const file = readdirSync(MIGRATIONS).find((f) => f.includes("medicine_search_text"));
+  if (!file) throw new Error("medicine_search_text migration is missing");
+  return readFileSync(join(MIGRATIONS, file), "utf8");
+}
+
+/** Columns the search must reach. */
+const SEARCHABLE = [
+  "name",
+  "brand_name",
+  "generic_name",
+  "composition",
+  "manufacturer",
+  "sku",
+  "barcode",
+  "strength",
+  "dosage_form",
+  "therapeutic_class",
+  "pack_size",
+  "hsn_code",
+  "drawer_mapping",
+];
 
 const captured: string[] = [];
 
@@ -44,68 +71,60 @@ async function sqlFor(params: Record<string, unknown>) {
   return captured[0] ?? "";
 }
 
-/** Columns the search must reach, in every pass. */
-const SEARCHABLE = [
-  "name",
-  "brand_name",
-  "generic_name",
-  "composition",
-  "manufacturer",
-  "sku",
-  "barcode",
-  "strength",
-  "dosage_form",
-  "therapeutic_class",
-  "pack_size",
-  "hsn_code",
-  "drawer_mapping",
-];
-
 describe("medicine search — what the one counter box can find", () => {
   beforeEach(() => {
     captured.length = 0;
   });
 
-  it("matches the typed phrase against every searchable column", async () => {
-    const sql = await sqlFor({ search: "cetirizine", page: 1, limit: 10 });
+  it("folds every searchable column into search_text", async () => {
+    const sql = searchMigrationSql();
     for (const col of SEARCHABLE) {
-      expect(sql, `whole-phrase pass is missing ${col}`).toContain(
+      expect(sql, `search_text is missing ${col}`).toContain(`coalesce("${col}",'')`);
+    }
+  });
+
+  it("stores a punctuation-stripped copy, so pan-40 and pan40 are one query", async () => {
+    expect(searchMigrationSql()).toContain("regexp_replace(lower(");
+    expect(searchMigrationSql()).toContain("'[^a-z0-9]', '', 'g'");
+  });
+
+  it("keeps the trigram index that makes a leading-wildcard LIKE indexable", async () => {
+    // Without gin_trgm_ops the same query silently reverts to a sequential
+    // scan: 140ms against 6,795 rows, and it grows with the catalogue.
+    const sql = searchMigrationSql();
+    expect(sql).toContain("CREATE EXTENSION IF NOT EXISTS pg_trgm");
+    expect(sql).toMatch(/USING gin \("search_text" gin_trgm_ops\)/);
+  });
+
+  it("searches the indexed column, not the raw ones", async () => {
+    const sql = await sqlFor({ search: "cetirizine", page: 1, limit: 10 });
+    expect(sql).toContain('"medicines"."search_text" LIKE');
+    // A per-column ILIKE creeping back in would not be wrong, only slow, and
+    // slow is exactly the failure nobody notices until the catalogue grows.
+    for (const col of SEARCHABLE) {
+      expect(sql, `${col} is being matched directly again`).not.toContain(
         `"medicines"."${col}" ilike`,
       );
     }
   });
 
-  it("matches punctuation-blind against every searchable column", async () => {
-    // "pan-40", "pan 40" and "pan40" have to be one query.
-    const sql = await sqlFor({ search: "pan-40", page: 1, limit: 10 });
-    for (const col of SEARCHABLE) {
-      expect(sql, `normalized pass is missing ${col}`).toContain(
-        `REGEXP_REPLACE("medicines"."${col}", '[^a-zA-Z0-9]', '', 'g')`,
-      );
-    }
-  });
-
-  it("lets each word of a multi-word search land in a different column", async () => {
+  it("lets each word of a multi-word search land anywhere in the row", async () => {
     // "cetirizine syrup": the salt is in generic_name, the form in
-    // dosage_form. Neither column alone matches the phrase, so this only
-    // works if every token is matched against the full column list.
+    // dosage_form. Neither column alone matches the phrase, so this only works
+    // if every token is matched against the whole folded blob.
     const sql = await sqlFor({ search: "cetirizine syrup", page: 1, limit: 10 });
-    const perColumn = sql.split(`"medicines"."dosage_form" ilike`).length - 1;
-    // Whole phrase + normalized is one each; the rest are the token passes.
-    expect(perColumn).toBeGreaterThan(2);
+    const passes = sql.split('"medicines"."search_text" LIKE').length - 1;
+    // Whole phrase + normalized + one per token.
+    expect(passes).toBeGreaterThan(2);
   });
 
   it("still ranks an exact SKU or barcode above a loose name match", async () => {
-    // Broadening the WHERE must not cost the scan its precedence: a scanned
-    // code has to come back first, not fourth.
     const sql = await sqlFor({ search: "MED26001", page: 1, limit: 10 });
     expect(sql).toContain(`WHEN LOWER("medicines"."sku") = LOWER(`);
     expect(sql).toContain(`WHEN LOWER("medicines"."barcode") = LOWER(`);
   });
 
   it("keeps the active-only default, and drops it only for isActive=all", async () => {
-    // The broadened search must not become a back door onto inactive rows for
-    // the callers that never asked for them.
     const plain = await sqlFor({ search: "cetirizine", page: 1, limit: 10 });
     expect(plain).toContain(`"medicines"."is_active" =`);
 

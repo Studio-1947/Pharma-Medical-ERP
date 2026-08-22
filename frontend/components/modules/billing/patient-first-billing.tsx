@@ -48,6 +48,7 @@ import { useCartStore } from "@/stores/cart.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { usePermissions } from "@/hooks/use-permissions";
 import { formatStockUnit } from "@/lib/stock-unit-formatter";
+import { invalidateMedicineViews, invalidateCounterDesk } from "@/lib/query-invalidation";
 
 type DeskPath = "prescription" | "doctor" | "otc" | null;
 
@@ -155,11 +156,20 @@ export function PatientFirstBilling({
   };
 
   // ── Total sale today (end-of-day summary for today) ────────────────────────
+
+  // The desk's live counters poll, because they describe the shop rather than
+  // this tab: another till bills, stock is received, a doctor calls the next
+  // token. React Query pauses the interval while the window is unfocused, so
+  // an idle counter is not sitting there polling all day, and the manual
+  // Refresh below covers the moment someone wants to be certain right now.
+  const DESK_POLL_MS = 60_000;
+
   const { data: todaysSaleRaw } = useQuery({
     queryKey: ["counter-today-sale", today, activeBranchId],
     queryFn: () =>
       apiClient.get("/billing/reports/end-of-day", { params: { date: today, ...branchParams } }) as any,
     retry: 1,
+    refetchInterval: DESK_POLL_MS,
   });
   const todaysSale: number = (() => {
     const raw = todaysSaleRaw as any;
@@ -173,6 +183,7 @@ export function PatientFirstBilling({
     queryKey: ["counter-low-stock", activeBranchId],
     queryFn: () => apiClient.get("/inventory/medicines/low-stock", { params: branchParams }) as any,
     retry: 1,
+    refetchInterval: DESK_POLL_MS,
   });
   const lowStockCount: number = (() => {
     const raw = lowStockRaw as any;
@@ -187,6 +198,7 @@ export function PatientFirstBilling({
     queryKey: ["counter-rx-today", activeBranchId],
     queryFn: () => apiClient.get("/prescriptions", { params: { ...branchParams, limit: 100 } }) as any,
     retry: 1,
+    refetchInterval: DESK_POLL_MS,
   });
   const rxTodayCount: number = (() => {
     const raw = rxTodayRaw as any;
@@ -209,6 +221,7 @@ export function PatientFirstBilling({
         params: { date: today, ...branchParams },
       }) as any,
     retry: 1,
+    refetchInterval: DESK_POLL_MS,
   });
   const otcToday: { supplies: number; units: number } = (() => {
     const raw = otcTodayRaw as any;
@@ -228,6 +241,7 @@ export function PatientFirstBilling({
         params: { from: today, to: today, limit: 5, ...branchParams },
       }) as any,
     retry: 1,
+    refetchInterval: DESK_POLL_MS,
   });
   const servedToday: any[] = (() => {
     const raw = servedTodayRaw as any;
@@ -242,6 +256,7 @@ export function PatientFirstBilling({
     queryKey: ["counter-clinic-queue", today, activeBranchId],
     queryFn: () => apiClient.get("/clinic/tokens", { params: { date: today, ...branchParams, limit: 100 } }) as any,
     retry: 1,
+    refetchInterval: DESK_POLL_MS,
   });
   const queueRows: any[] = (() => {
     const raw = queueRaw as any;
@@ -339,6 +354,22 @@ export function PatientFirstBilling({
 
   // The counter search keeps its own query keys, so the inventory modals'
   // invalidations don't reach it — refresh it by hand after either fix.
+  // Manual "Refresh": the poll covers the ordinary case, but an operator who
+  // has just been told something changed wants to be certain now rather than
+  // within the minute. Reaches the desk counters only — the medicine caches
+  // are refreshed by whatever mutated them.
+  const [deskRefreshing, setDeskRefreshing] = useState(false);
+  const refreshDesk = async () => {
+    setDeskRefreshing(true);
+    try {
+      await invalidateCounterDesk(queryClient);
+    } finally {
+      // Held briefly so the spin is visible: a refresh that returns in 20ms
+      // is indistinguishable from a dead button.
+      setTimeout(() => setDeskRefreshing(false), 350);
+    }
+  };
+
   const refreshMedicineSearch = () => {
     queryClient.invalidateQueries({ queryKey: ["medicine-search-counter"] });
     queryClient.invalidateQueries({ queryKey: ["counter-medicine-search"] });
@@ -624,6 +655,10 @@ export function PatientFirstBilling({
         priceMrp: mrp.toFixed(2),
         isActive: true,
       });
+      // The row was just activated. Every cached list still has it as
+      // Inactive at the old price, and nothing else will correct them — this
+      // is what used to make a manual page refresh necessary.
+      await invalidateMedicineViews(queryClient);
       const patched = { ...inactiveMrpTarget, priceMrp: mrp.toFixed(2), isActive: true };
       setInactiveMrpTarget(null);
       setInactiveMrpValue("");
@@ -761,6 +796,16 @@ export function PatientFirstBilling({
               ₹{todaysSale.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={refreshDesk}
+            disabled={deskRefreshing}
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-semibold hover:bg-slate-50 hover:text-slate-900 disabled:opacity-60 transition-all"
+            title="Re-read today's counters now. They also refresh on their own every minute."
+          >
+            <RefreshCw size={14} className={deskRefreshing ? "animate-spin" : undefined} />
+            <span className="hidden sm:inline">{deskRefreshing ? "Refreshing" : "Refresh"}</span>
+          </button>
           {user?.role === "super_admin" && (
             <button
               type="button"
@@ -812,6 +857,15 @@ export function PatientFirstBilling({
             {otcToday.units > 0 && (
               <span className="ml-1 text-[10px] font-bold text-slate-400">({otcToday.units} units)</span>
             )}
+          </p>
+          {/* Sitting beside the billing figures, a zero here reads as "the
+              bills did not count". It counts give-aways only, and walk-in
+              sales are bills, so say which is which rather than leave the
+              operator to infer it. */}
+          <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">
+            {otcToday.supplies === 0
+              ? "Nothing given free today — billed sales count under Total sale."
+              : "Samples and staff medicine. Billed sales count under Total sale."}
           </p>
           <button
             type="button"

@@ -27,6 +27,7 @@ import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog
 import { useActiveBranchId } from "@/hooks/use-branch";
 import { sendViaWhatsApp } from "@/lib/patient-messaging";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
+import { invalidateMedicineViews } from "@/lib/query-invalidation";
 
 
 
@@ -129,6 +130,10 @@ export function PosTerminal({
         isActive: true,
       });
       // Update the local medicine object so handleAddMedicine sees the new MRP
+      // The row was just activated. Every cached list still has it as
+      // Inactive at the old price, and nothing else will correct them — this
+      // is what used to make a manual page refresh necessary.
+      await invalidateMedicineViews(queryClient);
       const patched = { ...inactiveMrpTarget, priceMrp: mrp.toFixed(2), isActive: true };
       setInactiveMrpTarget(null);
       setInactiveMrpValue("");

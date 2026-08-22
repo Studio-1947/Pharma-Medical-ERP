@@ -5,6 +5,7 @@ import { useState } from "react";
 import { Plus, Search, Barcode, Pill, Trash2, Upload, Camera, ShieldAlert } from "lucide-react";
 import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
 import { apiClient, queryKeys } from "@/lib/api-client";
+import { invalidateMedicineViews } from "@/lib/query-invalidation";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
 import { Modal } from "@/components/ui/modal";
@@ -65,7 +66,9 @@ export function MedicineList() {
     mutationFn: ({ id, priceMrp, isActive }: { id: string; priceMrp: string; isActive?: boolean }) =>
       apiClient.patch(`/inventory/medicines/${id}`, { priceMrp, ...(isActive !== undefined ? { isActive } : {}) }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.medicines.list({}) });
+      // Not just this list: setting an MRP can flip the medicine active, and
+      // the counter and POS searches keep their own cache keys.
+      void invalidateMedicineViews(queryClient);
       toastSuccess("MRP updated", "The price has been saved.");
       setEditingMrpId(null);
       setEditingMrpValue("");

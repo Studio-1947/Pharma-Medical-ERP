@@ -29,6 +29,7 @@ import { formatStockUnit, getUnitLabel } from "@/lib/stock-unit-formatter";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
 import { quoteOtcSaleLines } from "@/lib/otc-quote";
 import { scheduleLabel } from "@/lib/schedule-class";
+import { invalidateMedicineViews } from "@/lib/query-invalidation";
 import { useAuthStore } from "@/stores/auth.store";
 import { RxPickerModal } from "./rx-picker-modal";
 import { InvoiceDetailModal } from "./invoice-detail-modal";
@@ -140,6 +141,19 @@ export function OtcCounterSale({
   // when the sale is on credit, and only then are they required.
   const [dueName, setDueName] = useState("");
   const [duePhone, setDuePhone] = useState("");
+  /**
+   * The registered patient this due is pinned to, once the operator has picked
+   * one from the lookup.
+   *
+   * The submit path already matched on phone and attached the due to an
+   * existing account, but it did so silently and only on an exact number. That
+   * left the operator typing blind: a returning customer whose number they did
+   * not have to hand was invisible, and there was no way to tell before
+   * billing whether this would join an account or open a second one. Picking
+   * here makes that choice explicit and survives a misspelt name.
+   */
+  const [duePatientId, setDuePatientId] = useState<string | null>(null);
+  const [duePatientLabel, setDuePatientLabel] = useState<string | null>(null);
   /** Part payment taken at the counter against a credit sale. "" = nothing paid now. */
   const [duePaidNow, setDuePaidNow] = useState("");
   const [duePaidMode, setDuePaidMode] = useState<"cash" | "upi" | "card">("cash");
@@ -167,6 +181,10 @@ export function OtcCounterSale({
         priceMrp: mrp.toFixed(2),
         isActive: true,
       });
+      // The row was just activated. Every cached list still has it as
+      // Inactive at the old price, and nothing else will correct them — this
+      // is what used to make a manual page refresh necessary.
+      await invalidateMedicineViews(qc);
       const patched = { ...inactiveMrpTarget, priceMrp: mrp.toFixed(2), isActive: true };
       setInactiveMrpTarget(null);
       setInactiveMrpValue("");
@@ -197,6 +215,10 @@ export function OtcCounterSale({
     setPaymentMode("cash");
     setDueName("");
     setDuePhone("");
+    // Cleared with the rest: a pin left behind would put the next sale's due
+    // on the previous customer's account.
+    setDuePatientId(null);
+    setDuePatientLabel(null);
     setDuePaidNow("");
     setDuePaidMode("cash");
     setReferredByDoctorId("");
@@ -323,6 +345,35 @@ export function OtcCounterSale({
     Math.max(0, Number.parseFloat(duePaidNow) || 0),
   );
   const dueAmount = Number((quote.total - paidNow).toFixed(2));
+  // Live lookup over whatever the operator has typed. Either field drives it:
+  // they may know the name and not the number, which was the case the
+  // phone-only match at submit time could never serve.
+  const dueLookupTerm = (duePhone.trim().length >= 3 ? duePhone : dueName).trim();
+  const debouncedDueLookup = useDebounce(dueLookupTerm, 300);
+  const dueLookupActive = !duePatientId && debouncedDueLookup.length >= 3;
+  const { data: dueMatchesRaw, isFetching: dueLookupBusy } = useQuery({
+    queryKey: ["otc-due-patient-lookup", debouncedDueLookup],
+    queryFn: () =>
+      apiClient.get("/patients", {
+        params: { search: debouncedDueLookup, limit: 6 },
+      }) as any,
+    enabled: dueLookupActive,
+  });
+  const dueMatches: any[] = dueLookupActive ? asArray(dueMatchesRaw) : [];
+
+  /** Pins the due to an existing account and fills the fields from it. */
+  const pickDuePatient = (p: any) => {
+    setDuePatientId(p.id);
+    setDuePatientLabel(`${p.name ?? "Customer"} · ${p.phone ?? ""}`);
+    setDueName(p.name ?? "");
+    setDuePhone(String(p.phone ?? ""));
+  };
+
+  const clearDuePatient = () => {
+    setDuePatientId(null);
+    setDuePatientLabel(null);
+  };
+
   const duePhoneValid = isValidPhoneNumber(duePhone);
   const creditReady = !onCredit || (dueName.trim().length > 0 && duePhoneValid);
   // A part payment that clears the whole bill is not a credit sale at all — it
@@ -405,6 +456,10 @@ export function OtcCounterSale({
     setPaymentMode("cash");
     setDueName("");
     setDuePhone("");
+    // Cleared with the rest: a pin left behind would put the next sale's due
+    // on the previous customer's account.
+    setDuePatientId(null);
+    setDuePatientLabel(null);
     setDuePaidNow("");
     setDuePaidMode("cash");
     setReferredByDoctorId("");
@@ -433,6 +488,9 @@ export function OtcCounterSale({
    * record every visit and nobody would see the real balance.
    */
   const resolveDuePatientId = async (): Promise<string> => {
+    // An explicit pick wins over the phone match: the operator has already
+    // said which account this belongs to.
+    if (duePatientId) return duePatientId;
     const existing = await findPatientByPhone(duePhone);
     if (existing) return existing;
     try {
@@ -1286,6 +1344,24 @@ export function OtcCounterSale({
                     </p>
                   </div>
 
+                  {/* Pinned to a registered account. Shown instead of the
+                      lookup so it is unambiguous which one the due lands on. */}
+                  {duePatientId && (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                      <p className="text-xs font-semibold text-emerald-900 min-w-0">
+                        Adding to the account of{" "}
+                        <span className="font-black">{duePatientLabel}</span>
+                      </p>
+                      <button
+                        type="button"
+                        onClick={clearDuePatient}
+                        className="shrink-0 text-[11px] font-bold text-emerald-700 hover:text-emerald-900 underline underline-offset-2"
+                      >
+                        Use a different customer
+                      </button>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label
@@ -1297,7 +1373,14 @@ export function OtcCounterSale({
                       <input
                         id="otc-due-name"
                         value={dueName}
-                        onChange={(e) => setDueName(e.target.value)}
+                        onChange={(e) => {
+                          setDueName(e.target.value);
+                          // Typing over a pinned account means it is no longer
+                          // that customer. Keeping the pin would put the due on
+                          // whoever was picked while the form showed a name
+                          // that is not theirs.
+                          clearDuePatient();
+                        }}
                         placeholder="e.g. Ramesh Das"
                         autoComplete="off"
                         className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/30"
@@ -1313,7 +1396,10 @@ export function OtcCounterSale({
                       <input
                         id="otc-due-phone"
                         value={duePhone}
-                        onChange={(e) => setDuePhone(e.target.value)}
+                        onChange={(e) => {
+                          setDuePhone(e.target.value);
+                          clearDuePatient();
+                        }}
                         placeholder="10-digit mobile number"
                         inputMode="tel"
                         autoComplete="off"
@@ -1326,6 +1412,64 @@ export function OtcCounterSale({
                       )}
                     </div>
                   </div>
+
+                  {/* Who this might already be. Matching on name as well as
+                      number is the point: the number is exactly what an
+                      operator does not have when a regular walks back in. */}
+                  {dueLookupActive && (
+                    <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
+                      {dueLookupBusy && dueMatches.length === 0 && (
+                        <p className="px-3 py-2 text-[11px] text-slate-400 animate-pulse">
+                          Looking for an existing customer…
+                        </p>
+                      )}
+                      {!dueLookupBusy && dueMatches.length === 0 && (
+                        <p className="px-3 py-2 text-[11px] text-slate-500">
+                          No existing customer matches. This sale will register{" "}
+                          <span className="font-bold">{dueName.trim() || "them"}</span> as a
+                          new one.
+                        </p>
+                      )}
+                      {dueMatches.length > 0 && (
+                        <>
+                          <p className="px-3 py-1.5 bg-slate-50 border-b border-slate-100 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                            Already registered
+                          </p>
+                          <div className="divide-y divide-slate-100 max-h-52 overflow-y-auto">
+                            {dueMatches.map((p: any) => {
+                              const owes = Number(p.outstandingBalance ?? 0);
+                              return (
+                                <button
+                                  key={p.id}
+                                  type="button"
+                                  onClick={() => pickDuePatient(p)}
+                                  className="w-full flex items-center justify-between gap-3 px-3 py-2 text-left hover:bg-emerald-50/70 transition-colors"
+                                >
+                                  <span className="min-w-0">
+                                    <span className="block text-xs font-bold text-slate-800 truncate">
+                                      {p.name}
+                                    </span>
+                                    <span className="block text-[11px] font-mono text-slate-400 truncate">
+                                      {p.phone}
+                                    </span>
+                                  </span>
+                                  {/* What they already owe belongs on a credit
+                                      decision, not two screens away. */}
+                                  <span
+                                    className={`shrink-0 text-[11px] font-bold ${
+                                      owes > 0 ? "text-rose-600" : "text-slate-400"
+                                    }`}
+                                  >
+                                    {owes > 0 ? `owes ${inr(owes)}` : "no dues"}
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
 
                   {/* Part payment — "due" is often "paid some of it now" */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
