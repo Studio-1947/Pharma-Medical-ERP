@@ -79,15 +79,92 @@ function looksUnreachable(error: AxiosError): boolean {
   return GATEWAY_DOWN.has(error.response.status);
 }
 
-let isRefreshing = false;
-let failedQueue: Array<{
-  resolve: (v: string) => void;
-  reject: (e: unknown) => void;
-}> = [];
+/** Raised when there is nothing to refresh WITH, as opposed to a refresh the
+ *  server rejected. The two lead to the same place but read differently in
+ *  the bootstrap's result. */
+class NoRefreshTokenError extends Error {
+  constructor() {
+    super("No refresh token");
+    this.name = "NoRefreshTokenError";
+  }
+}
 
-function processQueue(error: unknown, token: string | null) {
-  failedQueue.forEach((p) => (error ? p.reject(error) : p.resolve(token!)));
-  failedQueue = [];
+/** A 2xx that carried no usable token. It is not a transport failure, so the
+ *  bootstrap must not sit in its retry loop waiting for it to get better. */
+class MalformedRefreshError extends Error {
+  constructor() {
+    super("Refresh response missing accessToken");
+    this.name = "MalformedRefreshError";
+  }
+}
+
+/**
+ * The one refresh request in flight, shared by every caller.
+ *
+ * Refresh tokens are single-use: the server rotates the presented token away
+ * and issues a new one. Two requests carrying the SAME token therefore look
+ * like a replay, and the server used to answer the loser by revoking the
+ * whole family - signing the operator out. A page load produced exactly that
+ * pair, because the session bootstrap refreshed on mount while the shell's
+ * own first request 401'd on the expired access token and refreshed too.
+ *
+ * Collapsing them onto one promise means a token is presented once per page
+ * load, whatever else is happening. The server-side grace window in
+ * AuthService covers the case this cannot reach: a second browser tab.
+ */
+let refreshInFlight: Promise<string> | null = null;
+
+/** Writes a freshly issued pair everywhere the app reads tokens from, so the
+ *  direct keys, the Zustand store and the session cookie never drift. */
+function persistTokens(accessToken: string, refreshToken?: string) {
+  localStorage.setItem("pharmerp_access_token", accessToken);
+  if (refreshToken) localStorage.setItem("pharmerp_refresh_token", refreshToken);
+  apiClient.defaults.headers["Authorization"] = `Bearer ${accessToken}`;
+
+  try {
+    const raw = JSON.parse(localStorage.getItem("pharmerp-auth") ?? "{}");
+    if (raw?.state) {
+      raw.state.accessToken = accessToken;
+      if (refreshToken) raw.state.refreshToken = refreshToken;
+      localStorage.setItem("pharmerp-auth", JSON.stringify(raw));
+    }
+  } catch {}
+
+  if (typeof document !== "undefined") {
+    document.cookie = "pharmerp_session=1; path=/; max-age=604800; SameSite=Lax";
+  }
+}
+
+/** The single place a refresh request is made. Concurrent callers join the
+ *  request already in flight instead of starting a second one. */
+function refreshAccessToken(): Promise<string> {
+  if (refreshInFlight) return refreshInFlight;
+
+  const run = (async () => {
+    const refreshToken = getStoredToken("pharmerp_refresh_token");
+    if (!refreshToken) throw new NoRefreshTokenError();
+
+    const res: any = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken });
+    // TransformInterceptor spreads the payload to the top level, so tokens
+    // are available both at res.data.accessToken and res.data.data.accessToken
+    const newAccess: string = res.data?.accessToken ?? res.data?.data?.accessToken;
+    const newRefresh: string = res.data?.refreshToken ?? res.data?.data?.refreshToken;
+    if (!newAccess) throw new MalformedRefreshError();
+
+    persistTokens(newAccess, newRefresh);
+    return newAccess;
+  })();
+
+  refreshInFlight = run;
+  // Cleared only if this is still the current attempt, so a later refresh
+  // started after this one settled is never cancelled by this one's cleanup.
+  void run
+    .finally(() => {
+      if (refreshInFlight === run) refreshInFlight = null;
+    })
+    .catch(() => {});
+
+  return run;
 }
 
 function clearAuthAndRedirect() {
@@ -141,65 +218,20 @@ apiClient.interceptors.response.use(
       return Promise.reject(error);
     }
 
-    if (isRefreshing) {
-      return new Promise((resolve, reject) => {
-        failedQueue.push({ resolve, reject });
-      }).then((token) => {
-        original.headers["Authorization"] = `Bearer ${token}`;
-        return apiClient(original);
-      });
-    }
-
     original._retry = true;
-    isRefreshing = true;
 
     try {
-      const refreshToken = getStoredToken("pharmerp_refresh_token");
-
-      if (!refreshToken) {
-        processQueue(new Error("No refresh token"), null);
-        clearAuthAndRedirect();
-        return Promise.reject(new Error("No refresh token"));
-      }
-
-      const res: any = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken });
-      // TransformInterceptor spreads the payload to the top level, so tokens
-      // are available both at res.data.accessToken and res.data.data.accessToken
-      const newAccess: string = res.data?.accessToken ?? res.data?.data?.accessToken;
-      const newRefresh: string = res.data?.refreshToken ?? res.data?.data?.refreshToken;
-
-      if (!newAccess) throw new Error("Refresh response missing accessToken");
-
-      localStorage.setItem("pharmerp_access_token", newAccess);
-      if (newRefresh) localStorage.setItem("pharmerp_refresh_token", newRefresh);
-
-      // Update default headers AND the original request's header so the retry
-      // never sends the old expired token regardless of Axios config caching.
-      apiClient.defaults.headers["Authorization"] = `Bearer ${newAccess}`;
+      // Joins the bootstrap's refresh if one is already running, so a page
+      // load never presents the same single-use token twice.
+      const newAccess = await refreshAccessToken();
+      // Set the header on the original request too, not just the client
+      // defaults, so the retry never resends the old token regardless of how
+      // Axios cached this config.
       original.headers["Authorization"] = `Bearer ${newAccess}`;
-
-      // Keep the Zustand store in sync so the in-memory state never goes stale.
-      try {
-        const raw = JSON.parse(localStorage.getItem("pharmerp-auth") ?? "{}");
-        if (raw?.state) {
-          raw.state.accessToken = newAccess;
-          if (newRefresh) raw.state.refreshToken = newRefresh;
-          localStorage.setItem("pharmerp-auth", JSON.stringify(raw));
-        }
-      } catch {}
-
-      if (typeof document !== "undefined") {
-        document.cookie = "pharmerp_session=1; path=/; max-age=604800; SameSite=Lax";
-      }
-
-      processQueue(null, newAccess);
       return apiClient(original);
     } catch (err) {
-      processQueue(err, null);
       clearAuthAndRedirect();
       return Promise.reject(err);
-    } finally {
-      isRefreshing = false;
     }
   },
 );
@@ -216,35 +248,15 @@ apiClient.interceptors.response.use(
 export type BootstrapResult = "ok" | "unauthorized" | "unreachable";
 
 export async function bootstrapSession(): Promise<BootstrapResult> {
-  const refreshToken = getStoredToken("pharmerp_refresh_token");
-  if (!refreshToken) return "unauthorized";
+  if (!getStoredToken("pharmerp_refresh_token")) return "unauthorized";
+
   try {
-    const res: any = await axios.post(`${BASE_URL}/auth/refresh`, { refreshToken });
-    const newAccess: string = res.data?.accessToken ?? res.data?.data?.accessToken;
-    const newRefresh: string = res.data?.refreshToken ?? res.data?.data?.refreshToken;
-
-    if (!newAccess) return "unauthorized";
-
-    localStorage.setItem("pharmerp_access_token", newAccess);
-    if (newRefresh) localStorage.setItem("pharmerp_refresh_token", newRefresh);
-    apiClient.defaults.headers["Authorization"] = `Bearer ${newAccess}`;
-
-    // Keep the Zustand store in sync so the in-memory state never goes stale.
-    try {
-      const raw = JSON.parse(localStorage.getItem("pharmerp-auth") ?? "{}");
-      if (raw?.state) {
-        raw.state.accessToken = newAccess;
-        if (newRefresh) raw.state.refreshToken = newRefresh;
-        localStorage.setItem("pharmerp-auth", JSON.stringify(raw));
-      }
-    } catch {}
-
-    if (typeof document !== "undefined") {
-      document.cookie = "pharmerp_session=1; path=/; max-age=604800; SameSite=Lax";
-    }
-
+    await refreshAccessToken();
     return "ok";
   } catch (err) {
+    if (err instanceof NoRefreshTokenError) return "unauthorized";
+    if (err instanceof MalformedRefreshError) return "unauthorized";
+
     const status = (err as AxiosError)?.response?.status;
 
     // No response at all, or a gateway/5xx from a restarting backend: the

@@ -9,6 +9,7 @@ interface Medicine {
   id: string;
   name: string;
   sku: string;
+  isActive?: boolean;
 }
 
 /**
@@ -53,7 +54,9 @@ export function MedicineCombobox({
     queryKey: ["medicine-search", query],
     queryFn: () =>
       apiClient.get("/inventory/medicines", {
-        params: { search: query, limit: 10, page: 1 },
+        // Ordering more of a medicine the import left unpriced is a normal
+        // thing to want to do — receiving that order is what reactivates it.
+        params: { search: query, limit: 10, page: 1, isActive: "all" },
       }) as Promise<{ data: Medicine[] }>,
     // Two characters is enough to narrow the catalogue without firing a query
     // on every first keystroke.
@@ -112,7 +115,14 @@ export function MedicineCombobox({
                 setOpen(false);
               }}
             >
-              <span className="font-medium text-slate-800 truncate">{m.name}</span>
+              <span className="font-medium text-slate-800 truncate">
+                {m.name}
+                {m.isActive === false && (
+                  <span className="ml-1.5 align-middle text-[9px] bg-amber-100 text-amber-700 font-extrabold px-1.5 py-0.5 rounded border border-amber-200">
+                    Inactive
+                  </span>
+                )}
+              </span>
               <span className="text-xs text-slate-400 font-mono shrink-0">{m.sku}</span>
             </button>
           ))}

@@ -285,11 +285,19 @@ export function PatientFirstBilling({
   // medicine that is sitting in the catalogue. Surfacing them lets staff fix
   // the row in place: receiving a batch with an MRP promotes it back to
   // active (batch.service.ts does the promotion server-side).
+  // limit 25, not 6. isActive: "all" alone was not enough: results come back
+  // in relevance order with no regard for status, so on a catalogue this size
+  // six slots were routinely filled by active rows and every inactive match
+  // fell off the end. Measured against the live catalogue, half of realistic
+  // search terms ("dolo", "pant", "thyr") returned six active rows and hid
+  // every one of their inactive matches — indistinguishable, from the desk,
+  // from the medicine not existing at all.
+  const MED_SEARCH_LIMIT = 25;
   const { data: medSearchRaw, isFetching: medSearching } = useQuery({
     queryKey: ["medicine-search-counter", debounced, activeBranchId],
     queryFn: () =>
       apiClient.get("/inventory/medicines", {
-        params: { search: debounced, limit: 6, isActive: "all" },
+        params: { search: debounced, limit: MED_SEARCH_LIMIT, isActive: "all" },
       }) as any,
     enabled: searchActive,
   });
@@ -308,6 +316,15 @@ export function PatientFirstBilling({
     if (Array.isArray(raw?.data)) return raw.data;
     if (Array.isArray(raw)) return raw;
     return [];
+  })();
+
+  // How many the catalogue actually holds for this term. Without it a
+  // truncated list looks like the whole answer, which is how "it is not in
+  // the system" gets said about a medicine that is.
+  const medTotal: number = (() => {
+    const raw = medSearchRaw as any;
+    const meta = raw?.data?.meta ?? raw?.meta;
+    return typeof meta?.total === "number" ? meta.total : medResults.length;
   })();
 
   // Whole medicine row, not just id+name: the OTC modal prices the sale from
@@ -570,7 +587,12 @@ export function PatientFirstBilling({
   const debouncedMeds = useDebounce(medicineSearch, 300);
   const { data: medsRaw, isFetching: medsFetching } = useQuery({
     queryKey: ["counter-medicine-search", debouncedMeds],
-    queryFn: () => apiClient.get("/inventory/medicines", { params: { search: debouncedMeds, limit: 8, isActive: "all" } }) as any,
+    queryFn: () =>
+      apiClient.get("/inventory/medicines", {
+        // See MED_SEARCH_LIMIT above: eight slots hid every inactive match for
+        // half of realistic search terms.
+        params: { search: debouncedMeds, limit: 25, isActive: "all" },
+      }) as any,
     enabled: path === "otc" && debouncedMeds.trim().length >= 2,
   });
   const meds: any[] = (() => {
@@ -1165,10 +1187,23 @@ export function PatientFirstBilling({
 
                     {/* Medicines group — OTC counter sale (billed by default) */}
                     {medResults.length > 0 && (
-                      <div className="divide-y divide-slate-100 border-t border-slate-100">
-                        <p className="px-4 py-1.5 bg-slate-50 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-b border-slate-100 flex items-center gap-1.5">
-                          <Pill size={11} /> Medicines
+                      <div className="border-t border-slate-100">
+                        <p className="px-4 py-1.5 bg-slate-50 text-[10px] font-extrabold uppercase tracking-wider text-slate-400 border-b border-slate-100 flex items-center justify-between gap-1.5 sticky top-0 z-10">
+                          <span className="flex items-center gap-1.5">
+                            <Pill size={11} /> Medicines
+                          </span>
+                          {/* Says plainly when there is more behind the list,
+                              so a missing medicine reads as "narrow the
+                              search", not as "we do not stock it". */}
+                          <span className="font-bold normal-case tracking-normal text-slate-400">
+                            {medTotal > medResults.length
+                              ? `showing ${medResults.length} of ${medTotal} — type more to narrow`
+                              : `${medTotal} match${medTotal !== 1 ? "es" : ""}`}
+                          </span>
                         </p>
+                        {/* Capped and scrollable: 25 rows would otherwise push
+                            the rest of the desk off the screen. */}
+                        <div className="max-h-[26rem] overflow-y-auto divide-y divide-slate-100">
                         {medResults.map((m: any) => (
                           <div
                             key={m.id}
@@ -1272,6 +1307,7 @@ export function PatientFirstBilling({
                             })()}
                           </div>
                         ))}
+                        </div>
                       </div>
                     )}
                   </div>

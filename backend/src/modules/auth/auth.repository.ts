@@ -61,12 +61,32 @@ export class AuthRepository {
     ipAddress?: string;
     userAgent?: string;
   }) {
-    await this.db.insert(schema.refreshTokens).values({
-      userId: data.userId,
-      tokenHash: data.tokenHash,
-      expiresAt: data.expiresAt,
-      ipAddress: data.ipAddress as any,
-      userAgent: data.userAgent,
+    const [row] = await this.db
+      .insert(schema.refreshTokens)
+      .values({
+        userId: data.userId,
+        tokenHash: data.tokenHash,
+        expiresAt: data.expiresAt,
+        ipAddress: data.ipAddress as any,
+        userAgent: data.userAgent,
+      })
+      .returning({ id: schema.refreshTokens.id });
+    return row!;
+  }
+
+  /** Records that `id` was retired by rotation, superseded by `successorId`.
+   *  Only rows carrying this link are eligible for the refresh grace window;
+   *  a token revoked by logout or deactivation leaves it null and stays dead. */
+  async markRefreshTokenReplacedBy(id: string, successorId: string) {
+    await this.db
+      .update(schema.refreshTokens)
+      .set({ revokedAt: new Date(), replacedByTokenId: successorId })
+      .where(eq(schema.refreshTokens.id, id));
+  }
+
+  async findRefreshTokenById(id: string) {
+    return this.db.query.refreshTokens.findFirst({
+      where: eq(schema.refreshTokens.id, id),
     });
   }
 

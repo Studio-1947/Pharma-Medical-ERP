@@ -48,6 +48,21 @@ function SessionBootstrap({ children }: { children: React.ReactNode }) {
 
         if (result === "unauthorized") {
           logout();
+          // Clearing the session is not enough to leave the page. Nothing on a
+          // protected route re-checks auth on its own: middleware only runs on
+          // a navigation, and the dashboard renders its skeleton whenever the
+          // store has no role, so it never mounts and never fires the request
+          // whose 401 would have redirected. Without this the operator is left
+          // watching an empty skeleton indefinitely — which is what a rejected
+          // refresh after a deploy looked like.
+          //
+          // A full location assignment, not router.push: the session is gone,
+          // so every cached query and store in this document is stale and the
+          // document should be rebuilt rather than re-rendered.
+          if (typeof window !== "undefined" && !pathname.startsWith("/login")) {
+            const from = encodeURIComponent(pathname);
+            window.location.href = `/login?from=${from}`;
+          }
           return;
         }
 

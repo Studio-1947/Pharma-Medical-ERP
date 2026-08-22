@@ -44,6 +44,18 @@ export const refreshTokens = pgTable("refresh_tokens", {
   userAgent: text("user_agent"),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  // The token that superseded this one when it was rotated on refresh.
+  //
+  // revokedAt alone cannot say WHY a token died, and the two reasons need
+  // opposite handling: a token retired by rotation may have a losing request
+  // still in flight against it, while one killed by logout, a role change or
+  // a deactivation must never authenticate anyone again. Only a row with this
+  // column set is eligible for the concurrent-rotation grace in AuthService.
+  //
+  // Deliberately not a foreign key: deleteExpiredRefreshTokens sweeps this
+  // table in bulk, and a self-referencing FK would make a whole expired chain
+  // undeletable in one statement.
+  replacedByTokenId: uuid("replaced_by_token_id"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .defaultNow()
     .notNull(),

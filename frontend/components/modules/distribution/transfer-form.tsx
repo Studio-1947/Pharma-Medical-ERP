@@ -13,6 +13,7 @@ interface Medicine {
   id: string;
   name: string;
   sku: string;
+  isActive?: boolean;
   scheduleClass: string | null;
 }
 
@@ -68,7 +69,9 @@ function MedicineCombobox({
     queryKey: ["medicine-search", query],
     queryFn: () =>
       apiClient.get("/inventory/medicines", {
-        params: { search: query, limit: 10, page: 1 },
+        // Stock of an inactive medicine is still stock, and moving it between
+        // branches is independent of whether the counter may price it yet.
+        params: { search: query, limit: 10, page: 1, isActive: "all" },
       }) as Promise<{ data: Medicine[] }>,
     enabled: query.length >= 2,
     staleTime: 10_000,
@@ -118,7 +121,14 @@ function MedicineCombobox({
                 setOpen(false);
               }}
             >
-              <span className="font-medium text-slate-800 truncate">{m.name}</span>
+              <span className="font-medium text-slate-800 truncate">
+                {m.name}
+                {m.isActive === false && (
+                  <span className="ml-1.5 align-middle text-[9px] bg-amber-100 text-amber-700 font-extrabold px-1.5 py-0.5 rounded border border-amber-200">
+                    Inactive
+                  </span>
+                )}
+              </span>
               <span className="text-xs text-slate-400 font-mono shrink-0">{m.sku}</span>
             </button>
           ))}

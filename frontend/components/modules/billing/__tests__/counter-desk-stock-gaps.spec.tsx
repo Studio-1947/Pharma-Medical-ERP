@@ -158,9 +158,17 @@ const INACTIVE = {
 };
 
 /** Routes every counter-desk query; only the two search calls carry data. */
-function stubApi({ medicines = [] as any[], patients = [] as any[] } = {}) {
+function stubApi({
+  medicines = [] as any[],
+  patients = [] as any[],
+  medicinesTotal,
+}: { medicines?: any[]; patients?: any[]; medicinesTotal?: number } = {}) {
   get.mockImplementation((url: string) => {
-    if (url === "/inventory/medicines") return Promise.resolve({ data: medicines });
+    if (url === "/inventory/medicines")
+      return Promise.resolve({
+        data: medicines,
+        meta: { total: medicinesTotal ?? medicines.length },
+      });
     if (url === "/patients") return Promise.resolve({ data: patients });
     if (url === "/billing/reports/end-of-day") return Promise.resolve({ data: { totalSales: 0 } });
     return Promise.resolve({ data: [] });
@@ -278,9 +286,10 @@ describe("counter desk — closing stock gaps from the search results", () => {
     );
 
     // The whole point: the desk asked for every status, not just active ones.
-    const medCall = get.mock.calls.find(
-      (c: any[]) => c[0] === "/inventory/medicines" && c[1]?.params?.limit === 6,
-    );
+    // Matched on the url, not on a hardcoded limit: the limit is a tuning
+    // decision and pinning it here made this test fail the moment it changed,
+    // for a reason that had nothing to do with what it checks.
+    const medCall = get.mock.calls.find((c: any[]) => c[0] === "/inventory/medicines");
     expect(medCall?.[1]?.params?.isActive).toBe("all");
 
     // Named as inactive rather than silently unsellable, and the only action
@@ -288,6 +297,42 @@ describe("counter desk — closing stock gaps from the search results", () => {
     expect(screen.getByText("Inactive")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /OTC sale/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Activate" })).toBeInTheDocument();
+  });
+
+  it("asks for enough rows that inactive matches are not crowded out", async () => {
+    stubApi({ medicines: [INACTIVE] });
+    renderDesk();
+    await search("cholecalciferol");
+
+    await waitFor(() =>
+      expect(screen.getByText("Cholecalciferol Capsules USP")).toBeInTheDocument(),
+    );
+
+    const medCall = get.mock.calls.find(
+      (c: any[]) => c[0] === "/inventory/medicines" && c[1]?.params?.isActive === "all",
+    );
+    // isActive: "all" is necessary but not sufficient. Results come back in
+    // relevance order with no regard for status, so a short limit fills up
+    // with active rows and drops every inactive match — measured against the
+    // live catalogue, six rows hid them for half of realistic search terms.
+    expect(medCall?.[1]?.params?.limit).toBeGreaterThanOrEqual(25);
+  });
+
+  it("says how many matches it is hiding, so a short list is not read as the whole answer", async () => {
+    const many = Array.from({ length: 25 }, (_, i) => ({
+      ...IN_STOCK,
+      id: `med-many-${i}`,
+      name: `Dolo ${i}`,
+      sku: `MED9${i}`,
+    }));
+    stubApi({ medicines: many, medicinesTotal: 41 });
+    renderDesk();
+    await search("dolo");
+
+    await waitFor(() => expect(screen.getByText("Dolo 0")).toBeInTheDocument());
+    // Without this the desk says "we do not have it" about a medicine that is
+    // simply on the far side of the cut.
+    expect(screen.getByText(/showing 25 of 41/i)).toBeInTheDocument();
   });
 
   it("routes an inactive medicine into the batch form that reprices it", async () => {
