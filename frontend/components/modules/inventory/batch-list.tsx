@@ -27,6 +27,7 @@ interface Medicine {
   name: string;
   sku: string;
   priceMrp: string;
+  isActive?: boolean;
 }
 
 function expiryLabel(dateStr: string) {
@@ -66,7 +67,11 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
   const handleBarcodeScan = async (scanCode: string) => {
     if (!scanCode) return;
     try {
-      const res: any = await apiClient.get("/inventory/medicines", { params: { search: scanCode, limit: 1 } });
+      // Receiving stock is exactly how an inactive medicine gets its price and
+      // becomes sellable again, so this must be able to find one.
+      const res: any = await apiClient.get("/inventory/medicines", {
+        params: { search: scanCode, limit: 1, isActive: "all" },
+      });
       const medicine = res?.data?.data?.[0] ?? res?.data?.[0];
       if (medicine) {
         setSelectedMedicine(medicine);
@@ -115,7 +120,10 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
 
   const { data: medicineResults } = useQuery({
     queryKey: ["medicine-search-form", medicineSearch],
-    queryFn: () => apiClient.get("/inventory/medicines", { params: { search: medicineSearch, limit: 8 } }) as any,
+    queryFn: () =>
+      apiClient.get("/inventory/medicines", {
+        params: { search: medicineSearch, limit: 8, isActive: "all" },
+      }) as any,
     enabled: medicineSearch.length >= 2 && !selectedMedicine,
   });
 
@@ -208,6 +216,11 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
                         }}
                         className="w-full text-left px-4 py-2.5 hover:bg-muted/50 text-sm border-b last:border-b-0">
                         <span className="font-medium">{m.name}</span>
+                        {m.isActive === false && (
+                          <span className="ml-1.5 align-middle text-[9px] bg-amber-100 text-amber-700 font-extrabold px-1.5 py-0.5 rounded border border-amber-200">
+                            Inactive
+                          </span>
+                        )}
                         <span className="text-muted-foreground ml-2 text-xs">{m.sku} — MRP ₹{parseFloat(m.priceMrp).toFixed(2)}</span>
                       </button>
                     ))}

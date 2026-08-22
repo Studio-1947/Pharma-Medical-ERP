@@ -32,6 +32,7 @@ export interface MedicineOption {
   packSize?: number | null;
   unit?: string | null;
   priceMrp?: string | null;
+  isActive?: boolean;
   scheduleClass?: string | null;
   requiresPrescription?: boolean;
   isControlled?: boolean;
@@ -99,7 +100,14 @@ export function MedicineAutocomplete({
     queryKey: ["medicine-autocomplete", debounced, branchId],
     queryFn: () =>
       apiClient.get("/inventory/medicines", {
-        params: { search: debounced.trim(), limit: 8, branchId: branchId || undefined },
+        // A doctor prescribes by name, not by catalogue status. Hiding the
+        // inactive rows here just makes the drug look absent entirely.
+        params: {
+          search: debounced.trim(),
+          limit: 8,
+          branchId: branchId || undefined,
+          isActive: "all",
+        },
       }) as Promise<any>,
     enabled: shouldSearch,
     staleTime: 60_000,
@@ -262,6 +270,11 @@ export function MedicineAutocomplete({
           >
             <div className="flex items-center justify-between gap-2">
               <span className="text-xs font-bold truncate">{m.name}</span>
+              {m.isActive === false && (
+                <span className="shrink-0 text-[9px] bg-amber-100 text-amber-700 font-extrabold px-1.5 py-0.5 rounded border border-amber-200">
+                  Inactive
+                </span>
+              )}
               <div className="flex items-center gap-1.5 shrink-0">
                 {scheduleBadge(m)}
                 {m.totalStock !== undefined && m.totalStock !== null && (

@@ -88,7 +88,12 @@ export function GlobalSearchModal({ open, onClose }: Props) {
 
   const { data: medicinesRes, isLoading: loadingMeds } = useQuery({
     queryKey: ["global-search-meds", debouncedQuery],
-    queryFn: () => apiClient.get("/inventory/medicines", { params: { search: debouncedQuery, limit: 5 } }),
+    // isActive: "all" — a search box that cannot find a medicine sitting in
+    // the catalogue is worse than no search box. Status is shown on the row.
+    queryFn: () =>
+      apiClient.get("/inventory/medicines", {
+        params: { search: debouncedQuery, limit: 5, isActive: "all" },
+      }),
     enabled: open && debouncedQuery.trim().length >= 2 && canSearchMedicines,
   });
 
@@ -214,6 +219,11 @@ export function GlobalSearchModal({ open, onClose }: Props) {
                           <div>
                             <p className="text-xs font-bold text-slate-800 group-hover:text-emerald-900">
                               {m.name}
+                              {m.isActive === false && (
+                                <span className="ml-1.5 align-middle text-[9px] bg-amber-100 text-amber-700 font-extrabold px-1.5 py-0.5 rounded border border-amber-200">
+                                  Inactive
+                                </span>
+                              )}
                             </p>
                             <p className="text-[10px] text-slate-500 flex flex-wrap items-center gap-1.5 mt-0.5">
                               <span>SKU: {m.sku} &bull; MRP: ₹{m.priceMrp}</span>

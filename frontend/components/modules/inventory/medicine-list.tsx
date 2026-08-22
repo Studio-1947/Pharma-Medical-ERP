@@ -43,7 +43,11 @@ export function MedicineList() {
   // Active-only by default, matching what the counter sees. "false" surfaces
   // the medicines a bulk import parked inactive for want of an MRP — they are
   // in the catalogue but sellable nowhere until someone prices them.
-  const [status, setStatus] = useState<"true" | "false" | "all">("true");
+  // Defaults to "all". The catalogue is what is IN inventory, and an import
+  // that could not parse an MRP parks the row inactive — defaulting to active
+  // only meant thousands of real medicines were absent from the one screen
+  // that is supposed to list them. The dropdown still narrows to either side.
+  const [status, setStatus] = useState<"true" | "false" | "all">("all");
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitial, setCreateInitial] = useState<Partial<CreateMedicineDto> | null>(null);
