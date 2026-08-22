@@ -643,7 +643,7 @@ describe("OTC counter sale", () => {
     expect(url).toBe("/billing/invoices");
     expect(payload.patientId).toBe("pat-existing");
     // A second record would split this customer's dues across two accounts.
-    expect(post.mock.calls.some(([u]: [string]) => u === "/patients")).toBe(false);
+    expect(post.mock.calls.some(([u]) => u === "/patients")).toBe(false);
   });
 
   it("sends only the part payment actually taken at the counter", async () => {

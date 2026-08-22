@@ -15,9 +15,7 @@ import type { TestingLibraryMatchers } from "@testing-library/jest-dom/matchers"
  * the locally imported expect for the same reason.
  */
 declare module "vitest" {
-  // eslint-disable-next-line @typescript-eslint/no-empty-interface
   interface Assertion<T = any> extends TestingLibraryMatchers<any, T> {}
-  // eslint-disable-next-line @typescript-eslint/no-empty-interface
   interface AsymmetricMatchersContaining
     extends TestingLibraryMatchers<any, any> {}
 }
