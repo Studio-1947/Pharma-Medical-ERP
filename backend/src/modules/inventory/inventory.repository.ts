@@ -137,6 +137,13 @@ export class InventoryRepository {
     if (params.categoryId) {
       conditions.push(eq(schema.medicines.categoryId, params.categoryId));
     }
+    if (params.drawer) {
+      // Case-insensitive exact match: staff write "a3" and "A3" for the same
+      // drawer, but "A3" must not pull in "A30".
+      conditions.push(
+        sql`lower(${schema.medicines.drawerMapping}) = lower(${params.drawer.trim()})`,
+      );
+    }
     if (params.requiresPrescription !== undefined) {
       conditions.push(
         eq(schema.medicines.requiresPrescription, params.requiresPrescription),
@@ -182,6 +189,10 @@ export class InventoryRepository {
           requiresPrescription: schema.medicines.requiresPrescription,
           isControlled: schema.medicines.isControlled,
           scheduleClass: schema.medicines.scheduleClass,
+          // Where the pack physically sits. Selected because every screen that
+          // lists a medicine is a screen where someone may need to go and find
+          // it — the counter especially.
+          drawerMapping: schema.medicines.drawerMapping,
           stripSize: schema.medicines.stripSize,
           isActive: schema.medicines.isActive,
           createdAt: schema.medicines.createdAt,

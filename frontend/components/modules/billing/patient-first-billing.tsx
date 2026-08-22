@@ -1306,6 +1306,14 @@ export function PatientFirstBilling({
                               <p className="text-xs text-slate-400 font-mono truncate">
                                 {m.sku}
                                 {m.scheduleClass ? ` · ${m.scheduleClass}` : ""}
+                                {/* Where to actually go and get it. The whole
+                                    point of mapping a drawer is that it shows
+                                    up at the moment someone is fetching. */}
+                                {m.drawerMapping && (
+                                  <span className="ml-1.5 font-sans font-bold text-slate-500">
+                                    · Drawer {m.drawerMapping}
+                                  </span>
+                                )}
                                 {m.isActive === false && (
                                   <span className="ml-1 font-sans text-amber-600 font-semibold">
                                     · no MRP — add a batch to activate
@@ -1714,6 +1722,11 @@ export function PatientFirstBilling({
                         </p>
                         <p className="text-xs text-slate-400 font-mono truncate">
                           {m.sku} · {formatStockUnit(remainingStock(m), m)}
+                          {m.drawerMapping && (
+                            <span className="ml-1 font-sans font-bold text-slate-500">
+                              · Drawer {m.drawerMapping}
+                            </span>
+                          )}
                           {inBillPacks(m) > 0 && (
                             <span className="ml-1 text-orange-600 font-bold">
                               · {inBillPacks(m)} in bill
