@@ -515,7 +515,10 @@ export default function BillingPage() {
             Invoice History
           </button>
         </div>
-        <PatientFirstBilling onContinueToPayment={() => setPaying(true)} />
+        <PatientFirstBilling
+          onContinueToPayment={() => setPaying(true)}
+          onOpenHistory={() => setShowHistory(true)}
+        />
       </div>
     );
   }

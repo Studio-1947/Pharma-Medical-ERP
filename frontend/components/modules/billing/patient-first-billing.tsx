@@ -69,9 +69,13 @@ type DeskPath = "prescription" | "doctor" | "otc" | null;
  */
 export function PatientFirstBilling({
   onContinueToPayment,
+  onOpenHistory,
 }: {
   /** Called when the built bill is handed over — the host page shows the POS for payment inline (new flow never navigates to the classic POS route). */
   onContinueToPayment?: () => void;
+  /** Opens the host page's invoice history. The bills card drills into it;
+   *  without it the card simply has no arrow rather than a dead one. */
+  onOpenHistory?: () => void;
 }) {
   const { navigate } = useNavigation();
   const { success: toastSuccess, warning: toastWarning, info: toastInfo, error: toastError } = useToast();
@@ -176,6 +180,14 @@ export function PatientFirstBilling({
     const s = raw?.data ?? raw;
     if (typeof s?.totalSales === "number") return s.totalSales;
     return 0;
+  })();
+
+  // Same response, already on the wire — the end-of-day summary returns the
+  // count alongside the value, so the bills card costs no extra request.
+  const todaysBillCount: number = (() => {
+    const raw = todaysSaleRaw as any;
+    const s = raw?.data ?? raw;
+    return typeof s?.totalInvoices === "number" ? s.totalInvoices : 0;
   })();
 
   // ── Counter desk stat cards ────────────────────────────────────────────────
@@ -848,33 +860,52 @@ export function PatientFirstBilling({
           </button>
         </div>
 
-        {/* Free hand-outs today — samples and staff medicine only. A paid OTC
-            sale is billed, so it counts under sales, not here. */}
+        {/* Bills today. Total sale gives the value; without the count there
+            was no way to tell one large bill from twenty small ones, which is
+            the figure a counter actually reconciles against at close.
+            
+            This slot used to hold free hand-outs. That figure is real but it
+            is almost always zero, and a zero sitting beside the billing
+            numbers read as "the bills did not count" — so it now appears as a
+            second line here, and only when there is something to report. */}
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col">
-          <p className="text-2xl font-black text-emerald-700">{otcToday.supplies}</p>
+          <p className="text-2xl font-black text-emerald-700">{todaysBillCount}</p>
           <p className="text-xs font-semibold text-slate-600 mt-0.5">
-            Free hand-outs (no bill)
-            {otcToday.units > 0 && (
-              <span className="ml-1 text-[10px] font-bold text-slate-400">({otcToday.units} units)</span>
-            )}
+            Bill{todaysBillCount !== 1 ? "s" : ""} today
           </p>
-          {/* Sitting beside the billing figures, a zero here reads as "the
-              bills did not count". It counts give-aways only, and walk-in
-              sales are bills, so say which is which rather than leave the
-              operator to infer it. */}
+          {/* The average, not the total: the total is already the header pill
+              a few centimetres away, and repeating it says nothing. What the
+              count adds is the shape of the day — twenty small bills and one
+              large one reconcile very differently. */}
           <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">
-            {otcToday.supplies === 0
-              ? "Nothing given free today — billed sales count under Total sale."
-              : "Samples and staff medicine. Billed sales count under Total sale."}
+            {todaysBillCount > 0
+              ? `${'₹'}${(todaysSale / todaysBillCount).toLocaleString("en-IN", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })} average`
+              : "No sale billed yet today."}
           </p>
-          <button
-            type="button"
-            onClick={() => setDeskModal("otc-today")}
-            className="mt-2 self-end w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600 transition-colors"
-            title="View free hand-outs recorded today"
-          >
-            <ArrowRight size={13} />
-          </button>
+          {otcToday.supplies > 0 && (
+            <button
+              type="button"
+              onClick={() => setDeskModal("otc-today")}
+              className="mt-1 self-start text-[10px] font-bold text-amber-700 hover:text-amber-900 underline underline-offset-2 text-left"
+              title="View free hand-outs recorded today"
+            >
+              + {otcToday.supplies} given free
+              {otcToday.units > 0 ? ` (${otcToday.units} units)` : ""}
+            </button>
+          )}
+          {onOpenHistory && (
+            <button
+              type="button"
+              onClick={onOpenHistory}
+              className="mt-2 self-end w-7 h-7 rounded-full bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600 transition-colors"
+              title="Open the invoice history"
+            >
+              <ArrowRight size={13} />
+            </button>
+          )}
         </div>
 
         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm flex flex-col">
