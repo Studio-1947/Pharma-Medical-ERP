@@ -1035,6 +1035,57 @@ export function OtcCounterSale({
             </div>
           )}
 
+          {/* Optional prescription on an ordinary counter sale.
+              
+              The scan-and-attach path already existed but only appeared when
+              something on the bill was Schedule H, where it is compulsory. A
+              customer often brings a prescription for medicines that do not
+              legally require one, and there was no way to put it on the bill
+              — the paper went home with them and the sale carried no record
+              of why those medicines were sold. Optional here, and quiet: it
+              must not read as a demand on a plain OTC sale. */}
+          {!anyControlled && mode === "bill" && (
+            <div className="rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+              {prescriptionId ? (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="flex items-start gap-2 text-xs text-emerald-800 min-w-0">
+                    <FileCheck size={14} className="shrink-0 mt-0.5" />
+                    <span>
+                      Prescription <strong>{rxLabel ?? "linked"}</strong> is
+                      attached to this sale.
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPrescriptionId(null);
+                      setRxLabel(null);
+                    }}
+                    className="shrink-0 text-[11px] font-bold text-slate-500 hover:text-red-600 underline underline-offset-2"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs text-slate-500 min-w-0">
+                    Customer brought a prescription?{" "}
+                    <span className="text-slate-400">
+                      Optional — it is filed against the bill.
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setRxPickerOpen(true)}
+                    className="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-[11px] font-bold transition-colors"
+                  >
+                    <Camera size={13} /> Scan / upload prescription
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Lines on this sale */}
           <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
             <div className="px-3.5 py-2 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between gap-2">
