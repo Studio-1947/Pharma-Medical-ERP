@@ -162,7 +162,13 @@ function stubApi({
   medicines = [] as any[],
   patients = [] as any[],
   medicinesTotal,
-}: { medicines?: any[]; patients?: any[]; medicinesTotal?: number } = {}) {
+  endOfDay = { totalSales: 0, totalInvoices: 0 },
+}: {
+  medicines?: any[];
+  patients?: any[];
+  medicinesTotal?: number;
+  endOfDay?: { totalSales: number; totalInvoices: number };
+} = {}) {
   get.mockImplementation((url: string) => {
     if (url === "/inventory/medicines")
       return Promise.resolve({
@@ -170,7 +176,8 @@ function stubApi({
         meta: { total: medicinesTotal ?? medicines.length },
       });
     if (url === "/patients") return Promise.resolve({ data: patients });
-    if (url === "/billing/reports/end-of-day") return Promise.resolve({ data: { totalSales: 0 } });
+    if (url === "/billing/reports/end-of-day")
+      return Promise.resolve({ data: { totalSales: endOfDay.totalSales, totalInvoices: endOfDay.totalInvoices } });
     return Promise.resolve({ data: [] });
   });
 }
@@ -362,6 +369,36 @@ describe("counter desk — closing stock gaps from the search results", () => {
     );
     expect(screen.queryByRole("button", { name: /OTC sale/i })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Activate" })).toBeInTheDocument();
+  });
+
+  it("counts the bills taken today, and their average", async () => {
+    // Total sale alone cannot tell twenty small bills from one large one,
+    // which is the shape a counter reconciles against at close.
+    stubApi({ endOfDay: { totalSales: 1199.79, totalInvoices: 4 } });
+    renderDesk();
+
+    expect(await screen.findByText("4")).toBeInTheDocument();
+    expect(screen.getByText(/Bills today/i)).toBeInTheDocument();
+    expect(screen.getByText(/299\.95 average/)).toBeInTheDocument();
+  });
+
+  it("says nothing has been billed rather than showing a bare zero", async () => {
+    stubApi({ endOfDay: { totalSales: 0, totalInvoices: 0 } });
+    renderDesk();
+
+    expect(await screen.findByText(/No sale billed yet today/i)).toBeInTheDocument();
+    // Never "₹NaN average" — the average divides by the count.
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+  });
+
+  it("keeps free hand-outs out of sight until there is one to report", async () => {
+    // The figure is real but almost always zero, and a zero beside the billing
+    // numbers read as "the bills did not count".
+    stubApi({ endOfDay: { totalSales: 500, totalInvoices: 2 } });
+    renderDesk();
+
+    await screen.findByText(/Bills today/i);
+    expect(screen.queryByText(/given free/i)).not.toBeInTheDocument();
   });
 
   it("hides both fixes from a user without the inventory and catalogue grants", async () => {
