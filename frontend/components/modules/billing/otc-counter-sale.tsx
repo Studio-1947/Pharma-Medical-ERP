@@ -723,6 +723,14 @@ export function OtcCounterSale({
     return (
       <RxPickerModal
         open
+        // Schedule H keeps its full strictness; a customer who simply brought
+        // a prescription for an ordinary sale is not asked for the doctor's
+        // council number, which they will not have.
+        context={anyControlled ? "schedule-h" : "optional"}
+        // If the sale is already going on someone's account, the prescription
+        // belongs on that same account rather than the shared walk-in record.
+        patientId={duePatientId}
+        patientName={duePatientId ? dueName.trim() || null : null}
         onClose={() => setRxPickerOpen(false)}
         onSelectRx={(rxId, details) => {
           setPrescriptionId(rxId);
