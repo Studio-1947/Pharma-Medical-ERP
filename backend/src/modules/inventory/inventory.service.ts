@@ -216,6 +216,51 @@ function withScheduleDerivedFlags<T extends {
   };
 }
 
+/** Runs every write through the same tidying, whichever screen it came from:
+ *  the inline row, the edit form and the CSV import all land here. */
+function withNormalizedDrawer<T extends { drawerMapping?: string | null }>(dto: T): T {
+  if (!("drawerMapping" in dto)) return dto;
+  const normalized = normalizeDrawerMapping(dto.drawerMapping);
+  return normalized === undefined ? dto : { ...dto, drawerMapping: normalized };
+}
+
+/**
+ * Canonicalises a drawer label.
+ *
+ * Left free, the same drawer arrives as "11", "d11", "D 11" and "Drawer 11",
+ * and none of them match each other — the exact filter that stock-taking
+ * depends on then reports four drawers where the shop has one. A bare number,
+ * or a lone "d" against one, means a drawer and is written as such.
+ *
+ * A label that already names its own kind of place is left alone apart from
+ * the capital: "Rack A-1" and "Lockbox H1-1" are not drawers, and the
+ * distinction between a rack and the lockbox that Schedule H1 stock lives in
+ * is one worth keeping. So is anything else the operator typed — "A3" is
+ * already a label and is not second-guessed.
+ */
+export function normalizeDrawerMapping(raw?: string | null): string | undefined {
+  if (raw == null) return undefined;
+  const value = raw.trim().replace(/\s+/g, " ");
+  if (!value) return "";
+
+  // A regex literal, not new RegExp: a pattern built from a string
+  // needs every backslash doubled, and a missed one turns \b into a
+  // backspace character that silently matches nothing.
+  const named = /^(drawer|rack|shelf|lockbox|bin|box|cabinet|tray)\b\s*(.*)$/i.exec(value);
+  if (named) {
+    const word = named[1]!.toLowerCase();
+    const rest = named[2]!.trim();
+    const titled = word.charAt(0).toUpperCase() + word.slice(1);
+    return rest ? `${titled} ${rest}` : titled;
+  }
+
+  // "11", "d11", "D 11", "D-11" — all the same drawer.
+  const bare = /^d?\s*-?\s*(\d[a-z0-9-]*)$/i.exec(value);
+  if (bare) return `Drawer ${bare[1]}`;
+
+  return value;
+}
+
 /** Opening stock read off a catalogue row, held until its medicine has an id. */
 interface PendingBatch {
   batchNo: string;
@@ -257,7 +302,7 @@ export class InventoryService {
   }
 
   async create(rawDto: CreateMedicineDto, userId?: string) {
-    const dto = withScheduleDerivedFlags(rawDto);
+    const dto = withNormalizedDrawer(withScheduleDerivedFlags(rawDto));
     await this.assertBarcodeUnique(dto.barcode);
     // If the operator left SKU blank, mint a MEDNNNNN like bulk import does.
     // Two simultaneous mints can race on the same next value, so retry a few
@@ -298,7 +343,7 @@ export class InventoryService {
   }
 
   async update(id: string, rawDto: UpdateMedicineDto) {
-    const dto = withScheduleDerivedFlags(rawDto);
+    const dto = withNormalizedDrawer(withScheduleDerivedFlags(rawDto));
     await this.findOne(id);
     await this.assertBarcodeUnique(dto.barcode, id);
     try {
