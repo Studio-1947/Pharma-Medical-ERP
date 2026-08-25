@@ -7,7 +7,13 @@ export const createBatchSchema = z.object({
   batchNo: z.string().min(1).max(100),
   expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD"),
   quantity: z.number().int().min(1),
-  costPrice: z.string().regex(/^\d+(\.\d{1,2})?$/),
+  /**
+   * Optional. A pack often arrives before its invoice does, and refusing the
+   * batch until someone knows the landed cost just keeps the stock off the
+   * shelf. Left out, the service costs the batch from the medicine's
+   * catalogue purchase rate — the same fallback the CSV import already uses.
+   */
+  costPrice: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
   mrpAtEntry: z.string().regex(/^\d+(\.\d{1,2})?$/),
   poId: z.string().uuid().optional(),
   grnId: z.string().uuid().optional(),
@@ -39,6 +45,13 @@ export const queryBatchSchema = z.object({
   // controller overwrites whatever arrives here with the caller's resolved
   // scope, so it is a super_admin selector rather than a client-trusted filter.
   branchId: z.string().uuid().optional(),
+  /**
+   * Free text over the medicine (name, brand, generic, SKU, barcode, drawer)
+   * and the batch number itself. A shelf holds thousands of batches, so
+   * paging to find one was the only way to reach a row that is being recalled
+   * or written off.
+   */
+  search: z.string().trim().min(1).optional(),
   status: z.string().optional(),
   expiringBefore: z.string().optional(),
   page: z.coerce.number().int().min(1).default(1),

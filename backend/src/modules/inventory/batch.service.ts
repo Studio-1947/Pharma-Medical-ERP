@@ -79,8 +79,17 @@ export class BatchService {
         await this.batchRepo.findOrCreateDefaultLocationForBranch(resolvedBranchId);
     }
 
+    // Cost price is optional on the way in: a pack routinely reaches the shelf
+    // before its invoice does. inventory_batches.cost_price is NOT NULL and
+    // feeds stock valuation, so an omitted cost falls back to the medicine's
+    // catalogue purchase rate, then to the batch MRP — the same ladder the CSV
+    // import walks. Only a medicine with neither lands at zero.
+    const costPrice =
+      dto.costPrice ?? medicine.purchaseRate ?? dto.mrpAtEntry ?? "0";
+
     const batch = await this.batchRepo.createBatch({
       ...dto,
+      costPrice,
       branchId: resolvedBranchId,
       resolvedLocationId,
     });
