@@ -77,6 +77,14 @@ export const queryMedicineSchema = z.object({
   // they were unreachable through the API entirely.
   isActive: booleanFilter.optional(),
   requiresPrescription: booleanFlag.optional(),
+  /**
+   * Physical location filter, for pulling up one drawer at a time.
+   *
+   * Separate from `search`, which would also match the drawer's label inside a
+   * medicine name or composition — "A3" is a substring of plenty of things.
+   * Stock-taking a drawer needs the precise list, not a plausible one.
+   */
+  drawer: z.string().max(50).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(1000).default(20),
 });

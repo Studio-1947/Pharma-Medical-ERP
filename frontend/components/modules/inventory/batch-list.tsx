@@ -2,9 +2,11 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { AlertTriangle, CheckCircle, Clock, Pencil, Plus, X, Camera, Barcode } from "lucide-react";
+import { AlertTriangle, CheckCircle, Clock, Pencil, Plus, X, Camera, Barcode, Search } from "lucide-react";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
+import { useActiveBranchId } from "@/hooks/use-branch";
+import { useDebounce } from "@/hooks/use-debounce";
 import { useToast } from "@/components/ui/toast";
 import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
 import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
@@ -51,7 +53,11 @@ interface AddStockFormProps {
 }
 
 function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lockedMedicine }: AddStockFormProps) {
-  const { user } = useAuthStore();
+  // Not user.branchId: a super_admin has none, so reading the JWT sent
+  // branchId: undefined and every attempt came back "super_admin must select a
+  // branch" even with a branch picked in the switcher. This is the branch the
+  // switcher is showing.
+  const { branchId: activeBranchId, needsSelection } = useActiveBranchId();
   const [medicineSearch, setMedicineSearch] = useState("");
   const [selectedMedicine, setSelectedMedicine] = useState<Medicine | null>(lockedMedicine ?? null);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -59,7 +65,7 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
     batchNo: "",
     expiryDate: "",
     quantity: "",
-    costPrice: lockedMedicine ? parseFloat(lockedMedicine.priceMrp).toFixed(2) : "",
+    costPrice: "",
     mrpAtEntry: lockedMedicine ? parseFloat(lockedMedicine.priceMrp).toFixed(2) : "",
   });
   const [error, setError] = useState("");
@@ -78,7 +84,6 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
         setForm((f) => ({
           ...f,
           mrpAtEntry: parseFloat(medicine.priceMrp).toFixed(2),
-          costPrice: parseFloat(medicine.priceMrp).toFixed(2),
         }));
         setMedicineSearch("");
         setError("");
@@ -152,23 +157,35 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
     e.preventDefault();
     setError("");
     if (!selectedMedicine) { setError("Select a medicine first."); return; }
+    if (needsSelection) {
+      setError("Select a branch in the top bar first — stock has to land in one.");
+      return;
+    }
     if (!form.batchNo.trim()) { setError("Batch number is required."); return; }
     if (isDuplicate) { setError(`Batch number "${form.batchNo.trim()}" already exists for this medicine.`); return; }
     if (!form.expiryDate) { setError("Expiry date is required."); return; }
     const qty = parseInt(form.quantity);
     if (!qty || qty < 1) { setError("Quantity must be at least 1."); return; }
+    // Cost is optional — the invoice often turns up after the pack does. Left
+    // blank, the server costs the batch from the medicine's purchase rate
+    // rather than booking it at zero into stock valuation. A typed value still
+    // has to be a sane number.
+    const costEntered = form.costPrice.trim().length > 0;
     const cost = parseFloat(form.costPrice);
-    if (!cost || cost < 0) { setError("Cost price is required."); return; }
+    if (costEntered && (isNaN(cost) || cost < 0)) {
+      setError("Cost price must be a positive amount, or left blank.");
+      return;
+    }
     const mrp = parseFloat(form.mrpAtEntry || selectedMedicine.priceMrp);
     if (!mrp || mrp < 0) { setError("MRP is required."); return; }
 
     mutation.mutate({
       medicineId: selectedMedicine.id,
-      branchId: user?.branchId,
+      ...(activeBranchId ? { branchId: activeBranchId } : {}),
       batchNo: form.batchNo.trim(),
       expiryDate: form.expiryDate,
       quantity: qty,
-      costPrice: cost.toFixed(2),
+      ...(costEntered ? { costPrice: cost.toFixed(2) } : {}),
       mrpAtEntry: mrp.toFixed(2),
     });
   };
@@ -286,16 +303,21 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
             />
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-700">Cost Price (₹) *</label>
+            <label className="text-sm font-medium text-gray-700">
+              Cost Price (₹) <span className="text-muted-foreground font-normal">(optional)</span>
+            </label>
             <input
               type="number"
               step="0.01"
               min={0}
-              placeholder="6.50"
+              placeholder="Leave blank if unknown"
               value={form.costPrice}
               onChange={(e) => setForm((f) => ({ ...f, costPrice: e.target.value }))}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
+            <p className="text-[11px] text-muted-foreground">
+              Blank uses the medicine&apos;s purchase rate for stock valuation.
+            </p>
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-gray-700">MRP (₹) *</label>
@@ -666,6 +688,10 @@ interface Props {
 export function BatchList({ medicineId, medicine }: Props) {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
+  const [search, setSearch] = useState("");
+  // Typed, not scanned — a shelf search is a person spelling a brand name, so
+  // hold each keystroke rather than fire a query per character.
+  const debouncedSearch = useDebounce(search.trim(), 250);
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Batch | null>(null);
   const [adjustTarget, setAdjustTarget] = useState<Batch | null>(null);
@@ -679,6 +705,7 @@ export function BatchList({ medicineId, medicine }: Props) {
   const params: Record<string, any> = { page, limit: 20 };
   if (medicineId) params.medicineId = medicineId;
   if (status) params.status = status;
+  if (debouncedSearch) params.search = debouncedSearch;
 
   const { data, isLoading } = useQuery({
     queryKey: ["batches", params],
@@ -727,7 +754,33 @@ export function BatchList({ medicineId, medicine }: Props) {
   return (
     <div>
       {/* Filters + Add Stock */}
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        {!medicineId && (
+          <div className="relative flex-1 min-w-[220px] sm:max-w-sm">
+            <Search
+              size={16}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              placeholder="Search by medicine or batch number..."
+              aria-label="Search batches"
+              className="w-full border rounded-lg pl-9 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => { setSearch(""); setPage(1); }}
+                aria-label="Clear batch search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-slate-700"
+              >
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        )}
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
@@ -878,8 +931,10 @@ export function BatchList({ medicineId, medicine }: Props) {
                 })}
                 {(data as any).data?.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-muted-foreground">
-                      No batches found. Use &quot;Add Stock&quot; to receive inventory.
+                    <td colSpan={medicineId ? 8 : 9} className="text-center py-12 text-muted-foreground">
+                      {debouncedSearch
+                        ? `No batches match "${debouncedSearch}".`
+                        : "No batches found. Use “Add Stock” to receive inventory."}
                     </td>
                   </tr>
                 )}

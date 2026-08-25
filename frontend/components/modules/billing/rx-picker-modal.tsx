@@ -27,9 +27,30 @@ interface Props {
   onSelectRx: (rxId: string, rxDetails?: any) => void;
   patientId?: string | null;
   patientName?: string | null;
+  /**
+   * Why the picker is open.
+   *
+   * "schedule-h" is the compulsory case: the sale is illegal without a
+   * prescription and the register has to identify the prescriber, so the
+   * doctor's council number is required.
+   *
+   * "optional" is a customer who simply brought a prescription for an
+   * ordinary counter sale. Demanding an MCI number there asks for something
+   * the operator does not have and did not need, and the only way out would
+   * be to abandon the record entirely.
+   */
+  context?: "schedule-h" | "optional";
 }
 
-export function RxPickerModal({ open, onClose, onSelectRx, patientId, patientName }: Props) {
+export function RxPickerModal({
+  open,
+  onClose,
+  onSelectRx,
+  patientId,
+  patientName,
+  context = "schedule-h",
+}: Props) {
+  const optionalContext = context === "optional";
   const [tab, setTab] = useState<"search" | "upload">("search");
   const [search, setSearch] = useState("");
   const debouncedSearch = useDebounce(search, 300);
@@ -42,6 +63,13 @@ export function RxPickerModal({ open, onClose, onSelectRx, patientId, patientNam
   const [hospitalName, setHospitalName] = useState("");
   const [physicalRegisterNo, setPhysicalRegisterNo] = useState("");
   const [fileKey, setFileKey] = useState<string | null>(null);
+  // Who the prescription belongs to, when the screen that opened this had
+  // nobody selected. A counter sale is a walk-in by definition, so requiring a
+  // patient here blocked the paper-Rx form outright — including for Schedule
+  // H, where the fallback below had been written for exactly this case and
+  // could never run.
+  const [walkInName, setWalkInName] = useState("");
+  const [walkInPhone, setWalkInPhone] = useState("");
 
   const { data: rxResponse, isLoading } = useQuery({
     queryKey: ["rx-picker-search", patientId, debouncedSearch],
@@ -57,32 +85,81 @@ export function RxPickerModal({ open, onClose, onSelectRx, patientId, patientNam
     enabled: open && tab === "search",
   });
 
+  /** The reserved anonymous record every unnamed counter prescription shares. */
+  const WALK_IN_PHONE = "0000000000";
+
+  const findPatientByPhone = async (phone: string): Promise<string | null> => {
+    const digits = phone.replace(/\D/g, "");
+    if (digits.length < 10) return null;
+    const res: any = await apiClient.get("/patients", {
+      params: { search: digits.slice(-10), limit: 10 },
+    });
+    const rows = res?.data?.data ?? res?.data ?? res ?? [];
+    const match = (Array.isArray(rows) ? rows : []).find(
+      (p: any) => String(p?.phone ?? "").replace(/\D/g, "").slice(-10) === digits.slice(-10),
+    );
+    return match?.id ?? null;
+  };
+
+  /**
+   * The patient this prescription is filed against when the calling screen had
+   * none. A named customer gets their own record; otherwise it goes on the
+   * shared walk-in one, which is what keeps an unnamed paper Rx recordable at
+   * all rather than lost.
+   */
+  const resolveWalkInPatient = async (): Promise<string> => {
+    const named = walkInName.trim();
+    const phone = walkInPhone.trim();
+
+    if (named && phone) {
+      const existing = await findPatientByPhone(phone);
+      if (existing) return existing;
+      const created: any = await apiClient.post("/patients", { name: named, phone });
+      const id = created?.data?.id ?? created?.id;
+      if (id) return id;
+      const retry = await findPatientByPhone(phone);
+      if (retry) return retry;
+    }
+
+    // Matched on the reserved number, not on the name: searching for "Walk-in"
+    // would happily return a real person whose name merely contains it.
+    const existingWalkIn = await findPatientByPhone(WALK_IN_PHONE);
+    if (existingWalkIn) return existingWalkIn;
+
+    const createRes: any = await apiClient.post("/patients", {
+      name: "Walk-in Customer",
+      phone: WALK_IN_PHONE,
+    });
+    const id = createRes?.data?.id ?? createRes?.id;
+    if (id) return id;
+
+    const retry = await findPatientByPhone(WALK_IN_PHONE);
+    if (retry) return retry;
+    throw new Error("Could not assign a patient record for the prescription.");
+  };
+
   // Physical Rx Creation + Auto-Verify Mutation
   const createPhysicalRxMutation = useMutation({
     mutationFn: async () => {
       let activePatientId = patientId;
       if (!activePatientId) {
         try {
-          const searchRes: any = await apiClient.get("/patients", { params: { search: "Walk-in", limit: 1 } });
-          const existingWalkIn = (searchRes?.data?.data ?? searchRes?.data ?? searchRes)?.[0];
-          if (existingWalkIn?.id) {
-            activePatientId = existingWalkIn.id;
-          } else {
-            const createPatientRes: any = await apiClient.post("/patients", {
-              name: "Walk-in Customer",
-              phone: "0000000000",
-            });
-            activePatientId = createPatientRes?.data?.id ?? createPatientRes?.id;
-          }
-        } catch {
-          throw new Error("Could not assign a patient record for the prescription. Please select a patient.");
+          activePatientId = await resolveWalkInPatient();
+        } catch (err) {
+          throw new Error(
+            (err as Error)?.message ??
+              "Could not assign a patient record for the prescription. Please select a patient.",
+          );
         }
       }
 
       if (!doctorName.trim()) {
         throw new Error("Doctor Name is required.");
       }
-      if (!doctorRegNo.trim()) {
+      // The council number identifies the prescriber in the Schedule H
+      // register. An ordinary counter sale keeps no such register, and the
+      // customer's slip often does not carry it.
+      if (!optionalContext && !doctorRegNo.trim()) {
         throw new Error("Doctor Medical Registration Number is required for Schedule H sales.");
       }
 
@@ -272,88 +349,121 @@ export function RxPickerModal({ open, onClose, onSelectRx, patientId, patientNam
         ) : (
           /* Tab 2: Log Physical Paper Rx */
           <div className="space-y-4 pt-1">
-            {!patientId ? (
-              <div className="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold">
-                ⚠️ Please select a patient in POS search before logging a physical prescription.
-              </div>
-            ) : (
-              <div className="space-y-3.5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                      Prescribing Doctor Name *
-                    </label>
+            <div className="space-y-3.5">
+              {/* No patient on the calling screen. A counter sale is a
+                  walk-in by definition, so this used to block the form
+                  outright — the paper prescription simply could not be
+                  recorded. Naming the customer is offered, not demanded. */}
+              {!patientId && (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2.5">
+                  <p className="text-[11px] font-semibold text-slate-600">
+                    Whose prescription is this?{" "}
+                    <span className="font-normal text-slate-400">
+                      Optional — left blank it is filed against the shared
+                      walk-in record.
+                    </span>
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                     <input
-                      value={doctorName}
-                      onChange={(e) => setDoctorName(e.target.value)}
-                      placeholder="e.g. Dr. A. K. Sharma"
+                      value={walkInName}
+                      onChange={(e) => setWalkInName(e.target.value)}
+                      placeholder="Customer name"
+                      aria-label="Customer name for this prescription"
+                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                    />
+                    <input
+                      value={walkInPhone}
+                      onChange={(e) => setWalkInPhone(e.target.value)}
+                      placeholder="Phone number"
+                      inputMode="tel"
+                      aria-label="Customer phone for this prescription"
                       className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
                     />
                   </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                      Doctor Reg. No. (MCI / State Council) *
-                    </label>
-                    <input
-                      value={doctorRegNo}
-                      onChange={(e) => setDoctorRegNo(e.target.value)}
-                      placeholder="e.g. WBMC-84920 / MCI-4819"
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-                    />
-                  </div>
+                  {walkInName.trim() && !walkInPhone.trim() && (
+                    <p className="text-[11px] font-semibold text-amber-700">
+                      A phone number is needed to file it under this name —
+                      otherwise it goes on the shared walk-in record.
+                    </p>
+                  )}
                 </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                      Hospital / Clinic Name
-                    </label>
-                    <input
-                      value={hospitalName}
-                      onChange={(e) => setHospitalName(e.target.value)}
-                      placeholder="e.g. City Hospital / Apex Clinic"
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                      Physical Register Serial / Ref No
-                    </label>
-                    <input
-                      value={physicalRegisterNo}
-                      onChange={(e) => setPhysicalRegisterNo(e.target.value)}
-                      placeholder="e.g. SCH-H-2026/0491"
-                      className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-                    />
-                  </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Prescribing Doctor Name *
+                  </label>
+                  <input
+                    value={doctorName}
+                    onChange={(e) => setDoctorName(e.target.value)}
+                    placeholder="e.g. Dr. A. K. Sharma"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                  />
                 </div>
 
                 <div className="space-y-1">
                   <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
-                    Scan / Photo of Physical Paper Prescription
+                    Doctor Reg. No. (MCI / State Council)
+                    {optionalContext ? "" : " *"}
                   </label>
-                  <PrescriptionScanUpload
-                    value={fileKey}
-                    onChange={setFileKey}
-                    variant="compact"
+                  <input
+                    value={doctorRegNo}
+                    onChange={(e) => setDoctorRegNo(e.target.value)}
+                    placeholder="e.g. WBMC-84920 / MCI-4819"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Hospital / Clinic Name
+                  </label>
+                  <input
+                    value={hospitalName}
+                    onChange={(e) => setHospitalName(e.target.value)}
+                    placeholder="e.g. City Hospital / Apex Clinic"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
                   />
                 </div>
 
-                <div className="pt-2 flex justify-end">
-                  <Button
-                    variant="primary"
-                    size="md"
-                    isLoading={createPhysicalRxMutation.isPending}
-                    leftIcon={<Plus size={16} />}
-                    onClick={() => createPhysicalRxMutation.mutate()}
-                  >
-                    Verify & Link Physical Rx to Checkout
-                  </Button>
+                <div className="space-y-1">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                    Physical Register Serial / Ref No
+                  </label>
+                  <input
+                    value={physicalRegisterNo}
+                    onChange={(e) => setPhysicalRegisterNo(e.target.value)}
+                    placeholder="e.g. SCH-H-2026/0491"
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                  />
                 </div>
               </div>
-            )}
+
+              <div className="space-y-1">
+                <label className="block text-xs font-bold uppercase tracking-wider text-slate-700">
+                  Scan / Photo of Physical Paper Prescription
+                </label>
+                <PrescriptionScanUpload
+                  value={fileKey}
+                  onChange={setFileKey}
+                  variant="compact"
+                />
+              </div>
+
+              <div className="pt-2 flex justify-end">
+                <Button
+                  variant="primary"
+                  size="md"
+                  isLoading={createPhysicalRxMutation.isPending}
+                  leftIcon={<Plus size={16} />}
+                  onClick={() => createPhysicalRxMutation.mutate()}
+                >
+                  Verify & Link Physical Rx to Checkout
+                </Button>
+              </div>
+            </div>
           </div>
         )}
       </div>

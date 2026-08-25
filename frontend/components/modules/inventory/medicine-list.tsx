@@ -27,6 +27,8 @@ interface Medicine {
   isControlled: boolean;
   scheduleClass?: string;
   isActive: boolean;
+  /** Where the pack physically sits on the shelf, e.g. "A3". */
+  drawerMapping?: string | null;
 }
 
 interface ApiListResponse {
@@ -61,6 +63,14 @@ export function MedicineList() {
   // Inline MRP editing
   const [editingMrpId, setEditingMrpId] = useState<string | null>(null);
   const [editingMrpValue, setEditingMrpValue] = useState("");
+  // Inline drawer editing. Mapping a catalogue of thousands to physical
+  // drawers through the full edit form, one modal at a time, is not something
+  // anyone would finish — the point is to be able to walk the shelves and
+  // type as you go.
+  const [editingDrawerId, setEditingDrawerId] = useState<string | null>(null);
+  const [editingDrawerValue, setEditingDrawerValue] = useState("");
+  /** Narrows the list to one drawer, for checking it against the shelf. */
+  const [drawer, setDrawer] = useState("");
 
   const mrpMutation = useMutation({
     mutationFn: ({ id, priceMrp, isActive }: { id: string; priceMrp: string; isActive?: boolean }) =>
@@ -77,6 +87,32 @@ export function MedicineList() {
       toastError("Update failed", err?.response?.data?.message ?? "Could not update MRP.");
     },
   });
+
+  const drawerMutation = useMutation({
+    mutationFn: ({ id, drawerMapping }: { id: string; drawerMapping: string }) =>
+      apiClient.patch(`/inventory/medicines/${id}`, { drawerMapping }),
+    onSuccess: () => {
+      void invalidateMedicineViews(queryClient);
+      setEditingDrawerId(null);
+      setEditingDrawerValue("");
+    },
+    onError: (err: any) => {
+      toastError("Could not save the drawer", err?.response?.data?.message ?? "Try again.");
+      setEditingDrawerId(null);
+      setEditingDrawerValue("");
+    },
+  });
+
+  /** Saves only a real change, so tabbing through the list writes nothing. */
+  const commitDrawer = (m: Medicine) => {
+    const next = editingDrawerValue.trim();
+    if (next !== (m.drawerMapping ?? "").trim()) {
+      drawerMutation.mutate({ id: m.id, drawerMapping: next });
+    } else {
+      setEditingDrawerId(null);
+      setEditingDrawerValue("");
+    }
+  };
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => apiClient.delete(`/inventory/medicines/${id}`),
@@ -109,7 +145,13 @@ export function MedicineList() {
     }
   };
 
-  const params = { search, page, limit: 20, isActive: status };
+  const params = {
+    search,
+    page,
+    limit: 20,
+    isActive: status,
+    ...(drawer.trim() ? { drawer: drawer.trim() } : {}),
+  };
 
   const { data, isLoading, isError } = useQuery<ApiListResponse>({
     queryKey: queryKeys.medicines.list(params),
@@ -144,6 +186,14 @@ export function MedicineList() {
             <Camera size={16} />
           </button>
         </div>
+        <input
+          value={drawer}
+          onChange={(e) => { setDrawer(e.target.value); setPage(1); }}
+          placeholder="Drawer (e.g. A3)"
+          aria-label="Filter by drawer"
+          title="Show only the medicines mapped to one drawer"
+          className="w-40 border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary text-slate-700"
+        />
         <select
           value={status}
           onChange={(e) => { setStatus(e.target.value as typeof status); setPage(1); }}
@@ -197,6 +247,7 @@ export function MedicineList() {
                   <th className="text-left px-4 py-3 font-medium">Name</th>
                   <th className="text-left px-4 py-3 font-medium">SKU</th>
                   <th className="text-left px-4 py-3 font-medium">Unit</th>
+                  <th className="text-left px-4 py-3 font-medium">Drawer</th>
                   <th className="text-right px-4 py-3 font-medium">MRP</th>
                   <th className="text-right px-4 py-3 font-medium">Stock</th>
                   <th className="text-center px-4 py-3 font-medium">Class</th>
@@ -221,6 +272,51 @@ export function MedicineList() {
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-slate-600">{m.sku}</td>
                     <td className="px-4 py-3 text-slate-700">{m.unit}</td>
+                    {/* Click to type, Enter or blur to save, Escape to abandon
+                        — the same inline pattern as MRP, because mapping a
+                        shelf means editing many rows in a row. */}
+                    <td className="px-4 py-3">
+                      {editingDrawerId === m.id ? (
+                        <input
+                          value={editingDrawerValue}
+                          onChange={(e) => setEditingDrawerValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") commitDrawer(m);
+                            if (e.key === "Escape") {
+                              setEditingDrawerId(null);
+                              setEditingDrawerValue("");
+                            }
+                          }}
+                          onBlur={() => commitDrawer(m)}
+                          placeholder="e.g. A3"
+                          aria-label={`Drawer for ${m.name}`}
+                          maxLength={50}
+                          autoFocus
+                          className="w-24 border rounded px-2 py-1 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-white"
+                        />
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingDrawerId(m.id);
+                            setEditingDrawerValue(m.drawerMapping ?? "");
+                          }}
+                          aria-label={`Drawer for ${m.name}`}
+                          title={
+                            m.drawerMapping
+                              ? `In drawer ${m.drawerMapping} — click to change`
+                              : "Not mapped to a drawer yet — click to set one"
+                          }
+                          className={
+                            m.drawerMapping
+                              ? "px-2 py-0.5 rounded border border-slate-200 bg-slate-50 text-xs font-bold text-slate-700 hover:border-emerald-300 hover:bg-emerald-50 transition-colors"
+                              : "text-xs text-slate-300 hover:text-emerald-600 transition-colors"
+                          }
+                        >
+                          {m.drawerMapping || "Set"}
+                        </button>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-right">
                       {editingMrpId === m.id ? (
                         <div className="flex items-center justify-end gap-1">
@@ -369,7 +465,7 @@ export function MedicineList() {
                 ))}
                 {data.data.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="text-center py-16 text-muted-foreground">
+                    <td colSpan={9} className="text-center py-16 text-muted-foreground">
                       No medicines found.
                     </td>
                   </tr>

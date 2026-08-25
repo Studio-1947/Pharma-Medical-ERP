@@ -124,6 +124,20 @@ describe("medicine search — what the one counter box can find", () => {
     expect(sql).toContain(`WHEN LOWER("medicines"."barcode") = LOWER(`);
   });
 
+  it("filters to one drawer exactly, not by substring", async () => {
+    const sql = await sqlFor({ drawer: "A3", page: 1, limit: 20 });
+    // Stock-taking a drawer needs the precise list. A LIKE would pull "A30"
+    // into a check of "A3" and the count would never reconcile.
+    expect(sql).toMatch(/lower\("medicines"\."drawer_mapping"\) = lower\(/);
+    expect(sql).not.toContain('"medicines"."drawer_mapping" ilike');
+  });
+
+  it("returns the drawer with the list, so a screen can show where to look", async () => {
+    const sql = await sqlFor({ page: 1, limit: 20 });
+    // Selected, not just filterable: the counter needs to read it off the row.
+    expect(sql).toContain('"medicines"."drawer_mapping"');
+  });
+
   it("keeps the active-only default, and drops it only for isActive=all", async () => {
     const plain = await sqlFor({ search: "cetirizine", page: 1, limit: 10 });
     expect(plain).toContain(`"medicines"."is_active" =`);
