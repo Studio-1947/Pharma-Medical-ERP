@@ -86,3 +86,23 @@ export function getUnitLabel(
   }
   return u;
 }
+
+/**
+ * Only solid, individually countable doses may be sold out of their pack.
+ *
+ * `stripSize` is also used by the catalogue for non-solid packs (for example
+ * the mL in a bottle of drops).  Treating every value greater than one as a
+ * loose-sale option let staff sell "one loose unit" from a bottle, which is
+ * neither a meaningful dispensing unit nor a valid stock conversion.
+ */
+export function canSellLooseUnits(m: {
+  unit?: string | null;
+  dosageForm?: string | null;
+}): boolean {
+  const form = (m.dosageForm || "").trim().toLowerCase();
+  if (/(tablet|capsule|caplet|pill|lozenge)/.test(form)) return true;
+
+  // Older catalogue imports do not always have a dosage form. A strip is the
+  // one packaging unit we can safely recognise as individually dispensable.
+  return (m.unit || "").trim().toLowerCase() === "strip";
+}

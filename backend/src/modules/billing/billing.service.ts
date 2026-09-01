@@ -46,6 +46,8 @@ interface MedicineSnapshot {
   requiresPrescription: boolean;
   taxPercent: string;
   stripSize: number | null;
+  unit: string | null;
+  dosageForm: string | null;
   isActive: boolean;
 }
 
@@ -97,6 +99,19 @@ export function isControlledSchedule(scheduleClass: string | null | undefined): 
   if (!scheduleClass) return false;
   const normalised = scheduleClass.trim().toUpperCase().replace(/^SCHEDULE[_\s-]?/, "");
   return normalised === "H" || normalised === "H1" || normalised === "X";
+}
+
+/** `stripSize` may describe a bottle's volume; only solid doses are divisible. */
+export function unitsPerSalePack(medicine: Pick<MedicineSnapshot, "stripSize" | "unit" | "dosageForm">): number {
+  const form = (medicine.dosageForm ?? "").trim().toLowerCase();
+  const unit = (medicine.unit ?? "").trim().toLowerCase();
+  // Legacy rows predate dosage-form/unit capture. Retain their established
+  // strip conversion until they are enriched; an explicit Bottle/Drops form
+  // always wins and is never divisible.
+  const isSolidDose = /(tablet|capsule|caplet|pill|lozenge)/.test(form)
+    || unit === "strip"
+    || (!form && !unit);
+  return isSolidDose ? Math.max(1, medicine.stripSize ?? 1) : 1;
 }
 
 @Injectable()
@@ -185,6 +200,8 @@ export class BillingService {
           requiresPrescription: schema.medicines.requiresPrescription,
           taxPercent: schema.medicines.taxPercent,
           stripSize: schema.medicines.stripSize,
+          unit: schema.medicines.unit,
+          dosageForm: schema.medicines.dosageForm,
           isActive: schema.medicines.isActive,
         })
         .from(schema.medicines)
@@ -345,7 +362,7 @@ export class BillingService {
       const lines: AllocationLine[] = allAllocations.map(({ item, med, allocation }) => {
         // Pre-tax unit price, despite the column name — see the note on
         // TaxService.calculateLineTax. GST is added on top, deliberately.
-        const unitMrp = parseFloat(allocation.mrpAtEntry) / (med.stripSize || 1);
+        const unitMrp = parseFloat(allocation.mrpAtEntry) / unitsPerSalePack(med);
         const { lineTotal, taxAmount, breakdown } = this.taxService.calculateLineTax(
           unitMrp,
           allocation.allocate,
@@ -599,7 +616,7 @@ export class BillingService {
         medicineId: line.item.medicineId,
         batchId: line.batchId,
         quantity: line.allocate,
-        unitPrice: String(parseFloat(line.mrpAtEntry) / (line.med.stripSize || 1)),
+        unitPrice: String(parseFloat(line.mrpAtEntry) / unitsPerSalePack(line.med)),
         discountPct: line.item.discountPct ?? "0",
         taxPct: String(parseFloat(line.med.taxPercent)),
         lineTotal: line.lineTotal.toFixed(2),
@@ -691,7 +708,7 @@ export class BillingService {
       medicineName: line.med.name,
       batchId: line.batchId,
       quantity: line.allocate,
-      unitPrice: parseFloat(line.mrpAtEntry) / (line.med.stripSize || 1),
+      unitPrice: parseFloat(line.mrpAtEntry) / unitsPerSalePack(line.med),
       lineTotal: parseFloat(line.lineTotal.toFixed(2)),
       taxAmount: parseFloat(line.taxAmount.toFixed(2)),
       paymentMode: paymentMode as SaleEventDto["paymentMode"],

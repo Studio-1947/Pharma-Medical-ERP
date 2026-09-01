@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { Modal } from "@/components/ui/modal";
 import { format } from "date-fns";
-import { Receipt, AlertTriangle, Loader2 } from "lucide-react";
+import { Receipt, AlertTriangle, Loader2, Printer } from "lucide-react";
 import { formatTokenNo } from "@pharmerp/types";
 import { ShareRecordButton } from "@/components/shared/share-record-button";
 
@@ -28,6 +28,12 @@ function fmtDate(value?: string | null) {
   return Number.isNaN(d.getTime()) ? "--" : format(d, "MMM d, yyyy · h:mm a");
 }
 
+function escapeHtml(value: unknown) {
+  return String(value ?? "").replace(/[&<>\"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  })[char]!);
+}
+
 export function InvoiceDetailModal({
   invoiceId,
   onClose,
@@ -45,6 +51,29 @@ export function InvoiceDetailModal({
   const inv = raw?.data?.data ?? raw?.data ?? raw;
   const items: any[] = Array.isArray(inv?.items) ? inv.items : [];
   const payments: any[] = Array.isArray(inv?.payments) ? inv.payments : [];
+  const printInvoice = () => {
+    if (!inv) return;
+    const popup = window.open("", "_blank", "width=794,height=1050");
+    if (!popup) return;
+    const rows = items.map((item, index) => `
+      <tr><td>${index + 1}. ${escapeHtml(item.itemName ?? item.medicine?.name ?? item.medicineName ?? "--")}</td>
+      <td>${escapeHtml(item.batch?.batchNo ?? "--")}</td><td class="right">${escapeHtml(item.quantity ?? 0)}</td>
+      <td class="right">${inr(item.unitPrice)}</td><td class="right">${inr(item.lineTotal)}</td></tr>`).join("");
+    const paymentRows = payments.map((payment) =>
+      `<tr><td>${escapeHtml(payment.mode ?? "--")}</td><td class="right">${inr(payment.amount)}</td></tr>`,
+    ).join("");
+    popup.document.write(`<!doctype html><html><head><title>Invoice ${escapeHtml(inv.invoiceNo)}</title>
+      <style>@page{size:A4;margin:18mm}body{font:14px Arial;color:#111}h1{margin:0;font-size:22px}.muted{color:#666}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{padding:8px 6px;border-bottom:1px solid #ddd;text-align:left}th{font-size:11px;text-transform:uppercase;color:#666}.right{text-align:right}.total{font-size:18px;font-weight:700}</style>
+      </head><body><h1>Tax Invoice / Bill of Supply</h1><p class="muted">Invoice ${escapeHtml(inv.invoiceNo ?? "--")} &middot; ${escapeHtml(fmtDate(inv.createdAt))}</p>
+      <p><b>Patient:</b> ${escapeHtml(inv.patient?.name ?? "Walk-in")}</p>
+      <table><thead><tr><th>Medicine</th><th>Batch</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Total</th></tr></thead><tbody>${rows}</tbody></table>
+      <table><tbody><tr><td>Total</td><td class="right total">${inr(inv.totalAmount)}</td></tr></tbody></table>
+      ${paymentRows ? `<h3>Payments</h3><table><tbody>${paymentRows}</tbody></table>` : ""}
+      </body></html>`);
+    popup.document.close();
+    popup.focus();
+    setTimeout(() => { popup.print(); popup.close(); }, 300);
+  };
 
   return (
     <Modal
@@ -82,7 +111,16 @@ export function InvoiceDetailModal({
 
           {/* Patient-facing link. Revocable and expiring, so a bill sent to the
               wrong number can be killed. */}
-          <ShareRecordButton type="invoice" recordId={inv.id} label="Share bill with patient" />
+          <div className="flex flex-wrap items-center gap-2">
+            <ShareRecordButton type="invoice" recordId={inv.id} label="Share bill with patient" />
+            <button
+              type="button"
+              onClick={printInvoice}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            >
+              <Printer size={14} /> Print bill
+            </button>
+          </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
             <div>

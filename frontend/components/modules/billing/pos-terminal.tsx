@@ -9,7 +9,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Search, Trash2, Plus, Minus, ShoppingCart, Printer, AlertTriangle, FileText, Star, X, UserPlus, Camera, ShieldAlert, ShieldCheck, Maximize2, Minimize2, PanelLeftClose, PanelLeftOpen, LayoutGrid, Table, Percent, Edit3, SlidersHorizontal, CheckCircle2 } from "lucide-react";
 import { useCartStore, CartItem } from "@/stores/cart.store";
 import { useUIStore } from "@/stores/ui.store";
-import { formatStockUnit, getUnitLabel } from "@/lib/stock-unit-formatter";
+import { canSellLooseUnits, formatStockUnit, getUnitLabel } from "@/lib/stock-unit-formatter";
 import { isControlledScheduleClass } from "@/lib/schedule-class";
 import { PaymentModal } from "./payment-modal";
 import { RxPickerModal } from "./rx-picker-modal";
@@ -1528,7 +1528,7 @@ ${buildReceiptHeaderHtml({
                           </span>
                         </td>
                         <td className="py-2.5 px-3">
-                          {item.stripSize > 1 ? (
+                          {item.stripSize > 1 && canSellLooseUnits({ unit: item.unit }) ? (
                             <button
                               onClick={() => toggleUnit(item.medicineId, item.batchId)}
                               className="text-[10px] font-bold px-2 py-0.5 rounded border bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100 transition cursor-pointer"
@@ -2029,7 +2029,7 @@ ${buildReceiptHeaderHtml({
                       </button>
                     </div>
 
-                    {item.stripSize > 1 && (
+                    {item.stripSize > 1 && canSellLooseUnits({ unit: item.unit }) && (
                       <button
                         onClick={() => toggleUnit(item.medicineId, item.batchId)}
                         className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-emerald-50 border-emerald-200 text-emerald-800 hover:bg-emerald-100 transition cursor-pointer"

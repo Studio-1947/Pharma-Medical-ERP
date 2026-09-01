@@ -1214,3 +1214,6 @@ building anything that assumes partial-batch transfers work.
 | 5 | Planned | Payroll engine, salary slips, leave encashment |
 | 6 | Planned | Kubernetes deployment, Prometheus/Grafana, CI/CD |
 | 7 | Planned | Insurance claim management, Tally/Zoho integration |
+
+
+)RKX.jR.B1@W''-k - ADMIN root pass 

@@ -25,7 +25,7 @@ import { apiClient, queryKeys } from "@/lib/api-client";
 import { useActiveBranchId } from "@/hooks/use-branch";
 import { useDebounce } from "@/hooks/use-debounce";
 import { usePermissions } from "@/hooks/use-permissions";
-import { formatStockUnit, getUnitLabel } from "@/lib/stock-unit-formatter";
+import { canSellLooseUnits, formatStockUnit, getUnitLabel } from "@/lib/stock-unit-formatter";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
 import { quoteOtcSaleLines } from "@/lib/otc-quote";
 import { scheduleLabel } from "@/lib/schedule-class";
@@ -33,6 +33,7 @@ import { invalidateMedicineViews } from "@/lib/query-invalidation";
 import { useAuthStore } from "@/stores/auth.store";
 import { RxPickerModal } from "./rx-picker-modal";
 import { InvoiceDetailModal } from "./invoice-detail-modal";
+import { PaymentModal } from "./payment-modal";
 import { Modal } from "@/components/ui/modal";
 
 /**
@@ -161,6 +162,7 @@ export function OtcCounterSale({
   const [referredByDoctorId, setReferredByDoctorId] = useState("");
   const [notes, setNotes] = useState("");
   const [billedInvoiceId, setBilledInvoiceId] = useState<string | null>(null);
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
   // Inactive medicine MRP edit state
   const [inactiveMrpTarget, setInactiveMrpTarget] = useState<any | null>(null);
   const [inactiveMrpValue, setInactiveMrpValue] = useState("");
@@ -262,6 +264,7 @@ export function OtcCounterSale({
       dosageForm: line.medicine.dosageForm ?? null,
       stripSize,
     };
+    const canSellLoose = canSellLooseUnits(unitInfo);
     const schedule = scheduleLabel(line.medicine.scheduleClass);
     const controlled = !!line.medicine.requiresPrescription || !!schedule;
     // Total sellable across every FEFO batch — the server allocates across
@@ -273,9 +276,13 @@ export function OtcCounterSale({
     // Quantity in the unit the invoice API speaks. Mirrors the POS exactly: a
     // pack line is sent as packs x stripSize, because the server prices per
     // loose unit (mrpAtEntry / stripSize).
-    const baseUnits = line.saleUnit === "pack" ? line.quantity * stripSize : line.quantity;
+    // A bottle is one inventory unit even when its catalogue "pack size" is
+    // 30 mL. Only tablets/capsules are converted between a pack and loose
+    // units.
+    const unitsPerSalePack = canSellLoose ? stripSize : 1;
+    const baseUnits = line.saleUnit === "pack" ? line.quantity * unitsPerSalePack : line.quantity;
     const maxQty =
-      line.saleUnit === "pack" ? Math.floor(totalAvailable / stripSize) : totalAvailable;
+      line.saleUnit === "pack" ? Math.floor(totalAvailable / unitsPerSalePack) : totalAvailable;
     const selectedBatch = batches.find((b) => b.id === line.batchId) ?? batches[0] ?? null;
     const freeMax = Number(selectedBatch?.quantity ?? 0);
 
@@ -285,6 +292,8 @@ export function OtcCounterSale({
       batches,
       loading: !!q?.isLoading,
       stripSize,
+      unitsPerSalePack,
+      canSellLoose,
       taxPct,
       unitInfo,
       schedule,
@@ -309,7 +318,9 @@ export function OtcCounterSale({
       units: r.baseUnits,
       discountPct: r.line.discountPct,
       taxPct: r.taxPct,
-      stripSize: r.stripSize,
+      // The quote mirrors the billing service: a non-divisible pack is priced
+      // as one whole bottle/box, not as N imaginary loose units.
+      stripSize: r.unitsPerSalePack,
     })),
   );
 
@@ -514,7 +525,7 @@ export function OtcCounterSale({
 
   // ── Billed OTC sale — the normal invoice route ────────────────────────────
   const billMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (checkoutPayments?: { mode: string; amount: number; ref?: string }[]) => {
       // A due has to belong to someone: the server refuses to leave a balance
       // owing on an anonymous walk-in, so the account is settled before the
       // invoice is written.
@@ -542,7 +553,13 @@ export function OtcCounterSale({
                 },
               ]
             : [{ mode: "credit", amount: "0.00" }]
-          : [
+          : checkoutPayments
+            ? checkoutPayments.map((payment) => ({
+                mode: payment.mode,
+                amount: payment.amount.toFixed(2),
+                ...(payment.ref?.trim() ? { referenceNo: payment.ref.trim() } : {}),
+              }))
+            : [
               {
                 mode: paymentMode,
                 amount: quote.total.toFixed(2),
@@ -700,7 +717,11 @@ export function OtcCounterSale({
     if (!rxCleared) return;
     // Nobody's name on the debt, nobody to collect it from.
     if (!creditReady) return;
-    billMutation.mutate();
+    if (!onCredit) {
+      setCheckoutOpen(true);
+      return;
+    }
+    billMutation.mutate(undefined);
   };
 
   const pending = billMutation.isPending || freeMutation.isPending;
@@ -1211,7 +1232,7 @@ export function OtcCounterSale({
                     {!r.loading && !outOfStock && (
                       <>
                         {/* Sale unit — only meaningful when a pack holds more than one */}
-                        {mode === "bill" && r.stripSize > 1 && (
+                        {mode === "bill" && r.canSellLoose && r.stripSize > 1 && (
                           <div>
                             <p
                               id={`otc-saleunit-label-${r.line.medicine.id}`}
@@ -1729,7 +1750,7 @@ export function OtcCounterSale({
                   <Receipt size={14} />
                   {leavesDebt
                     ? `Bill ${inr(quote.total)} — ${inr(dueAmount)} on account`
-                    : `Bill ${inr(quote.total)}`}
+                    : `Pay & checkout ${inr(quote.total)}`}
                 </>
               ) : (
                 <>
@@ -1743,6 +1764,19 @@ export function OtcCounterSale({
       </form>
 
       {/* Inactive medicine MRP edit — set price and reactivate before adding */}
+      <PaymentModal
+        open={checkoutOpen}
+        total={quote.total}
+        hasPatient={false}
+        initialMode={paymentMode === "credit" ? "cash" : paymentMode}
+        onClose={() => setCheckoutOpen(false)}
+        onConfirm={(_, payments) => {
+          setCheckoutOpen(false);
+          billMutation.mutate(payments);
+        }}
+        loading={billMutation.isPending}
+      />
+
       <Modal
         title="Set MRP & Activate"
         subtitle={inactiveMrpTarget ? `"${inactiveMrpTarget.name}" is currently inactive — enter its MRP to make it sellable.` : undefined}

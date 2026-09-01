@@ -28,9 +28,11 @@ interface Props {
   needsRx?: boolean;
   prescriptionId?: string | null;
   onOpenRxPicker?: () => void;
+  /** Preselect the tender chosen on the calling screen. */
+  initialMode?: "cash" | "upi" | "card";
 }
 
-export function PaymentModal({ open, total, hasPatient, onConfirm, onClose, loading, needsRx, prescriptionId, onOpenRxPicker }: Props) {
+export function PaymentModal({ open, total, hasPatient, onConfirm, onClose, loading, needsRx, prescriptionId, onOpenRxPicker, initialMode = "cash" }: Props) {
   const [mode, setMode] = useState<string>("cash");
   const [splits, setSplits] = useState<{ mode: string; amount: string; ref: string }[]>([
     { mode: "cash", amount: "", ref: "" },
@@ -40,12 +42,12 @@ export function PaymentModal({ open, total, hasPatient, onConfirm, onClose, load
 
   useEffect(() => {
     if (open) {
-      setMode("cash");
-      setSplits([{ mode: "cash", amount: String(total.toFixed(2)), ref: "" }]);
+      setMode(initialMode);
+      setSplits([{ mode: initialMode, amount: String(total.toFixed(2)), ref: "" }]);
       setCashTendered(String(total.toFixed(2)));
       setError("");
     }
-  }, [open, total]);
+  }, [open, total, initialMode]);
 
   // Lock body scroll while open
   useEffect(() => {

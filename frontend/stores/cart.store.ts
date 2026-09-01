@@ -1,6 +1,7 @@
 "use client";
 import { create } from "zustand";
 import { isControlledRow } from "@/lib/schedule-class";
+import { canSellLooseUnits } from "@/lib/stock-unit-formatter";
 import { persist } from "zustand/middleware";
 
 // Doctor consultation fee attached to a prescription dispense. Billed as a
@@ -121,6 +122,7 @@ export const useCartStore = create<CartState>()(
         set((s) => ({
           items: s.items.map((i) => {
             if (i.batchId !== batchId) return i;
+            if (!canSellLooseUnits({ unit: i.unit })) return i;
             const nextUnit = i.saleUnit === "pack" ? "loose" : "pack";
             const nextQty =
               nextUnit === "loose"
