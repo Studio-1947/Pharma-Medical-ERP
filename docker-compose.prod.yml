@@ -82,9 +82,12 @@ services:
     container_name: pharmerp_frontend
     image: pharmerp-frontend:current
     restart: unless-stopped
-    env_file: .env.production
     environment:
       NODE_ENV: production
+      # Do not inherit the backend's PORT=4000 from .env.production. Next's
+      # standalone server otherwise binds to 4000 while nginx proxies to 3000,
+      # resulting in a permanent 502 despite a "Ready" frontend process.
+      PORT: "3000"
       NEXT_PUBLIC_API_URL: /api/v1
       # Days an asset is kept after the last deploy that shipped it. Sets how
       # long a client running an old build can still resolve its chunks.

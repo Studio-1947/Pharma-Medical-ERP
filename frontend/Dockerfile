@@ -24,6 +24,9 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
+# The backend uses PORT=4000 in the shared production environment. The
+# frontend is a separate upstream and must remain on nginx's configured 3000.
+ENV PORT=3000
 
 COPY --from=build /app/frontend/.next/standalone ./
 COPY --from=build /app/frontend/.next/static ./frontend/.next/static
