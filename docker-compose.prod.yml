@@ -31,7 +31,7 @@ services:
     healthcheck:
       # A 502 is a successful nginx process with a failed upstream. Probe the
       # HTTPS app route, not merely `nginx -t`, so deploy --wait catches it.
-      test: ["CMD-SHELL", "wget --no-check-certificate --no-verbose --tries=1 --spider https://localhost/ || exit 1"]
+      test: ["CMD-SHELL", "wget -q --no-check-certificate --spider https://localhost/ || exit 1"]
       interval: 10s
       timeout: 10s
       retries: 6
@@ -107,7 +107,9 @@ services:
         max-size: "50m"
         max-file: "5"
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1"]
+      # This image already includes Node 20. Use fetch instead of BusyBox wget:
+      # its GNU-only flags caused a false "unhealthy" result on Alpine.
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -214,7 +216,7 @@ services:
         max-size: "50m"
         max-file: "5"
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8123/ping || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -237,7 +239,7 @@ services:
         max-size: "50m"
         max-file: "5"
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:9000/minio/health/live || exit 1"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9000/minio/health/live || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5

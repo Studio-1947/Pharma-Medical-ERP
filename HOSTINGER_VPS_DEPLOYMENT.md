@@ -179,8 +179,8 @@ docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail
 
 # Check each layer independently: API, Next.js frontend, then nginx proxy.
 docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend node -e "fetch('http://127.0.0.1:4000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
-docker compose --env-file .env.production -f docker-compose.prod.yml exec -T frontend wget --no-verbose --tries=1 --spider http://localhost:3000
-docker compose --env-file .env.production -f docker-compose.prod.yml exec -T nginx wget --no-check-certificate --no-verbose --tries=1 --spider https://localhost/
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T frontend node -e "fetch('http://127.0.0.1:3000').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T nginx wget -q --no-check-certificate --spider https://localhost/
 ```
 
 To restore the last known-good application images immediately (while you
