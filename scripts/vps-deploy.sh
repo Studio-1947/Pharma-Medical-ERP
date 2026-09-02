@@ -426,7 +426,7 @@ docker compose -f docker-compose.prod.yml ps
 # Verify backend health
 log "Checking backend health..."
 for i in $(seq 1 30); do
-  if docker compose -f docker-compose.prod.yml exec -T backend wget --no-verbose --tries=1 --spider http://localhost:4000/api/v1/health 2>/dev/null; then
+  if docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend node -e "fetch('http://127.0.0.1:4000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))" 2>/dev/null; then
     log "Backend is healthy!"
     break
   fi
@@ -476,7 +476,7 @@ docker compose -f docker-compose.prod.yml ps
 
 echo ""
 echo "--- Backend Health ---"
-docker compose -f docker-compose.prod.yml exec -T backend wget --no-verbose --tries=1 --spider http://localhost:4000/api/v1/health 2>&1 && log "Backend: HEALTHY" || warn "Backend: NOT YET HEALTHY"
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend node -e "fetch('http://127.0.0.1:4000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))" 2>&1 && log "Backend: HEALTHY" || warn "Backend: NOT YET HEALTHY"
 
 echo ""
 echo "--- Nginx Status ---"

@@ -178,7 +178,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml ps
 docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=200 nginx frontend backend
 
 # Check each layer independently: API, Next.js frontend, then nginx proxy.
-docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend wget --no-verbose --tries=1 --spider http://localhost:4000/api/v1/health
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend node -e "fetch('http://127.0.0.1:4000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 docker compose --env-file .env.production -f docker-compose.prod.yml exec -T frontend wget --no-verbose --tries=1 --spider http://localhost:3000
 docker compose --env-file .env.production -f docker-compose.prod.yml exec -T nginx wget --no-check-certificate --no-verbose --tries=1 --spider https://localhost/
 ```
@@ -311,7 +311,7 @@ Upon pushing code to `main`:
 2. **SSH Connection**: Connects to `187.127.185.82`.
 3. **Pull & Backup**: Navigates to `/opt/pharmerp`, executes `git pull origin main`, and runs `./scripts/backup-db.sh` to ensure data safety.
 4. **Build & Refresh**: Executes `docker compose -f docker-compose.prod.yml up -d --build` to deploy updated code.
-5. **Health Check**: Verifies `/api/v1/health` responds with HTTP 200.
+5. **Health Check**: Verifies `/health` responds with HTTP 200.
 
 ---
 
