@@ -167,6 +167,12 @@ frontend, and the actual nginx HTTPS route before reporting success. It also
 keeps one rollback image for the backend and frontend, and restores it
 automatically when a new release fails its health checks.
 
+This stack is safe for a shared VPS: the host nginx remains the sole public
+listener on ports **80** and **443**, while this project's Docker nginx binds
+only to `127.0.0.1:8093` by default. The host nginx site for this ERP must
+proxy to `http://127.0.0.1:8093`; do not stop or alter nginx sites belonging to
+other projects.
+
 If nginx ever displays **502 Bad Gateway**, connect to the VPS and run the
 following commands exactly. They do not delete the database or Docker volumes.
 
@@ -180,7 +186,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail
 # Check each layer independently: API, Next.js frontend, then nginx proxy.
 docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend node -e "fetch('http://127.0.0.1:4000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 docker compose --env-file .env.production -f docker-compose.prod.yml exec -T frontend node -e "fetch('http://127.0.0.1:3000').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
-docker compose --env-file .env.production -f docker-compose.prod.yml exec -T nginx wget -q --no-check-certificate --spider https://localhost/
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T nginx wget -q --spider http://localhost/
 ```
 
 To restore the last known-good application images immediately (while you

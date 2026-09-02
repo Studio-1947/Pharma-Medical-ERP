@@ -110,7 +110,7 @@ fi
 echo "[4/5] Verifying API, frontend, and nginx routing..."
 if ! compose exec -T backend node -e "fetch('http://127.0.0.1:4000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))" \
   || ! compose exec -T frontend node -e "fetch('http://127.0.0.1:3000').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))" \
-  || ! compose exec -T nginx wget -q --no-check-certificate --spider https://localhost/; then
+  || ! compose exec -T nginx wget -q --spider http://localhost/; then
   fail_and_rollback "deployment completed but the application is not reachable through nginx."
 fi
 
