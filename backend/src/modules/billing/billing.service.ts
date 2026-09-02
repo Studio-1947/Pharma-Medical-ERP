@@ -475,12 +475,14 @@ export class BillingService {
         );
       }
 
-      // Under-payment is the "Due billing" path: the balance becomes what the
-      // patient owes. A walk-in has no account to owe against, so we still
-      // require full payment for anonymous sales.
+      // Under-payment is the "Due billing" path. A named patient's balance is
+      // also accrued on their account; an anonymous balance remains invoice-only.
       const amountDueDec = finalTotalDec.minus(paymentTotalDec);
       const hasDue = amountDueDec.greaterThan(0);
-      if (hasDue && !dto.patientId) {
+      const allowWalkInBalance = true;
+      // Walk-in invoices may carry a balance. It remains visible on the
+      // invoice, but without a named patient there is no account ledger entry.
+      if (hasDue && !dto.patientId && !allowWalkInBalance) {
         throw new UnprocessableEntityException(
           "Walk-in sales must be paid in full — register a patient to accept a partial payment as due",
         );

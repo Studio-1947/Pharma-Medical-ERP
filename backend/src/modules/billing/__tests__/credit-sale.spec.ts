@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
 import { BillingService } from "../billing.service";
-import { UnprocessableEntityException } from "@nestjs/common";
 
 /**
  * Counter credit sales — medicines handed over now, money collected later —
@@ -175,8 +174,8 @@ describe("CREDIT-01 — a sale handed over entirely on credit", () => {
     expect(tx.insert).not.toHaveBeenCalled();
   });
 
-  it("refuses to leave a balance owing on an anonymous walk-in", async () => {
-    const { service, mockBatchRepo, buildTx } = buildService();
+  it("keeps an anonymous walk-in balance on the invoice", async () => {
+    const { service, mockRepo, mockBatchRepo, mockPatientsRepo, buildTx } = buildService();
 
     const { result } = runSale(
       service,
@@ -186,7 +185,12 @@ describe("CREDIT-01 — a sale handed over entirely on credit", () => {
       [[MEDICINE_ROW], [{ id: "batch-1" }]],
     );
 
-    await expect(result).rejects.toBeInstanceOf(UnprocessableEntityException);
+    await result;
+    const invoice = mockRepo.createInvoiceWithItems.mock.calls[0]![0];
+    expect(invoice.amountPaid).toBe("0.00");
+    expect(invoice.amountDue).toBe("112.00");
+    expect(invoice.status).toBe("partially_paid");
+    expect(mockPatientsRepo.addOutstanding).not.toHaveBeenCalled();
   });
 });
 

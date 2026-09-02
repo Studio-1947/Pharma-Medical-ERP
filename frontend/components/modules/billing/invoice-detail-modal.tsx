@@ -7,6 +7,7 @@ import { format } from "date-fns";
 import { Receipt, AlertTriangle, Loader2, Printer } from "lucide-react";
 import { formatTokenNo } from "@pharmerp/types";
 import { ShareRecordButton } from "@/components/shared/share-record-button";
+import { buildReceiptHeaderHtml, RECEIPT_HEADER_STYLES } from "@/lib/receipt-header";
 
 /**
  * Read-only view of a past invoice: what was dispensed, from which batch, and
@@ -63,8 +64,8 @@ export function InvoiceDetailModal({
       `<tr><td>${escapeHtml(payment.mode ?? "--")}</td><td class="right">${inr(payment.amount)}</td></tr>`,
     ).join("");
     popup.document.write(`<!doctype html><html><head><title>Invoice ${escapeHtml(inv.invoiceNo)}</title>
-      <style>@page{size:A4;margin:18mm}body{font:14px Arial;color:#111}h1{margin:0;font-size:22px}.muted{color:#666}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{padding:8px 6px;border-bottom:1px solid #ddd;text-align:left}th{font-size:11px;text-transform:uppercase;color:#666}.right{text-align:right}.total{font-size:18px;font-weight:700}</style>
-      </head><body><h1>Tax Invoice / Bill of Supply</h1><p class="muted">Invoice ${escapeHtml(inv.invoiceNo ?? "--")} &middot; ${escapeHtml(fmtDate(inv.createdAt))}</p>
+      <style>@page{size:A4;margin:18mm}body{font:14px Arial;color:#111}.muted{color:#666}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{padding:8px 6px;border-bottom:1px solid #ddd;text-align:left}th{font-size:11px;text-transform:uppercase;color:#666}.right{text-align:right}.total{font-size:18px;font-weight:700}${RECEIPT_HEADER_STYLES}</style>
+      </head><body>${buildReceiptHeaderHtml({ tokenNo: inv.tokenNo, origin: window.location.origin, subtitle: "Tax Invoice / Bill of Supply" })}<p class="muted">Invoice ${escapeHtml(inv.invoiceNo ?? "--")} &middot; ${escapeHtml(fmtDate(inv.createdAt))}</p>
       <p><b>Patient:</b> ${escapeHtml(inv.patient?.name ?? "Walk-in")}</p>
       <table><thead><tr><th>Medicine</th><th>Batch</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Total</th></tr></thead><tbody>${rows}</tbody></table>
       <table><tbody><tr><td>Total</td><td class="right total">${inr(inv.totalAmount)}</td></tr></tbody></table>
@@ -72,7 +73,15 @@ export function InvoiceDetailModal({
       </body></html>`);
     popup.document.close();
     popup.focus();
-    setTimeout(() => { popup.print(); popup.close(); }, 300);
+    const print = () => { popup.print(); popup.close(); };
+    const logo = popup.document.getElementById("brand-logo") as HTMLImageElement | null;
+    if (logo && !logo.complete) {
+      logo.addEventListener("load", print, { once: true });
+      logo.addEventListener("error", print, { once: true });
+      setTimeout(print, 2000);
+    } else {
+      setTimeout(print, 300);
+    }
   };
 
   return (

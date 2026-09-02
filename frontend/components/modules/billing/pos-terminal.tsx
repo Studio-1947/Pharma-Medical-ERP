@@ -776,7 +776,12 @@ ${buildReceiptHeaderHtml({
 
       addItem({
         medicineId: m.id, batchId: first.id, name: m.name, sku: m.sku,
-        batchNo: first.batchNo, unitPrice: parseFloat(m.priceMrp),
+        // Invoice pricing follows the FEFO batch's recorded price.  The
+        // catalogue price can be newer while older stock is still on hand.
+        // Using it here made an "Exact" walk-in tender reach the server as an
+        // apparent partial payment.
+        batchNo: first.batchNo,
+        unitPrice: parseFloat(first.mrpAtEntry ?? m.priceMrp),
         stripSize: m.stripSize ? parseInt(m.stripSize) : 1,
         taxPct: parseFloat(m.taxPercent ?? "0"), discountPct: 0, quantity: 1,
         scheduleClass: m.scheduleClass, requiresPrescription: m.requiresPrescription,

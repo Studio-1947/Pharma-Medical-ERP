@@ -654,8 +654,8 @@ describe("CHECKOUT-11 — Doctor consultation fee billed as GST-exempt line", ()
     expect(mockMovementRepo.logMany.mock.calls[0]![0][0].batchId).toBe("batch-1");
   });
 
-  it("rejects a payment that omits the consultation fee", async () => {
-    const { service, mockBatchRepo, buildTx } = buildService();
+  it("records an omitted consultation fee as an outstanding walk-in balance", async () => {
+    const { service, mockRepo, mockBatchRepo, buildTx } = buildService();
 
     const dto = {
       consultationFee: { doctorName: "Dr. X", amount: "400.00" },
@@ -665,6 +665,7 @@ describe("CHECKOUT-11 — Doctor consultation fee billed as GST-exempt line", ()
 
     const tx = buildTx([
       [{ id: "med-otc", name: "Paracetamol", scheduleClass: "OTC", requiresPrescription: false, taxPercent: "12", stripSize: 10, isActive: true }],
+      [{ id: "batch-1" }],
     ]);
     (service as any).drizzle = { db: { transaction: vi.fn((cb: any) => cb(tx)) } };
     mockBatchRepo.selectBatchesForDispenseMulti.mockResolvedValue([
@@ -674,7 +675,11 @@ describe("CHECKOUT-11 — Doctor consultation fee billed as GST-exempt line", ()
     // Walk-in underpay (no patientId) is rejected with the walk-in guard,
     // not the generic payment-mismatch — a registered patient's underpayment
     // would instead be accepted as a due (see CHECKOUT-DUE tests below).
-    await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(/walk-in/i);
+    await service.create(dto as any, "staff-1", "branch-1");
+    const invoiceArg = mockRepo.createInvoiceWithItems.mock.calls[0]![0];
+    expect(invoiceArg.amountPaid).toBe("112.00");
+    expect(invoiceArg.amountDue).toBe("400.00");
+    expect(invoiceArg.status).toBe("partially_paid");
   });
 });
 
@@ -712,8 +717,8 @@ describe("CHECKOUT-DUE — partial payment accepted for a registered patient", (
     expect(mockPatientsRepo.addOutstanding).toHaveBeenCalledWith("pat-1", "62.00", tx);
   });
 
-  it("rejects a walk-in partial payment", async () => {
-    const { service, mockBatchRepo, buildTx } = buildService();
+  it("allows a walk-in partial payment without creating a patient ledger entry", async () => {
+    const { service, mockRepo, mockBatchRepo, mockPatientsRepo, buildTx } = buildService();
     const dto = {
       // no patientId → walk-in
       items: [{ medicineId: "med-otc", quantity: 2, discountPct: "0" }],
@@ -728,7 +733,13 @@ describe("CHECKOUT-DUE — partial payment accepted for a registered patient", (
       [{ batchId: "batch-1", batchNo: "B001", expiryDate: "2026-06-01", allocate: 2, mrpAtEntry: "560.00" }],
     ]);
 
-    await expect(service.create(dto as any, "staff-1", "branch-1")).rejects.toThrow(/walk-in/i);
+    await service.create(dto as any, "staff-1", "branch-1");
+
+    const invoiceArg = mockRepo.createInvoiceWithItems.mock.calls[0]![0];
+    expect(invoiceArg.amountPaid).toBe("50.00");
+    expect(invoiceArg.amountDue).toBe("62.00");
+    expect(invoiceArg.status).toBe("partially_paid");
+    expect(mockPatientsRepo.addOutstanding).not.toHaveBeenCalled();
   });
 
   it("rejects an over-payment even for a registered patient", async () => {

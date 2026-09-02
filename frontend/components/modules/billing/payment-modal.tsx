@@ -109,12 +109,13 @@ export function PaymentModal({ open, total, hasPatient, onConfirm, onClose, load
     }
   };
 
-  // Under-payment is a legitimate "due" outcome for a registered patient. The
+  // Under-payment is a legitimate outstanding-balance outcome. The
   // over-payment case stays a hard block — a refund is a separate return flow,
   // not an invoice with a negative balance.
   const splitOver = splitGap < -0.01;
   const splitDue = splitGap > 0.01;
-  const acceptedAsDue = isMulti && splitDue && !!hasPatient;
+  const allowWalkInBalance = true;
+  const acceptedAsDue = isMulti && splitDue;
 
   const handleConfirm = () => {
     setError("");
@@ -123,7 +124,7 @@ export function PaymentModal({ open, total, hasPatient, onConfirm, onClose, load
         setError(`Split total ₹${totalAllocated.toFixed(2)} exceeds ₹${total.toFixed(2)}. Over-collection is a return, not a sale.`);
         return;
       }
-      if (splitDue && !hasPatient) {
+      if (splitDue && !hasPatient && !allowWalkInBalance) {
         setError(`Walk-in sales must be paid in full — register a patient to accept ₹${splitGap.toFixed(2)} as due.`);
         return;
       }
