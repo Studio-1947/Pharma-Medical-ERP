@@ -168,10 +168,11 @@ keeps one rollback image for the backend and frontend, and restores it
 automatically when a new release fails its health checks.
 
 This stack is safe for a shared VPS: the host nginx remains the sole public
-listener on ports **80** and **443**, while this project's Docker nginx binds
-only to `127.0.0.1:8093` by default. The host nginx site for this ERP must
-proxy to `http://127.0.0.1:8093`; do not stop or alter nginx sites belonging to
-other projects.
+listener on ports **80** and **443**, and proxies directly to this project's
+private loopback ports. The ERP site must use `127.0.0.1:4001` for `/api/` and
+`127.0.0.1:3001` for `/`; do not stop or alter nginx sites belonging to other
+projects. The Docker nginx service is an optional direct-edge profile and is
+not used by `scripts/deploy.sh` on the shared VPS.
 
 If nginx ever displays **502 Bad Gateway**, connect to the VPS and run the
 following commands exactly. They do not delete the database or Docker volumes.
@@ -186,7 +187,8 @@ docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail
 # Check each layer independently: API, Next.js frontend, then nginx proxy.
 docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend node -e "fetch('http://127.0.0.1:4000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
 docker compose --env-file .env.production -f docker-compose.prod.yml exec -T frontend node -e "fetch('http://127.0.0.1:3000').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
-docker compose --env-file .env.production -f docker-compose.prod.yml exec -T nginx wget -q --spider http://localhost/
+curl -fsS http://127.0.0.1:4001/health
+curl -fsSI http://127.0.0.1:3001/
 ```
 
 To restore the last known-good application images immediately (while you
@@ -197,7 +199,7 @@ cd /opt/pharmerp
 docker image inspect pharmerp-backend:rollback pharmerp-frontend:rollback
 docker image tag pharmerp-backend:rollback pharmerp-backend:current
 docker image tag pharmerp-frontend:rollback pharmerp-frontend:current
-docker compose --env-file .env.production -f docker-compose.prod.yml up -d --no-build --force-recreate --wait --wait-timeout 180 nginx backend frontend
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --no-build --force-recreate --wait --wait-timeout 180 backend frontend
 docker compose --env-file .env.production -f docker-compose.prod.yml ps
 ```
 

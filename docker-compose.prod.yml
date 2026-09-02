@@ -5,12 +5,16 @@ services:
     image: nginx:1.27-alpine
     container_name: pharmerp_nginx
     restart: unless-stopped
+    # Optional direct-edge mode only. The shared Hostinger VPS uses system
+    # nginx, which proxies directly to the loopback ports on backend/frontend.
+    profiles: ["docker-edge"]
     ports:
-      # The shared VPS host nginx is the only public listener on 80/443.
-      # This internal proxy is reachable only from that host on a unique port.
-      - "127.0.0.1:${PHARMERP_NGINX_PORT:-8093}:80"
+      - "80:80"
+      - "443:443"
     volumes:
-      - ./nginx.vps.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+      - ./certbot/www:/var/www/certbot:ro
       # Hashed Next.js assets retained across deploys. Read-only here: the
       # frontend container is the only writer. nginx serves these directly and
       # falls back to proxying the frontend when a file is absent.
@@ -44,6 +48,8 @@ services:
     # restore it automatically if a newly built container never becomes ready.
     image: pharmerp-backend:current
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:4001:4000"
     env_file: .env.production
     environment:
       NODE_ENV: production
@@ -80,6 +86,8 @@ services:
     container_name: pharmerp_frontend
     image: pharmerp-frontend:current
     restart: unless-stopped
+    ports:
+      - "127.0.0.1:3001:3000"
     environment:
       NODE_ENV: production
       # Do not inherit the backend's PORT=4000 from .env.production. Next's

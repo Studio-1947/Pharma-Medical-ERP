@@ -36,8 +36,6 @@ show_failure_diagnostics() {
   echo "--- frontend logs (last 150 lines) ---"
   compose logs --tail=150 frontend || true
   echo ""
-  echo "--- nginx logs (last 150 lines) ---"
-  compose logs --tail=150 nginx || true
   echo "=========================================================="
 }
 
@@ -70,7 +68,7 @@ rollback() {
   docker image tag pharmerp-backend:rollback pharmerp-backend:current
   docker image tag pharmerp-frontend:rollback pharmerp-frontend:current
 
-  compose up -d --no-build --force-recreate --wait --wait-timeout 180 nginx backend frontend
+  compose up -d --no-build --force-recreate --wait --wait-timeout 180 backend frontend
 }
 
 fail_and_rollback() {
@@ -102,16 +100,15 @@ fi
 # 4. Rebuild and launch production containers
 echo "[3/5] Building and updating Docker containers..."
 save_rollback_images
-if ! compose up -d --build --wait --wait-timeout 180; then
+if ! compose up -d --build --wait --wait-timeout 180 backend frontend; then
   fail_and_rollback "one or more containers did not become healthy."
 fi
 
 # 5. Verify container health and the real route users hit.
-echo "[4/5] Verifying API, frontend, and nginx routing..."
+echo "[4/5] Verifying API and frontend upstreams..."
 if ! compose exec -T backend node -e "fetch('http://127.0.0.1:4000/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))" \
-  || ! compose exec -T frontend node -e "fetch('http://127.0.0.1:3000').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))" \
-  || ! compose exec -T nginx wget -q --spider http://localhost/; then
-  fail_and_rollback "deployment completed but the application is not reachable through nginx."
+  || ! compose exec -T frontend node -e "fetch('http://127.0.0.1:3000').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"; then
+  fail_and_rollback "deployment completed but an application upstream is not reachable."
 fi
 
 # 6. Clean up only dangling images. The :rollback tags are intentionally kept
