@@ -36,6 +36,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
 
 /** Runs one request that fails at the transport layer. */
@@ -48,6 +49,13 @@ async function failingRequest(client: Awaited<ReturnType<typeof loadClient>>) {
 }
 
 describe("api client: API unreachable", () => {
+  it("uses the same-origin API prefix when the build variable is empty", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
+    const client = await loadClient();
+
+    expect(client.defaults.baseURL).toBe("/api/v1");
+  });
+
   it("ends the session when /health confirms the API is down", async () => {
     const probe = vi.spyOn(axios, "get").mockRejectedValue(networkError());
     const client = await loadClient();

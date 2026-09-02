@@ -14,7 +14,7 @@ FROM deps AS build
 WORKDIR /app
 COPY packages/ ./packages/
 COPY frontend/ ./frontend/
-ARG NEXT_PUBLIC_API_URL
+ARG NEXT_PUBLIC_API_URL=/api/v1
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 RUN pnpm --filter @pharmerp/types build || true
 RUN pnpm --filter @pharmerp/utils build || true

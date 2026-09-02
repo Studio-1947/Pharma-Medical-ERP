@@ -1,7 +1,10 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from "axios";
 
-const BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
+// Docker's ARG becomes an empty string when no build argument is supplied.
+// `??` does not handle that case, producing `/auth/refresh` instead of the
+// same-origin `/api/v1/auth/refresh` route on production. Empty and whitespace
+// values must therefore use the production-safe relative default as well.
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL?.trim() || "/api/v1";
 
 export const apiClient = axios.create({
   baseURL: BASE_URL,

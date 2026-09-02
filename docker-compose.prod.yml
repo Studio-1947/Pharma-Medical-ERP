@@ -83,6 +83,10 @@ services:
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        # NEXT_PUBLIC_* values are compiled into the browser bundle, so this
+        # must be a build argument as well as the runtime value below.
+        NEXT_PUBLIC_API_URL: /api/v1
     container_name: pharmerp_frontend
     image: pharmerp-frontend:current
     restart: unless-stopped
