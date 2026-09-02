@@ -127,6 +127,11 @@ DB_PORT=5432
 DB_NAME=pharmerp
 DB_USER=pharmerp
 DB_PASSWORD=${DB_PASS}
+# Kept alongside the DB_* names so both Docker's official Postgres image and
+# the application use one identical credential set.
+POSTGRES_DB=pharmerp
+POSTGRES_USER=pharmerp
+POSTGRES_PASSWORD=${DB_PASS}
 DATABASE_URL=postgresql://pharmerp:${DB_PASS}@postgres:5432/pharmerp
 
 # Redis Configuration

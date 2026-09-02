@@ -17,8 +17,13 @@ echo "============================================================"
 cd "${APP_DIR}"
 
 compose() {
-  docker compose -f docker-compose.prod.yml "$@"
+  docker compose --env-file .env.production -f docker-compose.prod.yml "$@"
 }
+
+if [ ! -r .env.production ]; then
+  echo "Error: /opt/pharmerp/.env.production is missing or unreadable. Deployment stopped."
+  exit 1
+fi
 
 show_failure_diagnostics() {
   echo ""
@@ -34,6 +39,50 @@ show_failure_diagnostics() {
   echo "--- nginx logs (last 150 lines) ---"
   compose logs --tail=150 nginx || true
   echo "=========================================================="
+}
+
+save_rollback_images() {
+  # Capture the images used by the currently running containers *before* the
+  # build updates the :current tags. This also supports hosts deployed before
+  # explicit image tags were added to compose.
+  for service in backend frontend; do
+    container="pharmerp_${service}"
+    rollback_tag="pharmerp-${service}:rollback"
+    image_id="$(docker inspect --format '{{.Image}}' "${container}" 2>/dev/null || true)"
+
+    if [ -n "${image_id}" ]; then
+      docker image tag "${image_id}" "${rollback_tag}"
+      echo "Saved ${service} rollback image: ${rollback_tag}"
+    else
+      echo "No existing ${service} container; automatic rollback is unavailable on this first deploy."
+    fi
+  done
+}
+
+rollback() {
+  if ! docker image inspect pharmerp-backend:rollback >/dev/null 2>&1 \
+    || ! docker image inspect pharmerp-frontend:rollback >/dev/null 2>&1; then
+    echo "No complete rollback image set is available."
+    return 1
+  fi
+
+  echo "Restoring the previously running backend and frontend images..."
+  docker image tag pharmerp-backend:rollback pharmerp-backend:current
+  docker image tag pharmerp-frontend:rollback pharmerp-frontend:current
+
+  compose up -d --no-build --force-recreate --wait --wait-timeout 180 nginx backend frontend
+}
+
+fail_and_rollback() {
+  echo "Error: $1"
+  show_failure_diagnostics
+
+  if rollback; then
+    echo "Rollback completed: the last known-good application images are running again."
+  else
+    echo "Rollback could not be completed. Keep the diagnostics above and follow the VPS runbook."
+  fi
+  exit 1
 }
 
 # 1. Fetch latest changes from private git repository
@@ -52,25 +101,23 @@ fi
 
 # 4. Rebuild and launch production containers
 echo "[3/5] Building and updating Docker containers..."
+save_rollback_images
 if ! compose up -d --build --wait --wait-timeout 180; then
-  echo "Error: one or more containers did not become healthy."
-  show_failure_diagnostics
-  exit 1
+  fail_and_rollback "one or more containers did not become healthy."
 fi
 
-# 5. Clean up old unused build images to save disk space on VPS
-echo "[4/5] Pruning dangling Docker images..."
-docker image prune -f
-
-# 6. Verify container health
-echo "[5/5] Verifying API, frontend, and nginx routing..."
+# 5. Verify container health and the real route users hit.
+echo "[4/5] Verifying API, frontend, and nginx routing..."
 if ! compose exec -T backend wget --no-verbose --tries=3 --spider http://localhost:4000/api/v1/health \
   || ! compose exec -T frontend wget --no-verbose --tries=3 --spider http://localhost:3000 \
   || ! compose exec -T nginx wget --no-check-certificate --no-verbose --tries=3 --spider https://localhost/; then
-  echo "Error: deployment completed but the application is not reachable through nginx."
-  show_failure_diagnostics
-  exit 1
+  fail_and_rollback "deployment completed but the application is not reachable through nginx."
 fi
+
+# 6. Clean up only dangling images. The :rollback tags are intentionally kept
+# so the next failed deployment can be restored without pulling or rebuilding.
+echo "[5/5] Pruning dangling Docker images..."
+docker image prune -f
 
 echo "============================================================"
 echo " Deployment Successfully Completed!"

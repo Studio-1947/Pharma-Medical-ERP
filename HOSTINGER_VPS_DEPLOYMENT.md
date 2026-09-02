@@ -160,6 +160,44 @@ To ensure your DuckDNS domain always points to `187.127.185.82`:
 3. **Verify web application access**:
    Open `http://187.127.185.82` or `http://your-subdomain.duckdns.org` in your browser.
 
+### Deployment and 502 recovery runbook
+
+The normal GitHub Action invokes `scripts/deploy.sh`. It waits for the API,
+frontend, and the actual nginx HTTPS route before reporting success. It also
+keeps one rollback image for the backend and frontend, and restores it
+automatically when a new release fails its health checks.
+
+If nginx ever displays **502 Bad Gateway**, connect to the VPS and run the
+following commands exactly. They do not delete the database or Docker volumes.
+
+```bash
+cd /opt/pharmerp
+
+# Show which service is unhealthy and the reason it failed to start.
+docker compose --env-file .env.production -f docker-compose.prod.yml ps
+docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail=200 nginx frontend backend
+
+# Check each layer independently: API, Next.js frontend, then nginx proxy.
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T backend wget --no-verbose --tries=1 --spider http://localhost:4000/api/v1/health
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T frontend wget --no-verbose --tries=1 --spider http://localhost:3000
+docker compose --env-file .env.production -f docker-compose.prod.yml exec -T nginx wget --no-check-certificate --no-verbose --tries=1 --spider https://localhost/
+```
+
+To restore the last known-good application images immediately (while you
+investigate the failed release), run:
+
+```bash
+cd /opt/pharmerp
+docker image inspect pharmerp-backend:rollback pharmerp-frontend:rollback
+docker image tag pharmerp-backend:rollback pharmerp-backend:current
+docker image tag pharmerp-frontend:rollback pharmerp-frontend:current
+docker compose --env-file .env.production -f docker-compose.prod.yml up -d --no-build --force-recreate --wait --wait-timeout 180 nginx backend frontend
+docker compose --env-file .env.production -f docker-compose.prod.yml ps
+```
+
+Do not use `docker compose down -v`, `docker volume prune`, or `docker system
+prune --volumes` for a 502 incident: those can remove production data.
+
 ---
 
 ## 7. Step 6: SSL Certificate Setup (Let's Encrypt / HTTPS)

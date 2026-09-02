@@ -28,12 +28,23 @@ services:
       options:
         max-size: "50m"
         max-file: "5"
+    healthcheck:
+      # A 502 is a successful nginx process with a failed upstream. Probe the
+      # HTTPS app route, not merely `nginx -t`, so deploy --wait catches it.
+      test: ["CMD-SHELL", "wget --no-check-certificate --no-verbose --tries=1 --spider https://localhost/ || exit 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+      start_period: 15s
 
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
     container_name: pharmerp_backend
+    # Explicit tags let scripts/deploy.sh retain one known-good image and
+    # restore it automatically if a newly built container never becomes ready.
+    image: pharmerp-backend:current
     restart: unless-stopped
     env_file: .env.production
     environment:
@@ -66,6 +77,7 @@ services:
       context: .
       dockerfile: frontend/Dockerfile
     container_name: pharmerp_frontend
+    image: pharmerp-frontend:current
     restart: unless-stopped
     env_file: .env.production
     environment:
@@ -152,7 +164,11 @@ services:
     image: redis:7-alpine
     container_name: pharmerp_redis_prod
     restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD}
+    env_file: .env.production
+    # Resolve the password inside the container from env_file. Using a host
+    # side ${REDIS_PASSWORD} here made Redis start with a different (or blank)
+    # password whenever Compose was invoked without --env-file .env.production.
+    command: ["/bin/sh", "-ec", "exec redis-server --requirepass \"$${REDIS_PASSWORD}\""]
     volumes:
       - redis_prod_data:/data
     networks:
@@ -163,7 +179,9 @@ services:
         max-size: "50m"
         max-file: "5"
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      # Use the same container environment as the Redis server. `$$` is
+      # required so Compose does not try to substitute it on the VPS host.
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep -qx PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
