@@ -57,20 +57,26 @@ export function InvoiceDetailModal({
     const popup = window.open("", "_blank", "width=794,height=1050");
     if (!popup) return;
     const rows = items.map((item, index) => `
-      <tr><td>${index + 1}. ${escapeHtml(item.itemName ?? item.medicine?.name ?? item.medicineName ?? "--")}</td>
-      <td>${escapeHtml(item.batch?.batchNo ?? "--")}</td><td class="right">${escapeHtml(item.quantity ?? 0)}</td>
-      <td class="right">${inr(item.unitPrice)}</td><td class="right">${inr(item.lineTotal)}</td></tr>`).join("");
+      <tr>
+        <td><div class="medicine-name">${index + 1}. ${escapeHtml(item.itemName ?? item.medicine?.name ?? item.medicineName ?? "--")}</div><div class="batch-label">Batch: ${escapeHtml(item.batch?.batchNo ?? item.batchNo ?? "--")}</div></td>
+        <td class="center">${escapeHtml(item.quantity ?? 0)}</td>
+        <td class="right">${inr(item.unitPrice)}</td>
+        <td class="right">${Number(item.discountPct ?? 0) > 0 ? `${escapeHtml(item.discountPct)}%` : "--"}</td>
+        <td class="right">${Number(item.taxPct ?? 0) > 0 ? `${escapeHtml(item.taxPct)}%` : "--"}</td>
+        <td class="right amount">${inr(item.lineTotal)}</td>
+      </tr>`).join("");
     const paymentRows = payments.map((payment) =>
       `<tr><td>${escapeHtml(payment.mode ?? "--")}</td><td class="right">${inr(payment.amount)}</td></tr>`,
     ).join("");
     popup.document.write(`<!doctype html><html><head><title>Invoice ${escapeHtml(inv.invoiceNo)}</title>
-      <style>@page{size:A4;margin:18mm}body{font:14px Arial;color:#111}.muted{color:#666}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{padding:8px 6px;border-bottom:1px solid #ddd;text-align:left}th{font-size:11px;text-transform:uppercase;color:#666}.right{text-align:right}.total{font-size:18px;font-weight:700}${RECEIPT_HEADER_STYLES}</style>
-      </head><body>${buildReceiptHeaderHtml({ tokenNo: inv.tokenNo, origin: window.location.origin, subtitle: "Tax Invoice / Bill of Supply" })}<p class="muted">Invoice ${escapeHtml(inv.invoiceNo ?? "--")} &middot; ${escapeHtml(fmtDate(inv.createdAt))}</p>
-      <p><b>Patient:</b> ${escapeHtml(inv.patient?.name ?? "Walk-in")}</p>
-      <table><thead><tr><th>Medicine</th><th>Batch</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Total</th></tr></thead><tbody>${rows}</tbody></table>
-      <table><tbody><tr><td>Total</td><td class="right total">${inr(inv.totalAmount)}</td></tr></tbody></table>
-      ${paymentRows ? `<h3>Payments</h3><table><tbody>${paymentRows}</tbody></table>` : ""}
-      </body></html>`);
+      <style>
+        @page{size:A4;margin:18mm 20mm}*{box-sizing:border-box}body{font:14px 'Segoe UI',Arial,sans-serif;color:#111}.divider{border:0;border-top:1px dashed #bbb;margin:14px 0}.divider-solid{border:0;border-top:2px solid #333;margin:14px 0}.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px}.label{color:#666;font-size:11px;text-transform:uppercase;letter-spacing:.5px}.value{font-size:14px;font-weight:700;margin-top:2px}.right{text-align:right}.center{text-align:center}table{width:100%;border-collapse:collapse}th{font-size:11px;text-transform:uppercase;color:#555;letter-spacing:.5px;padding:7px 6px;border-bottom:2px solid #ddd;text-align:left}td{padding:9px 6px;border-bottom:1px dashed #e5e5e5;vertical-align:top;font-size:13px}.medicine-name{font-size:14px;font-weight:600}.batch-label{color:#777;font-size:11px;margin-top:2px}.amount{font-weight:700}.totals td{padding:5px 6px;border:0}.grand td{font-size:18px;font-weight:900;padding-top:10px;border-top:1px dashed #bbb}.section-label{font-size:11px;font-weight:700;text-transform:uppercase;color:#555;letter-spacing:.7px;margin:12px 0 6px}.badge{display:inline-block;border:1px solid #ddd;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;text-transform:capitalize}.footer{text-align:center;color:#666;font-size:11px;margin-top:20px;padding-top:12px;border-top:1px dashed #ddd;line-height:1.7}${RECEIPT_HEADER_STYLES}
+      </style></head><body>
+      ${buildReceiptHeaderHtml({ tokenNo: inv.tokenNo, origin: window.location.origin, subtitle: "Tax Invoice / Bill of Supply" })}<hr class="divider-solid"/>
+      <div class="meta"><div><div class="label">Invoice No</div><div class="value" style="font-family:monospace">${escapeHtml(inv.invoiceNo ?? "--")}</div></div><div class="right"><div class="label">Date &amp; Time</div><div class="value">${escapeHtml(fmtDate(inv.createdAt))}</div></div><div style="grid-column:span 2"><div class="label">Patient</div><div class="value">${escapeHtml(inv.patient?.name ?? "Walk-in Customer")}</div></div></div>
+      <hr class="divider"/><table><thead><tr><th style="width:45%">Medicine</th><th class="center">Qty</th><th class="right">MRP/Unit</th><th class="right">Disc</th><th class="right">Tax</th><th class="right">Amount</th></tr></thead><tbody>${rows}</tbody></table>
+      <hr class="divider"/><table class="totals"><tbody><tr><td>Subtotal</td><td class="right">${inr(inv.subtotal)}</td></tr><tr><td>Tax (GST)</td><td class="right">${inr(inv.taxAmount)}</td></tr>${Number(inv.discountAmount ?? 0) > 0 ? `<tr><td>Discount</td><td class="right">-${inr(inv.discountAmount)}</td></tr>` : ""}<tr class="grand"><td>TOTAL AMOUNT</td><td class="right">${inr(inv.totalAmount)}</td></tr></tbody></table>
+      <hr class="divider"/>${paymentRows ? `<div class="section-label">Payment Details</div><table class="totals"><tbody>${paymentRows}</tbody></table>` : ""}<div class="footer"><b>Thank you for choosing Radha Madhav Medical Hall</b><br/>Goods once sold will not be taken back without a valid reason.<br/>For queries, please contact your shop manager.</div></body></html>`);
     popup.document.close();
     popup.focus();
     const print = () => { popup.print(); popup.close(); };
