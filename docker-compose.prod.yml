@@ -17,8 +17,10 @@ services:
       # falls back to proxying the frontend when a file is absent.
       - next_static_archive:/var/www/next-static-root:ro
     depends_on:
-      - backend
-      - frontend
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
     networks:
       - pharmerp_net
     logging:
@@ -57,6 +59,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 90s
 
   frontend:
     build:
@@ -76,7 +79,8 @@ services:
       # frontend/docker-entrypoint.sh.
       - next_static_archive:/var/www/next-static-root
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - pharmerp_net
     logging:
@@ -89,6 +93,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 60s
 
   postgres:
     image: postgres:16-alpine
