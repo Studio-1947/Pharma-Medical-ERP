@@ -7,6 +7,26 @@ export const doctorProfileSchema = z.object({
   consultationFee: z.union([z.number(), z.string()]).optional(),
   regNo: z.string().optional(),
   phone: z.string().optional(),
+  /** Credential line printed immediately below the doctor's name on prescriptions. */
+  prescriptionCredentials: z.string().max(300).optional(),
+  /** Professional designation/appointment line printed on prescriptions. */
+  prescriptionDescription: z.string().max(500).optional(),
+  /** Concise services shown as the personalised prescription tags. */
+  prescriptionTags: z.array(z.string().min(1).max(80)).max(9).optional(),
+  /** A short, patient-friendly introduction to the doctor's practice. */
+  bio: z.string().max(2_000).optional(),
+  /** Degrees, fellowships, and the institutions where they were completed. */
+  qualifications: z.array(z.object({
+    qualification: z.string().max(200),
+    institution: z.string().max(300),
+    year: z.string().max(20).optional(),
+  })).max(20).optional(),
+  /** Previous and current professional appointments. */
+  experience: z.array(z.object({
+    role: z.string().max(200),
+    organization: z.string().max(300),
+    period: z.string().max(100).optional(),
+  })).max(20).optional(),
   weeklySchedule: z.array(z.object({
     days: z.string(),
     slots: z.string(),

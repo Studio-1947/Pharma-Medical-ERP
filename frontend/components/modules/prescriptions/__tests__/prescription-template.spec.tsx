@@ -77,4 +77,21 @@ describe("toPrescriptionTemplateData", () => {
     expect(mapped.id).toBe("y");
     expect(mapped.tokenNo).toBe(21);
   });
+
+  it("uses the doctor snapshot for the personalised header and service tags", () => {
+    const mapped = toPrescriptionTemplateData({
+      id: "rx-1",
+      doctorRegNo: "WBMC-60053",
+      doctorProfileSnapshot: {
+        credentials: "M.B.B.S., D.L.O.",
+        description: "ENT & Head and Neck Surgeon",
+        tags: ["ENT Care", "Head & Neck Surgery"],
+      },
+    });
+
+    expect(mapped.doctorQualification).toBe("M.B.B.S., D.L.O.");
+    expect(mapped.doctorDesignation).toBe("ENT & Head and Neck Surgeon");
+    expect(mapped.regNo).toBe("WBMC-60053");
+    expect(mapped.specialties).toEqual(["ENT Care", "Head & Neck Surgery"]);
+  });
 });

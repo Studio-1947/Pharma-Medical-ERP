@@ -309,6 +309,13 @@
       "when": 1787398054682,
       "tag": "0043_medicine_search_text",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1788843843538,
+      "tag": "0044_prescription_doctor_profile_snapshot",
+      "breakpoints": true
     }
   ]
 }

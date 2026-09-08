@@ -435,6 +435,7 @@ function ConsultationWorkspace({
   const todayStr = localDateString(new Date());
   const doctorSpecialty =
     token?.doctor?.doctorProfile?.specialty ?? token?.doctor?.specialty ?? "";
+  const doctorProfile = token?.doctor?.doctorProfile;
   const liveRx = toPrescriptionTemplateData({
     id: "live-preview",
     prescriptionNumber: "Draft",
@@ -445,9 +446,11 @@ function ConsultationWorkspace({
       return d.toISOString().split("T")[0];
     })(),
     doctorName: token?.doctor ? doctorName(token.doctor) : undefined,
-    doctorDesignation: doctorSpecialty || undefined,
-    regNo: token?.doctor?.doctorProfile?.regNo || undefined,
-    hospitalName: token?.doctor?.branchName || undefined,
+    doctorQualification: doctorProfile?.prescriptionCredentials || undefined,
+    doctorDesignation: doctorProfile?.prescriptionDescription || doctorSpecialty || undefined,
+    regNo: doctorProfile?.regNo || undefined,
+    hospitalName: doctorHospitalName || token?.doctor?.branchName || undefined,
+    specialties: doctorProfile?.prescriptionTags,
     specialty: doctorSpecialty || undefined,
     patientName: token?.patient?.name,
     notes,

@@ -8,6 +8,7 @@ import {
   date,
   integer,
   index,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 import { prescriptionStatusEnum } from "./enums";
@@ -29,6 +30,13 @@ export const prescriptions = pgTable(
     doctorName: varchar("doctor_name", { length: 255 }).notNull(),
     doctorRegNo: varchar("doctor_reg_no", { length: 100 }),
     hospitalName: varchar("hospital_name", { length: 255 }),
+    // The professional identity that appeared on the prescription when it was
+    // issued. A later profile edit must not rewrite a clinical record.
+    doctorProfileSnapshot: jsonb("doctor_profile_snapshot").$type<{
+      credentials?: string;
+      description?: string;
+      tags?: string[];
+    }>(),
     issuedDate: date("issued_date").notNull(),
     expiryDate: date("expiry_date").notNull(),
     fileUrl: text("file_url"),

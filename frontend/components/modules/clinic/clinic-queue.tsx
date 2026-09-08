@@ -39,6 +39,10 @@ import {
   Edit,
   Building2,
   Pill,
+  GraduationCap,
+  BriefcaseBusiness,
+  FileText,
+  Trash2,
 } from "lucide-react";
 import { DoctorMedicineManager } from "@/components/modules/clinic/doctor-medicine-manager";
 import { useBranches, rowsOf } from "@/queries/admin.queries";
@@ -65,6 +69,12 @@ interface Doctor {
     consultationFee?: number | string;
     regNo?: string;
     phone?: string;
+    prescriptionCredentials?: string;
+    prescriptionDescription?: string;
+    prescriptionTags?: string[];
+    bio?: string;
+    qualifications?: { qualification: string; institution: string; year?: string }[];
+    experience?: { role: string; organization: string; period?: string }[];
     weeklySchedule?: { days: string; slots: string }[];
     availabilityStatus?: string;
   } | null;
@@ -298,6 +308,17 @@ export function EditDoctorProfileModal({
   const [slot1Hours, setSlot1Hours] = useState("09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM");
   const [slot2Days, setSlot2Days] = useState("Saturday");
   const [slot2Hours, setSlot2Hours] = useState("09:00 AM - 02:00 PM");
+  const [profileTab, setProfileTab] = useState<"opd" | "professional">("opd");
+  const [bio, setBio] = useState("");
+  const [prescriptionCredentials, setPrescriptionCredentials] = useState("");
+  const [prescriptionDescription, setPrescriptionDescription] = useState("");
+  const [prescriptionTags, setPrescriptionTags] = useState("");
+  const [qualifications, setQualifications] = useState([
+    { qualification: "", institution: "", year: "" },
+  ]);
+  const [experience, setExperience] = useState([
+    { role: "", organization: "", period: "" },
+  ]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -317,6 +338,20 @@ export function EditDoctorProfileModal({
       setSlot1Hours(sList[0]?.slots ?? "09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM");
       setSlot2Days(sList[1]?.days ?? "Saturday");
       setSlot2Hours(sList[1]?.slots ?? "09:00 AM - 02:00 PM");
+      setBio(dProfile?.bio ?? "");
+      setPrescriptionCredentials(dProfile?.prescriptionCredentials ?? "");
+      setPrescriptionDescription(dProfile?.prescriptionDescription ?? "");
+      setPrescriptionTags((dProfile?.prescriptionTags ?? []).join(", "));
+      setQualifications(
+        dProfile?.qualifications?.length
+          ? dProfile.qualifications.map((item) => ({ ...item, year: item.year ?? "" }))
+          : [{ qualification: "", institution: "", year: "" }],
+      );
+      setExperience(
+        dProfile?.experience?.length
+          ? dProfile.experience.map((item) => ({ ...item, period: item.period ?? "" }))
+          : [{ role: "", organization: "", period: "" }],
+      );
     }
   }, [doctor]);
 
@@ -335,6 +370,28 @@ export function EditDoctorProfileModal({
       opdRoom: opdRoom.trim() || "OPD Cabin 101 (Ground Floor)",
       regNo: regNo.trim() || undefined,
       phone: phone.trim() || undefined,
+      prescriptionCredentials: prescriptionCredentials.trim() || undefined,
+      prescriptionDescription: prescriptionDescription.trim() || undefined,
+      prescriptionTags: prescriptionTags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter(Boolean)
+        .slice(0, 9),
+      bio: bio.trim() || undefined,
+      qualifications: qualifications
+        .map((item) => ({
+          qualification: item.qualification.trim(),
+          institution: item.institution.trim(),
+          ...(item.year.trim() ? { year: item.year.trim() } : {}),
+        }))
+        .filter((item) => item.qualification || item.institution),
+      experience: experience
+        .map((item) => ({
+          role: item.role.trim(),
+          organization: item.organization.trim(),
+          ...(item.period.trim() ? { period: item.period.trim() } : {}),
+        }))
+        .filter((item) => item.role || item.organization),
       availabilityStatus: status,
       weeklySchedule: [
         { days: slot1Days || "Mon - Fri", slots: slot1Hours || "09:00 AM - 01:00 PM & 04:00 PM - 07:00 PM" },
@@ -393,6 +450,29 @@ export function EditDoctorProfileModal({
       size="lg"
     >
       <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+        <div className="flex gap-1 rounded-xl bg-slate-100 p-1 border border-slate-200">
+          <button
+            type="button"
+            onClick={() => setProfileTab("opd")}
+            className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+              profileTab === "opd" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            OPD & Availability
+          </button>
+          <button
+            type="button"
+            onClick={() => setProfileTab("professional")}
+            className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold transition-colors ${
+              profileTab === "professional" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500 hover:text-slate-800"
+            }`}
+          >
+            Professional Profile
+          </button>
+        </div>
+
+        {profileTab === "opd" ? (
+          <>
         {/* Doctor Name Section */}
         <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 space-y-2">
           <label className="text-xs font-black text-slate-800 uppercase tracking-wider block">
@@ -663,6 +743,167 @@ export function EditDoctorProfileModal({
           </div>
         </div>
 
+          </>
+        ) : (
+          <div className="space-y-5">
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-3.5">
+              <p className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-emerald-900">
+                <FileText size={14} className="text-emerald-600" /> About the Doctor
+              </p>
+              <p className="mt-1 text-[11px] leading-relaxed text-emerald-800">
+                Add the information patients and front-desk staff need: the doctor&apos;s background, education, and professional appointments.
+              </p>
+            </div>
+
+            <div className="space-y-3 rounded-xl border border-teal-200 bg-teal-50/50 p-3.5">
+              <div>
+                <p className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-teal-900">
+                  <FileText size={14} className="text-teal-600" /> Personalised Prescription Header
+                </p>
+                <p className="mt-1 text-[11px] leading-relaxed text-teal-800">
+                  These lines and tags appear on prescriptions issued under this doctor&apos;s name.
+                </p>
+              </div>
+              <input
+                value={prescriptionCredentials}
+                onChange={(e) => setPrescriptionCredentials(e.target.value)}
+                maxLength={300}
+                placeholder="Credentials, e.g. MBBS, MS Orthopaedics"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+              <input
+                value={prescriptionDescription}
+                onChange={(e) => setPrescriptionDescription(e.target.value)}
+                maxLength={500}
+                placeholder="Designation, e.g. Consultant Joint Replacement & Trauma Surgeon"
+                className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+              <div>
+                <input
+                  value={prescriptionTags}
+                  onChange={(e) => setPrescriptionTags(e.target.value)}
+                  placeholder="Prescription tags, comma-separated (up to 9)"
+                  className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+                />
+                <p className="mt-1 text-[10px] text-slate-500">Example: Joint Replacement, Trauma Surgery, Sports Injury</p>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-700">
+                Professional Description
+              </label>
+              <textarea
+                rows={4}
+                maxLength={2000}
+                value={bio}
+                onChange={(e) => setBio(e.target.value)}
+                placeholder="e.g. Dr. Sharma is a consultant cardiologist with a special interest in preventive heart care and cardiac rehabilitation."
+                className="w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+              />
+              <p className="mt-1 text-[10px] text-slate-500">A short, patient-friendly introduction. {bio.length}/2000</p>
+            </div>
+
+            <div className="space-y-2.5 rounded-xl border border-slate-200 p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-slate-800">
+                    <GraduationCap size={15} className="text-emerald-600" /> Education & Qualifications
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-slate-500">What the doctor studied and where.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setQualifications((items) => [...items, { qualification: "", institution: "", year: "" }])}
+                  className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100"
+                >
+                  <Plus size={13} /> Add qualification
+                </button>
+              </div>
+              {qualifications.map((item, index) => (
+                <div key={index} className="grid grid-cols-1 gap-2 rounded-lg bg-slate-50 p-2.5 sm:grid-cols-[1fr_1.2fr_90px_auto]">
+                  <input
+                    value={item.qualification}
+                    onChange={(e) => setQualifications((items) => items.map((row, i) => i === index ? { ...row, qualification: e.target.value } : row))}
+                    placeholder="Degree / fellowship"
+                    className="min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800"
+                  />
+                  <input
+                    value={item.institution}
+                    onChange={(e) => setQualifications((items) => items.map((row, i) => i === index ? { ...row, institution: e.target.value } : row))}
+                    placeholder="College / institution"
+                    className="min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800"
+                  />
+                  <input
+                    value={item.year}
+                    onChange={(e) => setQualifications((items) => items.map((row, i) => i === index ? { ...row, year: e.target.value } : row))}
+                    placeholder="Year"
+                    className="min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800"
+                  />
+                  <button
+                    type="button"
+                    aria-label="Remove qualification"
+                    disabled={qualifications.length === 1}
+                    onClick={() => setQualifications((items) => items.filter((_, i) => i !== index))}
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2.5 rounded-xl border border-slate-200 p-3.5">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-slate-800">
+                    <BriefcaseBusiness size={15} className="text-emerald-600" /> Professional Experience
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-slate-500">Current or past roles, hospitals, and clinics.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setExperience((items) => [...items, { role: "", organization: "", period: "" }])}
+                  className="flex items-center gap-1 rounded-lg border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-[11px] font-bold text-emerald-700 hover:bg-emerald-100"
+                >
+                  <Plus size={13} /> Add experience
+                </button>
+              </div>
+              {experience.map((item, index) => (
+                <div key={index} className="grid grid-cols-1 gap-2 rounded-lg bg-slate-50 p-2.5 sm:grid-cols-[1fr_1.2fr_90px_auto]">
+                  <input
+                    value={item.role}
+                    onChange={(e) => setExperience((items) => items.map((row, i) => i === index ? { ...row, role: e.target.value } : row))}
+                    placeholder="Role / designation"
+                    className="min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800"
+                  />
+                  <input
+                    value={item.organization}
+                    onChange={(e) => setExperience((items) => items.map((row, i) => i === index ? { ...row, organization: e.target.value } : row))}
+                    placeholder="Hospital / organization"
+                    className="min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800"
+                  />
+                  <input
+                    value={item.period}
+                    onChange={(e) => setExperience((items) => items.map((row, i) => i === index ? { ...row, period: e.target.value } : row))}
+                    placeholder="e.g. 2018–24"
+                    className="min-w-0 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800"
+                  />
+                  <button
+                    type="button"
+                    aria-label="Remove experience"
+                    disabled={experience.length === 1}
+                    onClick={() => setExperience((items) => items.filter((_, i) => i !== index))}
+                    className="rounded-lg p-1.5 text-slate-400 hover:bg-rose-50 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
           <button
             type="button"
@@ -689,6 +930,84 @@ export function EditDoctorProfileModal({
           </button>
         </div>
       </form>
+    </Modal>
+  );
+}
+
+function DoctorProfessionalProfileModal({
+  doctor,
+  onClose,
+}: {
+  doctor: Doctor | null;
+  onClose: () => void;
+}) {
+  const profile = doctor?.doctorProfile;
+  const qualifications = profile?.qualifications ?? [];
+  const experience = profile?.experience ?? [];
+
+  return (
+    <Modal
+      title={doctor ? `${doctorName(doctor)} — Professional Profile` : "Professional Profile"}
+      subtitle="Education, qualifications, and professional experience"
+      icon={<GraduationCap size={18} className="text-emerald-600" />}
+      open={!!doctor}
+      onClose={onClose}
+      size="md"
+    >
+      <div className="space-y-5 px-6 py-5">
+        {profile?.bio ? (
+          <section>
+            <h3 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-slate-800">
+              <FileText size={14} className="text-emerald-600" /> About the Doctor
+            </h3>
+            <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm leading-relaxed text-slate-700 whitespace-pre-line">
+              {profile.bio}
+            </p>
+          </section>
+        ) : null}
+
+        {qualifications.length > 0 ? (
+          <section>
+            <h3 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-slate-800">
+              <GraduationCap size={14} className="text-emerald-600" /> Education & Qualifications
+            </h3>
+            <div className="mt-2 space-y-2">
+              {qualifications.map((item, index) => (
+                <div key={`${item.qualification}-${item.institution}-${index}`} className="rounded-xl border border-slate-200 p-3">
+                  <p className="text-sm font-bold text-slate-800">{item.qualification || "Qualification"}</p>
+                  <p className="mt-0.5 text-xs text-slate-600">{item.institution || "Institution not specified"}</p>
+                  {item.year ? <p className="mt-1 text-[11px] font-semibold text-emerald-700">{item.year}</p> : null}
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {experience.length > 0 ? (
+          <section>
+            <h3 className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-slate-800">
+              <BriefcaseBusiness size={14} className="text-emerald-600" /> Professional Experience
+            </h3>
+            <div className="mt-2 space-y-2">
+              {experience.map((item, index) => (
+                <div key={`${item.role}-${item.organization}-${index}`} className="rounded-xl border border-slate-200 p-3">
+                  <p className="text-sm font-bold text-slate-800">{item.role || "Professional appointment"}</p>
+                  <p className="mt-0.5 text-xs text-slate-600">{item.organization || "Organization not specified"}</p>
+                  {item.period ? <p className="mt-1 text-[11px] font-semibold text-emerald-700">{item.period}</p> : null}
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {!profile?.bio && qualifications.length === 0 && experience.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+            <GraduationCap size={22} className="mx-auto text-slate-400" />
+            <p className="mt-2 text-sm font-bold text-slate-700">Professional profile not added yet</p>
+            <p className="mt-1 text-xs text-slate-500">Use Edit Profile to add the doctor&apos;s description, education, and experience.</p>
+          </div>
+        ) : null}
+      </div>
     </Modal>
   );
 }
@@ -1093,6 +1412,7 @@ export function ClinicQueue() {
   const [searchFilter, setSearchFilter] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [editingDoctor, setEditingDoctor] = useState<Doctor | null>(null);
+  const [viewingDoctor, setViewingDoctor] = useState<Doctor | null>(null);
   // Whose medicine list the roster is showing. Reachable without starting a
   // sale, unlike the counter desk's copy, which needs a patient in the cart.
   const [medicinesForDoctor, setMedicinesForDoctor] = useState<Doctor | null>(null);
@@ -1388,6 +1708,12 @@ export function ClinicQueue() {
                       </div>
                     </div>
 
+                    {doc.doctorProfile?.bio ? (
+                      <p className="border-t border-slate-100 pt-2 text-[11px] leading-relaxed text-slate-600">
+                        {doc.doctorProfile.bio}
+                      </p>
+                    ) : null}
+
                     {/* Room, Branch & Status */}
                     <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-100 flex-wrap gap-1.5">
                       <div className="flex items-center gap-2 flex-wrap text-slate-600 font-medium">
@@ -1462,6 +1788,13 @@ export function ClinicQueue() {
                       Waiting: <span className="font-extrabold text-slate-900">{docWaiting} patients</span>
                     </div>
                     <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => setViewingDoctor(doc)}
+                        className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-xl transition-all border border-emerald-200"
+                        title="View education and professional experience"
+                      >
+                        <GraduationCap size={12} /> Profile
+                      </button>
                       <button
                         onClick={() => setMedicinesForDoctor(doc)}
                         className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-all border border-slate-200"
@@ -1710,6 +2043,11 @@ export function ClinicQueue() {
         open={!!editingDoctor}
         onClose={() => setEditingDoctor(null)}
         doctor={editingDoctor}
+      />
+
+      <DoctorProfessionalProfileModal
+        doctor={viewingDoctor}
+        onClose={() => setViewingDoctor(null)}
       />
 
       {/* Medicines this doctor prescribes. Admins and shop managers may curate

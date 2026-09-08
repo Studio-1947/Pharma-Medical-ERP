@@ -55,14 +55,27 @@ export class PrescriptionsService {
     // exactly what the Schedule H register exists to rule out.
     const autoVerify = currentUser?.role === "doctor";
     const attribution = autoVerify
-      ? await this.repo.findUserDisplayName(currentUser!.sub)
+      ? await this.repo.findDoctorPrescriptionIdentity(currentUser!.sub)
       : null;
+
+    if (autoVerify && dto.isControlled && !attribution?.regNo) {
+      throw new UnprocessableEntityException(
+        "Add your medical registration number to your doctor profile before issuing a controlled prescription",
+      );
+    }
 
     const branchId = dto.branchId || currentUser?.branchId;
     const payload = {
       ...dto,
       branchId: branchId || undefined,
-      ...(attribution ? { doctorName: attribution } : {}),
+      ...(attribution
+        ? {
+            doctorName: attribution.name,
+            doctorRegNo: attribution.regNo,
+            hospitalName: attribution.hospitalName,
+            doctorProfileSnapshot: attribution.snapshot,
+          }
+        : {}),
     };
 
     const prescription = await this.repo.create(payload, {

@@ -120,25 +120,76 @@ export class PrescriptionsRepository {
     return row?.tokenNo ?? null;
   }
 
-  /** Name of the signed-in prescriber, for attributing a prescription to them. */
-  async findUserDisplayName(id: string) {
-    const user = await this.db.query.users.findFirst({
-      columns: { firstName: true, lastName: true, email: true },
-      where: eq(schema.users.id, id),
-    });
+  /**
+   * Identity printed on a prescription authored by a signed-in doctor.
+   *
+   * This intentionally reads the profile on the server instead of trusting
+   * header text posted by the browser. The result is copied into the
+   * prescription as a snapshot when it is issued.
+   */
+  async findDoctorPrescriptionIdentity(id: string) {
+    const [user] = await this.db
+      .select({
+        firstName: schema.users.firstName,
+        lastName: schema.users.lastName,
+        email: schema.users.email,
+        doctorProfile: schema.users.doctorProfile,
+        branchName: schema.branches.name,
+      })
+      .from(schema.users)
+      .leftJoin(schema.branches, eq(schema.users.branchId, schema.branches.id))
+      .where(eq(schema.users.id, id))
+      .limit(1);
     if (!user) return null;
     const name = [user.firstName, user.lastName].filter(Boolean).join(" ").trim();
-    if (name) return name.startsWith("Dr.") ? name : `Dr. ${name}`;
-    if (user.email) {
+    const displayName = name
+      ? (name.startsWith("Dr.") ? name : `Dr. ${name}`)
+      : user.email
+        ? (() => {
       const rawName = (user.email.split("@")[0] ?? "doctor").replace(/[^a-zA-Z0-9]/g, " ").trim();
       const cap = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : "Doctor";
       return `Dr. ${cap}`;
-    }
-    return "Dr. Doctor";
+          })()
+        : "Dr. Doctor";
+    const profile = user.doctorProfile ?? {};
+    const qualifications = Array.isArray(profile.qualifications)
+      ? profile.qualifications
+          .map((item: any) => item?.qualification)
+          .filter((value: unknown): value is string => typeof value === "string" && Boolean(value.trim()))
+      : [];
+    const experience = Array.isArray(profile.experience)
+      ? profile.experience
+          .map((item: any) => [item?.role, item?.organization].filter(Boolean).join(" — "))
+          .filter(Boolean)
+      : [];
+    const tags = Array.isArray(profile.prescriptionTags)
+      ? profile.prescriptionTags.filter((tag: unknown): tag is string => typeof tag === "string" && Boolean(tag.trim())).slice(0, 9)
+      : typeof profile.specialty === "string"
+        ? profile.specialty.split(",").map((tag: string) => tag.trim()).filter(Boolean).slice(0, 9)
+        : [];
+
+    return {
+      name: displayName,
+      regNo: typeof profile.regNo === "string" && profile.regNo.trim() ? profile.regNo.trim() : undefined,
+      hospitalName: user.branchName ?? undefined,
+      snapshot: {
+        credentials:
+          typeof profile.prescriptionCredentials === "string" && profile.prescriptionCredentials.trim()
+            ? profile.prescriptionCredentials.trim()
+            : qualifications.join(" · ") || undefined,
+        description:
+          typeof profile.prescriptionDescription === "string" && profile.prescriptionDescription.trim()
+            ? profile.prescriptionDescription.trim()
+            : experience[0] || profile.specialty || undefined,
+        tags,
+      },
+    };
   }
 
   async create(
-    data: CreatePrescriptionDto,
+    data: CreatePrescriptionDto & {
+      doctorProfileSnapshot?: { credentials?: string; description?: string; tags?: string[] };
+    },
     opts?: { autoVerify?: boolean; verifiedBy?: string },
   ) {
     return this.db.transaction(async (tx) => {
@@ -150,6 +201,7 @@ export class PrescriptionsRepository {
           doctorName: data.doctorName,
           doctorRegNo: data.doctorRegNo,
           hospitalName: data.hospitalName,
+          doctorProfileSnapshot: data.doctorProfileSnapshot,
           issuedDate: data.issuedDate,
           expiryDate: data.expiryDate,
           notes: data.notes,

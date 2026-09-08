@@ -16,6 +16,7 @@ const DOCTOR_PUBLIC_COLUMNS = {
   firstName: true,
   lastName: true,
   email: true,
+  doctorProfile: true,
 } as const;
 
 // The consultation view needs identity plus the clinical fields a doctor acts

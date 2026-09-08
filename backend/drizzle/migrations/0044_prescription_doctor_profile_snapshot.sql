@@ -1,0 +1,1 @@
+ALTER TABLE "prescriptions" ADD COLUMN "doctor_profile_snapshot" jsonb;

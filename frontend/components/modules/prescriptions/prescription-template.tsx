@@ -66,10 +66,20 @@ const LETTERHEAD_URL = "/Prescription%20svg.svg";
 export function toPrescriptionTemplateData(raw: unknown): PrescriptionTemplateData {
   const rx = (raw as any)?.data?.data ?? (raw as any)?.data ?? raw ?? {};
   const patient = rx?.patient;
+  // Doctor-authored prescriptions keep this small profile snapshot so the
+  // printed letterhead remains the same clinical record even after the doctor
+  // updates their profile later.
+  const profile = rx?.doctorProfileSnapshot ?? rx?.doctorProfile ?? {};
   const specialties = Array.isArray(rx?.specialties)
     ? rx.specialties.map(String)
+    : Array.isArray(profile?.tags)
+      ? profile.tags.map(String)
+      : Array.isArray(profile?.prescriptionTags)
+        ? profile.prescriptionTags.map(String)
     : typeof rx?.specialty === "string" && rx.specialty.trim()
       ? rx.specialty.split(",").map((s: string) => s.trim()).filter(Boolean)
+      : typeof profile?.specialty === "string" && profile.specialty.trim()
+        ? profile.specialty.split(",").map((s: string) => s.trim()).filter(Boolean)
       : [];
   return {
     id: rx?.id ?? "",
@@ -78,9 +88,11 @@ export function toPrescriptionTemplateData(raw: unknown): PrescriptionTemplateDa
     issuedDate: rx?.issuedDate ?? rx?.createdAt ?? null,
     expiryDate: rx?.expiryDate ?? null,
     doctorName: rx?.doctorName ?? null,
-    doctorQualification: rx?.doctorQualification ?? rx?.specialty ?? null,
-    doctorDesignation: rx?.doctorDesignation ?? null,
-    regNo: rx?.regNo ?? null,
+    doctorQualification:
+      rx?.doctorQualification ?? profile?.credentials ?? profile?.prescriptionCredentials ?? rx?.specialty ?? null,
+    doctorDesignation:
+      rx?.doctorDesignation ?? profile?.description ?? profile?.prescriptionDescription ?? null,
+    regNo: rx?.doctorRegNo ?? rx?.regNo ?? profile?.regNo ?? null,
     hospitalName: rx?.hospitalName ?? null,
     specialties,
     patientName: rx?.patientName ?? patient?.name ?? null,
@@ -162,8 +174,8 @@ export function PrescriptionTemplate({
   const docLines = [
     rx.doctorQualification,
     rx.doctorDesignation,
-    rx.hospitalName,
     rx.regNo ? `Reg No: ${rx.regNo}` : null,
+    rx.hospitalName,
   ].filter(Boolean);
   const patientLine = [rx.patientAge, rx.patientGender].filter(Boolean).join(" · ");
 
