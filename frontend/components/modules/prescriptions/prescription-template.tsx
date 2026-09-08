@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { format } from "date-fns";
 import { Modal } from "@/components/ui/modal";
 import { Printer, FileText } from "lucide-react";
-import { PHARMACY_PRINT_DETAILS, formatTokenNo } from "@pharmerp/types";
+import { CLINIC_PRINT_DETAILS, formatTokenNo } from "@pharmerp/types";
 
 /* ────────────────────────────────────────────────────────────────────────────
  * Official prescription layout.
@@ -56,7 +56,7 @@ export interface PrescriptionTemplateData {
   items: PrescriptionTemplateItem[];
 }
 
-const BRAND = PHARMACY_PRINT_DETAILS.legalName;
+const BRAND = CLINIC_PRINT_DETAILS.legalName;
 const TEAL = "#00807A";
 const INK = "#344B4A";
 
@@ -215,6 +215,25 @@ export function PrescriptionTemplate({
       )}
 
       {/* Layer 2 — dynamic content, positioned in the letterhead's own coords */}
+
+      {/* The artwork uses the shop's shorter trading name. Keep the artwork,
+          but make the clinic's full identity explicit on every prescription. */}
+      <div
+        style={{
+          position: "absolute",
+          right: 28,
+          top: 126,
+          width: 190,
+          textAlign: "center",
+          color: TEAL,
+          fontSize: 8,
+          fontWeight: 800,
+          letterSpacing: 0.35,
+          textTransform: "uppercase",
+        }}
+      >
+        {BRAND}
+      </div>
 
       {/* Doctor identity (top-left) */}
       <div style={{ position: "absolute", left: 39, top: 34, width: 350 }}>
@@ -389,6 +408,24 @@ export function PrescriptionTemplate({
             </div>
           </div>
         )}
+      </div>
+
+      {/* Replace the shorter shop name baked into the footer artwork. */}
+      <div
+        style={{
+          position: "absolute",
+          left: 394,
+          top: 793,
+          width: 174,
+          minHeight: 12,
+          background: "#fff",
+          color: TEAL,
+          fontSize: 7.2,
+          lineHeight: 1.25,
+          fontWeight: 800,
+        }}
+      >
+        {BRAND}
       </div>
 
       {/* Signature (above the letterhead's own footer) */}

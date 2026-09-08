@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
+import { PHARMACY_PRINT_DETAILS } from "@pharmerp/types";
 import {
   Building2,
   MapPin,
@@ -70,6 +71,7 @@ function BranchForm({
   const {
     register,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<BranchFormData>({
     defaultValues: {
@@ -111,6 +113,14 @@ function BranchForm({
       setError(err?.response?.data?.message ?? "Failed to save branch."),
   });
 
+  // Whatever is typed here is what the customer reads on the medicine bill,
+  // so show it back as the bill header rather than making the user print one
+  // to find out. Blank fields fall back to the built-in store details, exactly
+  // as the receipt and PDF do.
+  const printName = watch("name")?.trim() || PHARMACY_PRINT_DETAILS.legalName;
+  const printAddress = watch("address")?.trim() || PHARMACY_PRINT_DETAILS.addressLine;
+  const printPhone = watch("phone")?.trim() || PHARMACY_PRINT_DETAILS.phone;
+
   return (
     <form
       onSubmit={handleSubmit((d) => {
@@ -130,9 +140,14 @@ function BranchForm({
           </label>
           <input
             {...register("name", { required: "Required" })}
-            placeholder="Main Branch"
+            placeholder={PHARMACY_PRINT_DETAILS.legalName}
             className={inputCls}
           />
+          <p className="text-[11px] text-slate-500">
+            Printed as the heading on this branch&apos;s medicine bills, receipts
+            and invoice PDFs. Use the shop name customers should see, not an
+            internal label.
+          </p>
           {errors.name && (
             <p className="text-xs text-red-500">{errors.name.message}</p>
           )}
@@ -168,9 +183,10 @@ function BranchForm({
           <textarea
             {...register("address", { required: "Required" })}
             rows={2}
-            placeholder="Full address"
+            placeholder={PHARMACY_PRINT_DETAILS.addressLine}
             className={`${inputCls} resize-none`}
           />
+          <p className="text-[11px] text-slate-500">Printed under the shop name on every bill.</p>
           {errors.address && (
             <p className="text-xs text-red-500">{errors.address.message}</p>
           )}
@@ -180,7 +196,7 @@ function BranchForm({
           <label className="text-xs font-semibold text-gray-700">Phone</label>
           <input
             {...register("phone")}
-            placeholder="+91 98765 43210"
+            placeholder={PHARMACY_PRINT_DETAILS.phone}
             className={inputCls}
           />
         </div>
@@ -248,6 +264,23 @@ function BranchForm({
             This is the head office
           </label>
         </div>
+      </div>
+
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          Medicine bill header preview
+        </p>
+        <div className="mt-2 text-center">
+          <p className="text-sm font-extrabold text-slate-900">{printName}</p>
+          <p className="whitespace-pre-line text-[11px] leading-snug text-slate-500">
+            {printAddress}
+          </p>
+          <p className="text-[11px] text-slate-500">Ph: {printPhone}</p>
+        </div>
+        <p className="mt-2 text-[10px] text-slate-400">
+          Doctor prescriptions print the clinic name instead and are not affected
+          by this form.
+        </p>
       </div>
 
       {error && (

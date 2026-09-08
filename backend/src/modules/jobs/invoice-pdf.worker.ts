@@ -97,13 +97,16 @@ export class InvoicePdfWorker {
   // ════════════════════════════════════════════════════════════════════════════
   private buildPdf(invoice: any, branch: any): Promise<Buffer> {
     return new Promise((resolve, reject) => {
+      const printName = branch?.name?.trim() || PHARMACY_PRINT_DETAILS.legalName;
+      const printAddress = branch?.address?.trim() || PHARMACY_PRINT_DETAILS.addressLine;
+      const printPhone = branch?.phone?.trim() || PHARMACY_PRINT_DETAILS.phone;
       const doc = new PDFDocument({
         size: "A4",
         margins: { top: 25, bottom: 10, left: 30, right: 30 },
         bufferPages: true,
         info: {
           Title: `Cash Memo ${invoice.invoiceNo}`,
-          Author: PHARMACY_PRINT_DETAILS.legalName,
+          Author: printName,
         },
       });
 
@@ -133,7 +136,7 @@ export class InvoicePdfWorker {
       let y = 32;
 
       doc.font("Helvetica-Bold").fontSize(16).fillColor(TXT)
-        .text(PHARMACY_PRINT_DETAILS.legalName.toUpperCase(), ML, y, {
+        .text(printName.toUpperCase(), ML, y, {
           width: PW, align: "center", lineBreak: false,
         });
       y += 20;
@@ -145,13 +148,13 @@ export class InvoicePdfWorker {
       y += 13;
 
       doc.font("Helvetica").fontSize(8).fillColor(TXT)
-        .text(PHARMACY_PRINT_DETAILS.addressLine, ML, y, {
+        .text(printAddress, ML, y, {
           width: PW, align: "center", lineBreak: false,
         });
       y += 12;
 
       doc.font("Helvetica").fontSize(7.5).fillColor(LABEL)
-        .text(`Ph: ${PHARMACY_PRINT_DETAILS.phone}`, ML, y, {
+        .text(`Ph: ${printPhone}`, ML, y, {
           width: PW, align: "center", lineBreak: false,
         });
       y += 11;

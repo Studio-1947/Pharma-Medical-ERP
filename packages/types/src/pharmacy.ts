@@ -1,22 +1,28 @@
 /**
- * Legal identity printed on patient-facing documents.
+ * Default identity for medicine invoices when older data has no branch detail.
  *
  * Lives in the shared package because the same details are rendered by the
- * frontend (POS receipt, on-screen invoice preview, prescription, public record
- * page) and by the backend (invoice PDF). These appear on tax invoices, so the
+ * frontend (POS receipt and on-screen invoice preview) and by the backend
+ * (invoice PDF). These appear on tax invoices, so the
  * two sides drifting apart would be a compliance problem, not a cosmetic one.
  *
- * Note this is deliberately NOT the same string as the application's own name.
- * Printed documents carry the honorific "Shree"; the app UI, browser tab and
- * installed PWA use the plain trading name, matching the logo artwork.
+ * Medicine invoices normally use the selling branch record. This object is the
+ * safe fallback for historical invoices and Store 1.
  */
 export const PHARMACY_PRINT_DETAILS = {
-  /** Legal name as it must appear on bills, receipts and prescriptions. */
-  legalName: "Shree Radha Madhav Medical Hall",
+  /** Store name used on medicine bills when branch data is unavailable. */
+  legalName: "Radha Madhav Medical Hall",
   /** Trading name, matching the logo lockup. Used by the app UI, not by bills. */
   tradingName: "Radha Madhav Medical Hall",
   addressLine: "Krishna Nagar, Near Mirik BPHC, Mirik-734214",
   phone: "73844 57427, 97759 31980",
+} as const;
+
+/** Clinic identity used only on doctor prescriptions and clinic documents. */
+export const CLINIC_PRINT_DETAILS = {
+  legalName: "Shree Radha Madhav Medical Hall",
+  addressLine: PHARMACY_PRINT_DETAILS.addressLine,
+  phone: PHARMACY_PRINT_DETAILS.phone,
 } as const;
 
 /** Convenience for single-line contexts such as PDF metadata. */

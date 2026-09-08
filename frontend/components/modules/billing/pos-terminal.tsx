@@ -81,6 +81,10 @@ export function PosTerminal({
   const [isOnline, setIsOnline] = useState(true);
   const [printOpen, setPrintOpen] = useState(false);
   const [lastInvoice, setLastInvoice] = useState<any>(null);
+  // The selling branch's own shop name, set in Settings -> Branches. Older
+  // invoices carry no branch, so they keep printing the built-in store name.
+  const sellingBranchName =
+    lastInvoice?.branch?.name?.trim() || PHARMACY_PRINT_DETAILS.legalName;
   const [lastReceiptItems, setLastReceiptItems] = useState<any[]>([]);
   const [lastReceiptPatient, setLastReceiptPatient] = useState<any>(null);
   const [lastReceiptPayments, setLastReceiptPayments] = useState<any[]>([]);
@@ -383,10 +387,11 @@ export function PosTerminal({
   ${RECEIPT_HEADER_STYLES}
 </style>
 </head><body>
-${buildReceiptHeaderHtml({
+  ${buildReceiptHeaderHtml({
     tokenNo: lastInvoice.tokenNo,
     origin: window.location.origin,
     subtitle: "Tax Invoice / Bill of Supply",
+    branch: lastInvoice.branch,
   })}  <hr class="divider-solid"/>
 
   <div class="meta">
@@ -446,7 +451,7 @@ ${buildReceiptHeaderHtml({
   <table class="totals-table">${payRows}</table>
 
   <div class="footer">
-    <p><b>Thank you for choosing Radha Madhav Medical Hall</b></p>
+    <p><b>Thank you for choosing ${sellingBranchName.replace(/[&<>"']/g, (char: string) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!)}</b></p>
     <p>Goods once sold will not be taken back without a valid reason.</p>
     <p>For queries, please contact your shop manager.</p>
   </div>
@@ -2363,19 +2368,19 @@ ${buildReceiptHeaderHtml({
               <div className="text-center space-y-1">
                 <Image
                   src="/logo-full.svg"
-                  alt={PHARMACY_PRINT_DETAILS.legalName}
+                  alt={sellingBranchName}
                   width={129}
                   height={68}
                   className="mx-auto h-12 w-auto"
                   priority
                 />
                 <h2 className="text-base font-extrabold tracking-tight text-gray-900">
-                  {PHARMACY_PRINT_DETAILS.legalName}
+                  {sellingBranchName}
                 </h2>
                 <p className="text-[11px] leading-snug text-gray-500">
-                  {PHARMACY_PRINT_DETAILS.addressLine}
+                  {lastInvoice.branch?.address?.trim() || PHARMACY_PRINT_DETAILS.addressLine}
                   <br />
-                  Ph: {PHARMACY_PRINT_DETAILS.phone}
+                  Ph: {lastInvoice.branch?.phone?.trim() || PHARMACY_PRINT_DETAILS.phone}
                 </p>
                 <p className="text-xs text-gray-500">Tax Invoice / Bill of Supply</p>
               </div>
@@ -2483,7 +2488,7 @@ ${buildReceiptHeaderHtml({
 
               {/* Footer */}
               <div className="text-center pt-2">
-                <p className="text-[10px] text-gray-400">Thank you for choosing Radha Madhav Medical Hall</p>
+                <p className="text-[10px] text-gray-400">Thank you for choosing {sellingBranchName}</p>
                 <p className="text-[10px] text-gray-300 mt-0.5">Goods once sold will not be taken back without valid reason</p>
               </div>
             </div>
@@ -2502,6 +2507,7 @@ ${buildReceiptHeaderHtml({
                     phone: lastReceiptPatient?.phone,
                     patientName: lastReceiptPatient?.name,
                     type: "invoice",
+                    storeName: sellingBranchName,
                     id: lastInvoice.id,
                     number: lastInvoice.invoiceNo,
                     subtotal: lastInvoice.subtotal,

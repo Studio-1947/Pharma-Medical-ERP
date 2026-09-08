@@ -76,10 +76,27 @@ describe("buildReceiptHeaderHtml — letterhead identity", () => {
     buildReceiptHeaderHtml({ tokenNo: 1, origin: ORIGIN, subtitle: "Receipt" }),
   );
 
-  it("bills under the legal name, carrying the honorific", () => {
+  it("uses the Store 1 fallback for medicine invoices", () => {
     const name = dom.querySelector(".legal-name")?.textContent ?? "";
-    expect(name).toBe("Shree Radha Madhav Medical Hall");
-    expect(name.startsWith("Shree ")).toBe(true);
+    expect(name).toBe("Radha Madhav Medical Hall");
+  });
+
+  it("uses the actual selling branch on Store 2 invoices", () => {
+    const branchDom = parse(buildReceiptHeaderHtml({
+      tokenNo: null,
+      origin: ORIGIN,
+      subtitle: "Tax Invoice",
+      branch: {
+        name: "Radha Madhav Medical Hall and Polyclinic",
+        address: "Store 2 address",
+        phone: "12345",
+      },
+    }));
+    expect(branchDom.querySelector(".legal-name")?.textContent).toBe(
+      "Radha Madhav Medical Hall and Polyclinic",
+    );
+    expect(branchDom.querySelector(".legal-addr")?.textContent).toContain("Store 2 address");
+    expect(branchDom.querySelector(".legal-addr")?.textContent).toContain("12345");
   });
 
   it("prints the address and phone", () => {
@@ -131,5 +148,58 @@ describe("buildReceiptHeaderHtml — escaping and styles", () => {
     ]) {
       expect(RECEIPT_HEADER_STYLES).toContain(`.${cls}`);
     }
+  });
+});
+
+/**
+ * The shop name on a medicine bill is whatever the branch was given in
+ * Settings -> Branches. These cases pin that pass-through, because a silent
+ * fallback to the built-in name would print one store's identity on another
+ * store's tax invoice and nothing else would notice.
+ */
+describe("buildReceiptHeaderHtml -- the branch name is what gets printed", () => {
+  const header = (branch: Record<string, unknown> | null) =>
+    parse(
+      buildReceiptHeaderHtml({
+        tokenNo: null,
+        origin: ORIGIN,
+        subtitle: "Tax Invoice / Bill of Supply",
+        branch: branch as never,
+      }),
+    );
+
+  it("prints any name the branch was given, verbatim", () => {
+    const dom = header({
+      name: "Bright Star Medico",
+      address: "12 Hill Cart Road, Siliguri",
+      phone: "99999 00000",
+    });
+    expect(dom.querySelector(".legal-name")?.textContent).toBe("Bright Star Medico");
+    const addr = dom.querySelector(".legal-addr")?.textContent ?? "";
+    expect(addr).toContain("12 Hill Cart Road, Siliguri");
+    expect(addr).toContain("99999 00000");
+  });
+
+  it("falls back to the built-in store for an invoice with no branch", () => {
+    const dom = header(null);
+    expect(dom.querySelector(".legal-name")?.textContent).toBe(
+      PHARMACY_PRINT_DETAILS.legalName,
+    );
+  });
+
+  it("treats a blank or whitespace branch name as missing", () => {
+    const dom = header({ name: "   ", address: "  ", phone: "" });
+    expect(dom.querySelector(".legal-name")?.textContent).toBe(
+      PHARMACY_PRINT_DETAILS.legalName,
+    );
+    expect(dom.querySelector(".legal-addr")?.textContent).toContain(
+      PHARMACY_PRINT_DETAILS.addressLine,
+    );
+  });
+
+  it("escapes a branch name containing markup", () => {
+    const dom = header({ name: "A & B <Medicals>" });
+    expect(dom.querySelector(".legal-name")?.textContent).toBe("A & B <Medicals>");
+    expect(dom.querySelectorAll("medicals").length).toBe(0);
   });
 });

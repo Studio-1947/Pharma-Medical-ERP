@@ -1,3 +1,5 @@
+import { CLINIC_PRINT_DETAILS, PHARMACY_PRINT_DETAILS } from "@pharmerp/types";
+
 /**
  * Patient Messaging Dispatcher (WhatsApp & SMS)
  * 
@@ -9,6 +11,11 @@ export interface DispatchParams {
   phone?: string | null;
   patientName?: string | null;
   type: "prescription" | "invoice";
+  /**
+   * Selling branch name for an invoice message, so the text matches the printed
+   * bill. Ignored for prescriptions, which always carry the clinic identity.
+   */
+  storeName?: string | null;
   id: string;
   number?: string | null;
   doctorName?: string | null;
@@ -55,6 +62,7 @@ export function sendViaWhatsApp(params: DispatchParams): boolean {
     }
   }
 
+  const storeName = params.storeName?.trim() || PHARMACY_PRINT_DETAILS.legalName;
   const phone = formatPhoneNumber(rawPhone);
   const name = params.patientName ? `\n👤 *Patient*: ${params.patientName}` : "";
 
@@ -69,7 +77,7 @@ export function sendViaWhatsApp(params: DispatchParams): boolean {
       itemsText = `\n\n*PRESCRIBED MEDICINES*:\n${list}`;
     }
 
-    text = `*Radha Madhav Medical Hall* 🏥\n*Digital Prescription Record*\n\n📄 *Prescription ID*: #${params.number || params.id.slice(0, 8)}${name}${doc}${itemsText}\n\n🔗 *View Digital Copy*: Contact the pharmacy counter for a secure copy.\n\n*Thank you for choosing Radha Madhav Medical Hall!*`;
+    text = `*${CLINIC_PRINT_DETAILS.legalName}* 🏥\n*Digital Prescription Record*\n\n📄 *Prescription ID*: #${params.number || params.id.slice(0, 8)}${name}${doc}${itemsText}\n\n🔗 *View Digital Copy*: Contact the pharmacy counter for a secure copy.\n\n*Thank you for choosing ${CLINIC_PRINT_DETAILS.legalName}!*`;
   } else {
     let itemsText = "";
     if (Array.isArray(params.items) && params.items.length > 0) {
@@ -88,7 +96,7 @@ export function sendViaWhatsApp(params: DispatchParams): boolean {
     const tax = Number(params.taxAmount || 0) > 0 ? `\n*GST Tax*: ₹${Number(params.taxAmount).toFixed(2)}` : "";
     const total = params.totalAmount ? `\n💰 *TOTAL PAID*: ₹${Number(params.totalAmount).toFixed(2)}` : "";
 
-    text = `*Radha Madhav Medical Hall* 🏥\n*Tax Invoice / Bill of Supply*\n\n🧾 *Invoice No*: #${params.number || params.id.slice(0, 8)}${name}${itemsText}\n──────────────────${sub}${tax}${total}\n\n📄 *View / Download Digital Receipt*:\n🔗 Contact the pharmacy counter for a secure copy.\n\n*Thank you for choosing Radha Madhav Medical Hall!*\n_Goods once sold will not be taken back without valid reason._`;
+    text = `*${storeName}* 🏥\n*Tax Invoice / Bill of Supply*\n\n🧾 *Invoice No*: #${params.number || params.id.slice(0, 8)}${name}${itemsText}\n──────────────────${sub}${tax}${total}\n\n📄 *View / Download Digital Receipt*:\n🔗 Contact the pharmacy counter for a secure copy.\n\n*Thank you for choosing ${storeName}!*\n_Goods once sold will not be taken back without valid reason._`;
   }
 
   const url = `https://wa.me/${phone}?text=${encodeURIComponent(text)}`;
@@ -103,12 +111,13 @@ export function sendViaSms(params: DispatchParams): boolean {
   if (!params.phone) return false;
 
   const phone = params.phone.replace(/\D/g, "");
+  const storeName = params.storeName?.trim() || PHARMACY_PRINT_DETAILS.legalName;
 
   let text = "";
   if (params.type === "prescription") {
-    text = `Radha Madhav Medical Hall: Your prescription #${params.number || params.id.slice(0, 8)} is ready. Contact the pharmacy counter for a secure copy.`;
+    text = `${CLINIC_PRINT_DETAILS.legalName}: Your prescription #${params.number || params.id.slice(0, 8)} is ready. Contact the pharmacy counter for a secure copy.`;
   } else {
-    text = `Radha Madhav Medical Hall: Your bill receipt #${params.number || params.id.slice(0, 8)} is ready. Contact the pharmacy counter for a secure copy.`;
+    text = `${storeName}: Your bill receipt #${params.number || params.id.slice(0, 8)} is ready. Contact the pharmacy counter for a secure copy.`;
   }
 
   const url = `sms:${phone}?body=${encodeURIComponent(text)}`;

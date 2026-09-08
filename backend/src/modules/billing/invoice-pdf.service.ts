@@ -86,13 +86,16 @@ export class InvoicePdfService {
 
   private buildPdf(invoice: any, branch: any): Promise<Buffer> {
     return new Promise((resolve, reject) => {
+      const printName = branch?.name?.trim() || PHARMACY_PRINT_DETAILS.legalName;
+      const printAddress = branch?.address?.trim() || PHARMACY_PRINT_DETAILS.addressLine;
+      const printPhone = branch?.phone?.trim() || PHARMACY_PRINT_DETAILS.phone;
       const doc = new PDFDocument({
         size: "A4",
         margins: { top: 30, bottom: 10, left: 35, right: 35 },
         bufferPages: true,
         info: {
           Title: `Tax Invoice ${invoice.invoiceNo}`,
-          Author: PHARMACY_PRINT_DETAILS.legalName,
+          Author: printName,
         },
       });
 
@@ -108,10 +111,10 @@ export class InvoicePdfService {
       const drawHeader = (headerY: number) => {
         doc.rect(ML, headerY, PW, 65).fill(BLUE);
         doc.fillColor("white").fontSize(18).font("Helvetica-Bold")
-          .text(PHARMACY_PRINT_DETAILS.legalName, ML + 12, headerY + 14, { width: PW * 0.55, lineBreak: false });
+          .text(printName, ML + 12, headerY + 14, { width: PW * 0.55, lineBreak: false });
         doc.fontSize(8).font("Helvetica")
-          .text(PHARMACY_PRINT_DETAILS.addressLine, ML + 12, headerY + 34, { width: PW * 0.55, lineBreak: false })
-          .text(`Ph: ${PHARMACY_PRINT_DETAILS.phone}`, ML + 12, headerY + 44, { width: PW * 0.55, lineBreak: false });
+          .text(printAddress, ML + 12, headerY + 34, { width: PW * 0.55, lineBreak: false })
+          .text(`Ph: ${printPhone}`, ML + 12, headerY + 44, { width: PW * 0.55, lineBreak: false });
         doc.fontSize(16).font("Helvetica-Bold").fillColor("white")
           .text("TAX INVOICE", ML + PW * 0.58, headerY + 14, { width: PW * 0.42, align: "right", lineBreak: false });
 

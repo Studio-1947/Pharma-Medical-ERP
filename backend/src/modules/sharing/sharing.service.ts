@@ -252,9 +252,19 @@ export class SharingService {
       ? await this.tokenNoForPrescription(inv.prescriptionId)
       : null;
 
+    // The selling store's own identity: Store 2 bills must not print under
+    // Store 1's name on the public copy either.
+    const branch = inv.branchId
+      ? await this.db.query.branches.findFirst({
+          where: eq(schema.branches.id, inv.branchId),
+          columns: { name: true, address: true, phone: true },
+        })
+      : null;
+
     return {
       invoiceNo: inv.invoiceNo,
       invoiceDate: inv.createdAt ?? null,
+      branch: branch ?? null,
       status: inv.status ?? null,
       tokenNo,
       tokenLabel: formatTokenNo(tokenNo),

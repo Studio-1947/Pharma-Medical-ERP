@@ -137,8 +137,11 @@ export class BillingService {
     if (!inv) throw new NotFoundException(`Invoice ${id} not found`);
     // Printed documents show the clinic queue token above the header, so it has
     // to travel with the invoice. Null for walk-in sales, which have no token.
-    const tokenNo = await this.repo.findTokenNoByPrescription(inv.prescriptionId);
-    return { data: { ...inv, tokenNo } };
+    const [tokenNo, branch] = await Promise.all([
+      this.repo.findTokenNoByPrescription(inv.prescriptionId),
+      this.repo.findBranchPrintDetails?.(inv.branchId) ?? Promise.resolve(null),
+    ]);
+    return { data: { ...inv, tokenNo, branch } };
   }
 
   /**
@@ -176,9 +179,12 @@ export class BillingService {
 
   /** Re-serves an invoice that a previous, duplicate attempt already wrote. */
   private async buildCreateResponse(invoice: any) {
-    const tokenNo = await this.repo.findTokenNoByPrescription(invoice.prescriptionId);
+    const [tokenNo, branch] = await Promise.all([
+      this.repo.findTokenNoByPrescription(invoice.prescriptionId),
+      this.repo.findBranchPrintDetails?.(invoice.branchId) ?? Promise.resolve(null),
+    ]);
     return {
-      invoice: { ...invoice, tokenNo },
+      invoice: { ...invoice, tokenNo, branch },
       items: invoice.items ?? [],
       // Lets the POS tell "your sale is recorded" apart from "a new sale was
       // just made", which matters when reprinting after a flaky connection.
@@ -733,12 +739,13 @@ export class BillingService {
 
     // The POS prints the receipt straight from this response, so the queue
     // token has to be present here rather than only on a later detail fetch.
-    const tokenNo = await this.repo.findTokenNoByPrescription(
-      result.invoice.prescriptionId,
-    );
+    const [tokenNo, branch] = await Promise.all([
+      this.repo.findTokenNoByPrescription(result.invoice.prescriptionId),
+      this.repo.findBranchPrintDetails?.(result.invoice.branchId) ?? Promise.resolve(null),
+    ]);
 
     return {
-      invoice: { ...result.invoice, tokenNo },
+      invoice: { ...result.invoice, tokenNo, branch },
       items: result.items,
     };
   }

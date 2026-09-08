@@ -11,6 +11,22 @@ export class BillingRepository {
     return this.drizzle.db;
   }
 
+  /** Public identity used on the selling branch's printed medicine invoice. */
+  async findBranchPrintDetails(branchId: string | null | undefined) {
+    if (!branchId) return null;
+    const [branch] = await this.db
+      .select({
+        id: schema.branches.id,
+        name: schema.branches.name,
+        address: schema.branches.address,
+        phone: schema.branches.phone,
+      })
+      .from(schema.branches)
+      .where(eq(schema.branches.id, branchId))
+      .limit(1);
+    return branch ?? null;
+  }
+
   /**
    * Allocates the next invoice number for a branch, inside the caller's
    * transaction.

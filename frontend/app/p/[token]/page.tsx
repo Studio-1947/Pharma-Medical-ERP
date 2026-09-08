@@ -9,7 +9,7 @@ import {
   Building2, Phone, Download, Share2, Receipt, ShieldCheck
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { PHARMACY_PRINT_DETAILS, formatTokenNo } from "@pharmerp/types";
+import { CLINIC_PRINT_DETAILS, PHARMACY_PRINT_DETAILS, formatTokenNo } from "@pharmerp/types";
 
 export default function PublicPatientPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
@@ -28,6 +28,18 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
   const record = (response as any)?.data?.data ?? (response as any)?.data;
   const isRx = record?.type === "prescription";
   const isInv = record?.type === "invoice";
+
+  // One page, two identities. A prescription is a clinic document and carries
+  // the clinic's full name; an invoice is a medicine bill and carries the
+  // selling store, falling back to Store 1 for records saved before branches
+  // were printed.
+  const header = isRx
+    ? CLINIC_PRINT_DETAILS
+    : {
+        legalName: record?.branch?.name?.trim() || PHARMACY_PRINT_DETAILS.legalName,
+        addressLine: record?.branch?.address?.trim() || PHARMACY_PRINT_DETAILS.addressLine,
+        phone: record?.branch?.phone?.trim() || PHARMACY_PRINT_DETAILS.phone,
+      };
 
   if (isLoading) {
     return (
@@ -66,17 +78,17 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
               carries its own white ground so it stays legible on this header. */}
           <Image
             src="/logo.svg"
-            alt={PHARMACY_PRINT_DETAILS.legalName}
+            alt={header.legalName}
             width={56}
             height={56}
             className="inline-block w-14 h-14 rounded-2xl mb-3 shadow-lg"
             priority
           />
-          <h1 className="text-lg font-black tracking-tight">{PHARMACY_PRINT_DETAILS.legalName}</h1>
+          <h1 className="text-lg font-black tracking-tight">{header.legalName}</h1>
           <p className="text-[11px] text-emerald-100/90 mt-1 leading-snug">
-            {PHARMACY_PRINT_DETAILS.addressLine}
+            {header.addressLine}
             <br />
-            Ph: {PHARMACY_PRINT_DETAILS.phone}
+            Ph: {header.phone}
           </p>
           <p className="text-xs text-emerald-200 font-medium mt-1">Digital Patient Healthcare Record</p>
 
@@ -256,10 +268,10 @@ export default function PublicPatientPage({ params }: { params: Promise<{ token:
 
           <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-slate-600">
             <ShieldCheck size={14} className="text-emerald-600 print:hidden" />
-            <span>Official Verified Record — Radha Madhav Medical Hall</span>
+            <span>Official Verified Record — {header.legalName}</span>
           </div>
           <p className="text-[10px] text-slate-400 print:text-slate-600">
-            Thank you for choosing Radha Madhav Medical Hall. For support, contact your pharmacy counter.
+            Thank you for choosing {header.legalName}. For support, contact your pharmacy counter.
           </p>
         </div>
 

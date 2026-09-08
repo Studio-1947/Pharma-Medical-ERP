@@ -16,6 +16,12 @@ export interface ReceiptHeaderOptions {
   origin: string;
   /** Document kind, e.g. "Tax Invoice / Bill of Supply". */
   subtitle: string;
+  /** Selling branch printed on this medicine invoice. */
+  branch?: {
+    name?: string | null;
+    address?: string | null;
+    phone?: string | null;
+  } | null;
 }
 
 /** Styles for the markup produced by {@link buildReceiptHeaderHtml}. */
@@ -44,6 +50,7 @@ export function buildReceiptHeaderHtml({
   tokenNo,
   origin,
   subtitle,
+  branch,
 }: ReceiptHeaderOptions): string {
   const tokenLabel = formatTokenNo(tokenNo);
 
@@ -59,13 +66,15 @@ export function buildReceiptHeaderHtml({
 `
     : "";
 
-  const name = esc(PHARMACY_PRINT_DETAILS.legalName);
+  const name = esc(branch?.name?.trim() || PHARMACY_PRINT_DETAILS.legalName);
+  const address = esc(branch?.address?.trim() || PHARMACY_PRINT_DETAILS.addressLine);
+  const phone = esc(branch?.phone?.trim() || PHARMACY_PRINT_DETAILS.phone);
 
   return `${tokenBlock}  <div class="brand">
     <img id="brand-logo" src="${esc(origin)}/logo-full.svg" alt="${name}"/>
   </div>
   <p class="legal-name">${name}</p>
-  <p class="legal-addr">${esc(PHARMACY_PRINT_DETAILS.addressLine)}<br/>Ph: ${esc(PHARMACY_PRINT_DETAILS.phone)}</p>
+  <p class="legal-addr">${address}<br/>Ph: ${phone}</p>
   <p class="subtitle">${esc(subtitle)}</p>
 `;
 }

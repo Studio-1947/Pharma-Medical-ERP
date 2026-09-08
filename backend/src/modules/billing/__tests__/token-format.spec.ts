@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatTokenNo, PHARMACY_PRINT_DETAILS } from "@pharmerp/types";
+import { CLINIC_PRINT_DETAILS, formatTokenNo, PHARMACY_PRINT_DETAILS } from "@pharmerp/types";
 
 /**
  * formatTokenNo decides whether the token row renders at all, on every printed
@@ -54,13 +54,10 @@ describe("formatTokenNo", () => {
 });
 
 describe("PHARMACY_PRINT_DETAILS", () => {
-  it("carries the honorific on the legal name used by bills", () => {
-    // The bill must read "Shree ...", while the app UI and logo artwork use the
-    // plain trading name. Regressing this is a compliance/branding issue that
-    // no other test would catch.
-    expect(PHARMACY_PRINT_DETAILS.legalName).toBe("Shree Radha Madhav Medical Hall");
+  it("keeps the medical-store invoice name separate from the clinic", () => {
+    expect(PHARMACY_PRINT_DETAILS.legalName).toBe("Radha Madhav Medical Hall");
     expect(PHARMACY_PRINT_DETAILS.tradingName).toBe("Radha Madhav Medical Hall");
-    expect(PHARMACY_PRINT_DETAILS.legalName.startsWith("Shree ")).toBe(true);
+    expect(CLINIC_PRINT_DETAILS.legalName).toBe("Shree Radha Madhav Medical Hall");
   });
 
   it("carries the address and phone printed on every document", () => {
