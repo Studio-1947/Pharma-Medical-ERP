@@ -123,6 +123,18 @@ function displayDoctorName(name?: string | null) {
   return /^dr\.?\s/i.test(name.trim()) ? name.trim() : `Dr. ${name.trim()}`;
 }
 
+function patientNameFontSize(name: string) {
+  if (name.length > 34) return 8.5;
+  if (name.length > 26) return 9.5;
+  if (name.length > 20) return 10.5;
+  return 12;
+}
+
+function patientAgeLabel(age?: string | null) {
+  if (!age) return null;
+  return /^\d+$/.test(age.trim()) ? `${age.trim()} yrs` : age.trim();
+}
+
 /* ─────────────────────── Letterhead sanitization ───────────────────────
  * Removes the paths that belong to the source doctor (name, credentials and
  * the service list on the band, plus its row dashes) so the live doctor's
@@ -175,9 +187,9 @@ export function PrescriptionTemplate({
     rx.doctorQualification,
     rx.doctorDesignation,
     rx.regNo ? `Reg No: ${rx.regNo}` : null,
-    rx.hospitalName,
   ].filter(Boolean);
-  const patientLine = [rx.patientAge, rx.patientGender].filter(Boolean).join(" · ");
+  const patientAge = patientAgeLabel(rx.patientAge);
+  const patientGender = rx.patientGender?.trim();
 
   return (
     <div
@@ -205,7 +217,7 @@ export function PrescriptionTemplate({
       {/* Layer 2 — dynamic content, positioned in the letterhead's own coords */}
 
       {/* Doctor identity (top-left) */}
-      <div style={{ position: "absolute", left: 39, top: 34, width: 470 }}>
+      <div style={{ position: "absolute", left: 39, top: 34, width: 350 }}>
         <div style={{ color: TEAL, fontWeight: 800, fontSize: 13.5, lineHeight: 1.2 }}>
           {docName}
         </div>
@@ -217,36 +229,13 @@ export function PrescriptionTemplate({
               fontSize: 9.5,
               lineHeight: 1.15,
               marginTop: i === 0 ? 5 : 1,
+              overflowWrap: "anywhere",
             }}
           >
             {line}
           </div>
         ))}
       </div>
-
-      {/* Doctor's service list on the teal band */}
-      {rx.specialties.length > 0 && (
-        <div
-          style={{
-            position: "absolute",
-            left: 38,
-            top: 164,
-            width: 152,
-            color: "#fff",
-            fontWeight: 700,
-            fontSize: 10,
-            letterSpacing: 1,
-            textTransform: "uppercase",
-            lineHeight: 1.45,
-          }}
-        >
-          {rx.specialties.slice(0, 9).map((s, i) => (
-            <div key={i} style={{ marginBottom: 3 }}>
-              {s}
-            </div>
-          ))}
-        </div>
-      )}
 
       {/* Queue token, in the clear band under the letterhead logo. Rendered only
           for prescriptions written from the clinic queue; uploaded scans and
@@ -273,22 +262,36 @@ export function PrescriptionTemplate({
         </div>
       )}
 
-      {/* Patient name filled into the pre-printed "Name:" form row */}
+      {/* Each value has its own pre-printed form row, preventing collisions. */}
       {rx.patientName && (
         <div
           style={{
             position: "absolute",
             left: 300,
             top: 151,
-            fontSize: 12,
+            width: 260,
+            fontSize: patientNameFontSize(rx.patientName),
             fontWeight: 700,
             color: INK,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
           }}
+          title={rx.patientName}
         >
           {rx.patientName}
-          {patientLine && (
-            <span style={{ fontWeight: 600, color: "#5A6E6B" }}> · {patientLine}</span>
-          )}
+        </div>
+      )}
+
+      {patientAge && (
+        <div style={{ position: "absolute", left: 300, top: 174, width: 92, fontSize: 10.5, fontWeight: 700, color: INK }}>
+          {patientAge}
+        </div>
+      )}
+
+      {patientGender && (
+        <div style={{ position: "absolute", left: 470, top: 174, width: 82, fontSize: 10.5, fontWeight: 700, color: INK, textTransform: "capitalize" }}>
+          {patientGender}
         </div>
       )}
 

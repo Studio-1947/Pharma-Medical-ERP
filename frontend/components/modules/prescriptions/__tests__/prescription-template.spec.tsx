@@ -61,6 +61,22 @@ describe("PrescriptionTemplate — clinic queue token", () => {
     expect(screen.getByText("Test Patient")).toBeInTheDocument();
     expect(screen.getByText("004")).toBeInTheDocument();
   });
+
+  it("keeps patient name, age, and gender in separate fields without printing branch or service tags", () => {
+    renderRx({
+      patientName: "Soumic Chatterjee",
+      patientAge: "32",
+      patientGender: "male",
+      hospitalName: "Main Branch",
+      specialties: ["General Medicine", "Primary Care"],
+    });
+
+    expect(screen.getByText("Soumic Chatterjee")).toBeInTheDocument();
+    expect(screen.getByText("32 yrs")).toBeInTheDocument();
+    expect(screen.getByText("male")).toBeInTheDocument();
+    expect(screen.queryByText("Main Branch")).not.toBeInTheDocument();
+    expect(screen.queryByText("General Medicine")).not.toBeInTheDocument();
+  });
 });
 
 describe("toPrescriptionTemplateData", () => {
