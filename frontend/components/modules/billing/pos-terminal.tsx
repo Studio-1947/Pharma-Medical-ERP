@@ -716,6 +716,7 @@ export function PosTerminal({
       loyaltyPointsToRedeem,
       items: items.map((i) => ({
         medicineId: i.medicineId,
+        batchId: i.batchId,
         quantity: i.saleUnit === "pack" ? i.quantity * (i.stripSize || 1) : i.quantity,
         discountPct: String(i.discountPct ?? "0"),
       })),

@@ -2,6 +2,9 @@ import { z } from "zod";
 
 export const invoiceItemSchema = z.object({
   medicineId: z.string().uuid(),
+  // When omitted the server uses FEFO. A supplied batch pins both physical
+  // stock and its batch-specific selling price.
+  batchId: z.string().uuid().optional(),
   quantity: z.number().int().min(1),
   discountPct: z.string().regex(/^\d+(\.\d{1,2})?$/).default("0"),
   // batchId REMOVED — server performs FEFO (BILL-06)

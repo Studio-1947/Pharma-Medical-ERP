@@ -247,7 +247,17 @@ export class InvoicePdfService {
       rowY += 6;
       totLine("GRAND TOTAL", rupee(invoice.totalAmount), true, BLUE);
       totLine("Amount Paid", rupee(invoice.amountPaid));
-      if (Number(invoice.amountDue) > 0) totLine("Balance Due", rupee(invoice.amountDue), false, "#dc2626");
+      if (Number(invoice.amountDue) > 0) {
+        totLine("Balance Due", rupee(invoice.amountDue), true, "#dc2626");
+        rowY += 4;
+        doc.roundedRect(totLineX, rowY, ML + PW - totLineX, 27, 4)
+          .fillAndStroke("#fef2f2", "#dc2626");
+        doc.font("Helvetica-Bold").fontSize(10).fillColor("#991b1b")
+          .text("PAYMENT DUE", totLineX + 8, rowY + 8, { lineBreak: false });
+        doc.font("Helvetica-Bold").fontSize(12).fillColor("#dc2626")
+          .text(rupee(invoice.amountDue), totValX, rowY + 7, { width: totW, align: "right", lineBreak: false });
+        rowY += 33;
+      }
 
       rowY += 6;
       if (invoice.payments?.length) {

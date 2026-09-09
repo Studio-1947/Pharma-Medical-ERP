@@ -63,6 +63,7 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
   const [cameraOpen, setCameraOpen] = useState(false);
   const [form, setForm] = useState({
     batchNo: "",
+    manufactureDate: "",
     expiryDate: "",
     quantity: "",
     costPrice: "",
@@ -183,6 +184,7 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
       medicineId: selectedMedicine.id,
       ...(activeBranchId ? { branchId: activeBranchId } : {}),
       batchNo: form.batchNo.trim(),
+      ...(form.manufactureDate ? { manufactureDate: form.manufactureDate } : {}),
       expiryDate: form.expiryDate,
       quantity: qty,
       ...(costEntered ? { costPrice: cost.toFixed(2) } : {}),
@@ -258,7 +260,7 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-gray-700">Batch Number *</label>
             <input
@@ -278,6 +280,12 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
                 This batch number already exists for the selected medicine.
               </p>
             )}
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Manufacturing Date</label>
+            <input type="date" max={form.expiryDate || undefined} value={form.manufactureDate}
+              onChange={(e) => setForm((f) => ({ ...f, manufactureDate: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-gray-700">Expiry Date *</label>

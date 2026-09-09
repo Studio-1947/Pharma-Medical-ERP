@@ -44,13 +44,52 @@ import { OtcCounterSale } from "@/components/modules/billing/otc-counter-sale";
 import { InvoiceDetailModal } from "@/components/modules/billing/invoice-detail-modal";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
 import { useToast } from "@/components/ui/toast";
-import { useCartStore } from "@/stores/cart.store";
+import { useCartStore, type CartItem } from "@/stores/cart.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { usePermissions } from "@/hooks/use-permissions";
 import { formatStockUnit } from "@/lib/stock-unit-formatter";
 import { invalidateMedicineViews, invalidateCounterDesk } from "@/lib/query-invalidation";
 
 type DeskPath = "prescription" | "doctor" | "otc" | null;
+
+function CartBatchPicker({ item, branchId }: { item: CartItem; branchId?: string }) {
+  const replaceBatch = useCartStore((s) => s.replaceBatch);
+  const { data } = useQuery({
+    queryKey: ["cart-batches", item.medicineId, branchId],
+    queryFn: () => apiClient.get(`/inventory/medicines/${item.medicineId}/batches`, { params: { branchId } }) as any,
+    staleTime: 15_000,
+  });
+  const batches: any[] = Array.isArray((data as any)?.data?.data)
+    ? (data as any).data.data
+    : Array.isArray((data as any)?.data) ? (data as any).data : Array.isArray(data) ? data as any[] : [];
+
+  return (
+    <div className="mt-1 flex items-center gap-1.5">
+      <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[9px] font-bold text-amber-700">FEFO recommended</span>
+      <select
+        aria-label={`Batch for ${item.name}`}
+        value={item.batchId}
+        onChange={(e) => {
+          const b = batches.find((row) => row.id === e.target.value);
+          if (!b) return;
+          replaceBatch(item.medicineId, item.batchId, {
+            batchId: b.id,
+            batchNo: b.batchNo,
+            unitPrice: Number(b.mrpAtEntry),
+            batchStock: Math.max(0, Number(b.quantity ?? 0) - Number(b.reservedQty ?? 0)),
+          });
+        }}
+        className="max-w-[250px] rounded border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-mono text-slate-600"
+      >
+        {batches.map((b, index) => (
+          <option key={b.id} value={b.id}>
+            {index === 0 ? "Recommended · " : ""}{b.batchNo} · exp {String(b.expiryDate).slice(0, 10)} · ₹{Number(b.mrpAtEntry).toFixed(2)} · qty {Number(b.quantity) - Number(b.reservedQty ?? 0)}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
 
 /**
  * New billing flow — the patient-first counter desk journey.
@@ -1828,6 +1867,7 @@ export function PatientFirstBilling({
                         {item.saleUnit === "loose" ? `${item.quantity} loose` : `${item.quantity} × ${item.saleUnit}`} · {item.taxPct > 0 ? `${item.taxPct}% GST` : "No GST"}
                         {discAmt > 0 && <span className="text-purple-600 font-semibold"> · −₹{discAmt.toFixed(2)}</span>}
                       </p>
+                      <CartBatchPicker item={item} branchId={activeBranchId} />
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       <div className="flex items-center gap-1 border border-slate-200 rounded-lg px-1 py-0.5">
@@ -1838,7 +1878,16 @@ export function PatientFirstBilling({
                         >
                           <Minus size={11} />
                         </button>
-                        <span className="text-xs font-bold text-slate-800 w-5 text-center">{item.quantity}</span>
+                        <input
+                          type="number"
+                          min={1}
+                          max={item.batchStock}
+                          inputMode="numeric"
+                          aria-label={`Quantity for ${item.name}`}
+                          value={item.quantity}
+                          onChange={(e) => cart.updateQty(item.medicineId, item.batchId, Math.max(1, Math.min(Number(e.target.value) || 1, item.batchStock ?? Number.MAX_SAFE_INTEGER)))}
+                          className="w-10 bg-transparent text-center text-xs font-bold text-slate-800 outline-none"
+                        />
                         <button
                           type="button"
                           onClick={() => cart.updateQty(item.medicineId, item.batchId, item.quantity + 1)}

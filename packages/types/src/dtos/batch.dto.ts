@@ -5,6 +5,7 @@ export const createBatchSchema = z.object({
   locationId: z.string().uuid().optional(),
   branchId: z.string().uuid().optional(),
   batchNo: z.string().min(1).max(100),
+  manufactureDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD").optional(),
   expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD"),
   quantity: z.number().int().min(1),
   /**
@@ -21,6 +22,7 @@ export const createBatchSchema = z.object({
 
 export const updateBatchSchema = z.object({
   batchNo: z.string().min(1).max(100).optional(),
+  manufactureDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD").optional(),
   expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD").optional(),
   costPrice: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
   mrpAtEntry: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),

@@ -70,6 +70,8 @@ export function SettleDueModal({
       toastSuccess("Payment recorded", `₹${amount} collected against ${selected?.invoiceNo}`);
       qc.invalidateQueries({ queryKey: ["patient-outstanding-invoices", patientId] });
       qc.invalidateQueries({ queryKey: ["patients"] });
+      qc.invalidateQueries({ queryKey: ["receivables-aging"] });
+      qc.invalidateQueries({ queryKey: ["patient-ledger", patientId] });
       setSelectedInvoiceId(null);
       setAmount("");
       setReferenceNo("");

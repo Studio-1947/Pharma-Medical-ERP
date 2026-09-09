@@ -5,12 +5,13 @@ import { useState } from "react";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { useNavigation } from "@/lib/navigation-context";
 import { useAuthStore } from "@/stores/auth.store";
-import { ShoppingCart, XCircle, RotateCcw, AlertCircle, Download, Search, BarChart2, Receipt, ListOrdered } from "lucide-react";
+import { ShoppingCart, XCircle, RotateCcw, AlertCircle, Download, Search, BarChart2, Receipt, ListOrdered, HandCoins } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { PatientFirstBilling } from "@/components/modules/billing/patient-first-billing";
 import { PosTerminal } from "@/components/modules/billing/pos-terminal";
 import { StuckSalesBanner } from "@/components/modules/billing/stuck-sales-banner";
 import { RxPendingBanner } from "@/components/modules/billing/rx-pending-banner";
+import { ReceivablesAgingView } from "@/components/modules/billing/receivables-aging-view";
 import { errorText } from "@/lib/error-message";
 
 // ─── PDF download button (polls until ready) ─────────────────────────────────
@@ -426,6 +427,7 @@ export default function BillingPage() {
   const { user } = useAuthStore();
   const [page, setPage] = useState(1);
   const [showHistory, setShowHistory] = useState(false);
+  const [showDues, setShowDues] = useState(false);
   // In the new flow the payment POS renders inline on this page — the classic
   // POS route is never navigated to, so no classic POS screen is ever shown.
   const [paying, setPaying] = useState(false);
@@ -506,9 +508,13 @@ export default function BillingPage() {
     }
     return (
       <div>
-        <div className="mb-4 flex items-center justify-end">
+        <div className="mb-4 flex items-center justify-end gap-2">
+          <button onClick={() => { setShowDues(true); setShowHistory(true); }}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-purple-200 bg-purple-50 text-purple-700 text-xs font-semibold hover:bg-purple-100 transition-all">
+            <HandCoins size={14} /> Customer Dues
+          </button>
           <button
-            onClick={() => setShowHistory(true)}
+            onClick={() => { setShowDues(false); setShowHistory(true); }}
             className="flex items-center gap-2 px-3.5 py-2 rounded-xl border border-slate-200 bg-white text-slate-600 text-xs font-semibold hover:bg-slate-50 hover:text-slate-900 transition-all"
           >
             <ListOrdered size={14} />
@@ -547,11 +553,16 @@ export default function BillingPage() {
       )}
 
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-2xl font-semibold">Billing</h2>
+        <h2 className="text-2xl font-semibold">{showDues ? "Customer Dues & Settlement" : "Billing"}</h2>
         {/* Open POS is available to everyone in the old (legacy) flow — the
             classic terminal is its primary interface. In the new flow it stays
             reachable only for super admins, who use it as the fallback; shop
             managers are sent back to the counter desk by /billing/pos anyway. */}
+        <div className="flex items-center gap-2">
+        <button onClick={() => setShowDues((v) => !v)}
+          className="flex items-center gap-2 px-4 py-2 border border-purple-200 bg-purple-50 text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-100">
+          <HandCoins size={16} /> {showDues ? "Invoice History" : "Customer Dues"}
+        </button>
         {(user?.role === "super_admin" || !newFlowActive) && (
           <button
             onClick={() => navigate("/billing/pos")}
@@ -560,7 +571,10 @@ export default function BillingPage() {
             <ShoppingCart size={16} /> Open POS
           </button>
         )}
+        </div>
       </div>
+
+      {showDues ? <ReceivablesAgingView /> : <>
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 mb-5 p-4 bg-muted/30 rounded-xl border">
@@ -729,6 +743,7 @@ export default function BillingPage() {
       <ReturnModal invoice={returnTarget} open={!!returnTarget} onClose={() => setReturnTarget(null)} />
 
       <EodSummary />
+      </>}
     </div>
   );
 }
