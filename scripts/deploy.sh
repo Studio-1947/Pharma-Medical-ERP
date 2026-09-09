@@ -68,7 +68,7 @@ rollback() {
   docker image tag pharmerp-backend:rollback pharmerp-backend:current
   docker image tag pharmerp-frontend:rollback pharmerp-frontend:current
 
-  compose up -d --no-build --force-recreate --wait --wait-timeout 180 backend frontend
+  compose up -d --no-deps --no-build --force-recreate --wait --wait-timeout 180 backend frontend
 }
 
 fail_and_rollback() {
@@ -100,7 +100,7 @@ fi
 # 4. Rebuild and launch production containers
 echo "[3/5] Building and updating Docker containers..."
 save_rollback_images
-if ! compose up -d --build --wait --wait-timeout 180 backend frontend; then
+if ! compose up -d --no-deps --build --wait --wait-timeout 180 backend frontend; then
   fail_and_rollback "one or more containers did not become healthy."
 fi
 

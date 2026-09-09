@@ -1,4 +1,4 @@
-FROM node:20-bullseye AS base
+FROM node:20-bookworm AS base
 RUN npm install -g pnpm@9
 
 FROM base AS deps
@@ -20,7 +20,7 @@ RUN pnpm --filter @pharmerp/utils build || true
 RUN pnpm --filter backend build
 RUN pnpm deploy --filter backend --prod /deploy
 
-FROM node:20-bullseye-slim AS runner
+FROM node:20-bookworm-slim AS runner
 # No build tools needed at runtime — dist/main is compiled JS
 WORKDIR /app
 COPY --from=build /deploy .
