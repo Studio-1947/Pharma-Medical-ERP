@@ -69,20 +69,24 @@ export const approvePurchaseOrderSchema = z.object({
   notes: z.string().optional(),
 });
 
+const createGrnItemSchema = z.object({
+  poItemId: z.string().uuid(),
+  receivedQty: z.number().int().min(1),
+  rejectedQty: z.number().int().min(0).default(0),
+  freeQty: z.number().int().min(0).optional().default(0),
+  batchNo: z.string().min(1).max(100),
+  expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+}).refine((item) => item.freeQty <= item.receivedQty, {
+  message: "Free quantity cannot exceed total received quantity",
+  path: ["freeQty"],
+});
+
 export const createGrnSchema = z.object({
   poId: z.string().uuid(),
   supplierInvoiceNo: z.string().max(100).optional(),
   qcPassed: z.boolean(),
   qcNotes: z.string().optional(),
-  items: z.array(z.object({
-    poItemId: z.string().uuid(),
-    receivedQty: z.number().int().min(0),
-    rejectedQty: z.number().int().min(0).default(0),
-    // How many of receivedQty on this delivery were free (scheme), not billed.
-    freeQty: z.number().int().min(0).optional().default(0),
-    batchNo: z.string().min(1).max(100),
-    expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  })).min(1),
+  items: z.array(createGrnItemSchema).min(1),
 });
 
 export const queryPurchaseOrderSchema = z.object({

@@ -112,6 +112,19 @@ describe("GRN branch stamping", () => {
     expect(batchInsert!.values.branchId).not.toBe(BRANCH_OTHER);
   });
 
+  it("spreads billed cost across billed and free stock", async () => {
+    await repoWith(db).createGRN({
+      ...GRN_DTO,
+      items: [{ ...GRN_DTO.items[0], receivedQty: 200, freeQty: 40 }],
+    }, "user-1");
+
+    const batchInsert = inserts.find((i) => i.table === schema.inventoryBatches);
+    expect(batchInsert!.values.quantity).toBe(200);
+    // Dealer bills 160 × ₹10 = ₹1,600. Spread over all 200 physical units,
+    // inventory remains valued at the same ₹1,600 (₹8 effective cost each).
+    expect(batchInsert!.values.costPrice).toBe("8.00");
+  });
+
   it("stamps the stock movement with the same branch as the batch", async () => {
     await repoWith(db).createGRN(GRN_DTO, "user-1");
 

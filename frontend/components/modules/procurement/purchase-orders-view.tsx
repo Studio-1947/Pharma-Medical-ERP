@@ -119,6 +119,7 @@ function GrnModal({
       if (!l.batchNo.trim()) { setError("Batch number is required for all items."); return; }
       if (!l.expiryDate) { setError("Expiry date is required for all items."); return; }
       if (l.receivedQty <= 0) { setError("Received quantity must be greater than 0."); return; }
+      if (l.freeQty < 0 || l.freeQty > l.receivedQty) { setError("Free quantity must be between 0 and total received quantity."); return; }
     }
     mutation.mutate(lines);
   };
@@ -161,8 +162,9 @@ function GrnModal({
                 <th className="text-left py-2 pr-3">Item / Medicine ID</th>
                 <th className="text-left py-2 pr-3">Batch No <span className="text-red-500">*</span></th>
                 <th className="text-left py-2 pr-3">Expiry Date <span className="text-red-500">*</span></th>
-                <th className="text-right py-2 pr-3">Rcvd Qty <span className="text-red-500">*</span></th>
-                <th className="text-right py-2 pr-3">Free Qty</th>
+                <th className="text-right py-2 pr-3">Total Received <span className="text-red-500">*</span></th>
+                <th className="text-right py-2 pr-3">Free</th>
+                <th className="text-right py-2 pr-3">Billed</th>
                 <th className="text-right py-2">Unit Cost (₹)</th>
               </tr>
             </thead>
@@ -216,13 +218,26 @@ function GrnModal({
                       className="w-16 border rounded px-2 py-1 text-xs text-right font-mono focus:outline-none focus:ring-1 focus:ring-emerald-400 ml-auto block"
                     />
                   </td>
+                  <td className="py-2 pr-3 text-right font-mono font-bold text-slate-700">
+                    {Math.max(0, line.receivedQty - line.freeQty)}
+                  </td>
                   <td className="py-2">
                     <input
-                      type="text"
+                      type="number"
+                      min="0"
+                      step="0.01"
                       value={line.unitCost}
-                      onChange={(e) => updateLine(idx, "unitCost", e.target.value)}
-                      className="w-24 border rounded px-2 py-1 text-xs text-right font-mono focus:outline-none focus:ring-1 focus:ring-emerald-400 ml-auto block"
+                      readOnly
+                      title="Rate fixed on the approved purchase order"
+                      className="w-24 border rounded px-2 py-1 text-xs text-right font-mono bg-slate-50 text-slate-500 ml-auto block"
                     />
+                    <div className="mt-1 text-[10px] font-bold text-emerald-700 whitespace-nowrap text-right">
+                      Bill ₹{(
+                        Math.max(0, line.receivedQty - line.freeQty) * Number(line.unitCost || 0) *
+                        (1 - Number((poDetail?.items[idx] as any)?.discountPct ?? 0) / 100) *
+                        (1 + Number((poDetail?.items[idx] as any)?.taxPct ?? 0) / 100)
+                      ).toFixed(2)}
+                    </div>
                   </td>
                 </tr>
               ))}
