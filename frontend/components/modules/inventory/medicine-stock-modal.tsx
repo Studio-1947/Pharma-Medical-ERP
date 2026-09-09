@@ -48,6 +48,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
   const [newExpiry, setNewExpiry] = useState("");
   const [newManufactureDate, setNewManufactureDate] = useState("");
   const [newQty, setNewQty] = useState<number>(50);
+  const [newFreeQty, setNewFreeQty] = useState<number>(0);
   const [qtyMode, setQtyMode] = useState<"units" | "strips">("units");
   const [newPurchasePrice, setNewPurchasePrice] = useState<string>("");
   const [newMrp, setNewMrp] = useState<string>("");
@@ -101,6 +102,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
       setNewExpiry("");
       setNewManufactureDate("");
       setNewQty(50);
+      setNewFreeQty(0);
       setNewPurchasePrice("");
       setNewMrp("");
     },
@@ -124,6 +126,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
       setNewExpiry("");
       setNewManufactureDate("");
       setNewQty(50);
+      setNewFreeQty(0);
       setNewPurchasePrice("");
       setNewMrp("");
       return;
@@ -150,6 +153,11 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
   const handleAddStockSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!medicineId || !newBatchNo.trim() || !newExpiry) return;
+    const unitMultiplier = qtyMode === "strips" ? Math.max(1, Number(medicine?.stripSize ?? 1)) : 1;
+    if (newFreeQty < 0 || newFreeQty > newQty) {
+      toastError("Invalid free quantity", "Free count cannot exceed total received count.");
+      return;
+    }
 
     // An inactive medicine is only promoted back to active by a batch that
     // carries a real MRP (batch.service.ts). Receiving one at zero would
@@ -172,7 +180,8 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
       batchNo: newBatchNo.trim().toUpperCase(),
       expiryDate: newExpiry, // YYYY-MM-DD format
       ...(newManufactureDate ? { manufactureDate: newManufactureDate } : {}),
-      quantity: Number(newQty) * (qtyMode === "strips" ? Math.max(1, Number(medicine?.stripSize ?? 1)) : 1),
+      quantity: Number(newQty) * unitMultiplier,
+      ...(newFreeQty > 0 ? { freeQuantity: Number(newFreeQty) * unitMultiplier } : {}),
       costPrice: cost,
       mrpAtEntry: mrp,
     });
@@ -324,6 +333,13 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                   </select>
                   </div>
                   {qtyMode === "strips" && <p className="mt-1 text-[10px] text-slate-500">{newQty} strips × {medicine?.stripSize ?? 1} = {newQty * Number(medicine?.stripSize ?? 1)} units</p>}
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Free Count</label>
+                  <input type="number" min={0} max={newQty} inputMode="numeric" value={newFreeQty}
+                    onChange={(e) => setNewFreeQty(Math.max(0, Number(e.target.value) || 0))}
+                    className="w-full text-xs font-bold bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  <p className="mt-1 text-[10px] text-slate-500">Billed {Math.max(0, newQty - newFreeQty)} + free {newFreeQty} = {newQty} {qtyMode}</p>
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">Cost Price / strip (₹)</label>

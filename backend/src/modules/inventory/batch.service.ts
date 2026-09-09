@@ -17,6 +17,7 @@ import type {
 import { BarcodeService } from "./barcode.service";
 import { assertBranchAccess } from "../../common/auth/branch-scope";
 import type { JwtPayload } from "../../common/decorators/current-user.decorator";
+import Decimal from "decimal.js";
 
 @Injectable()
 export class BatchService {
@@ -84,8 +85,14 @@ export class BatchService {
     // feeds stock valuation, so an omitted cost falls back to the medicine's
     // catalogue purchase rate, then to the batch MRP — the same ladder the CSV
     // import walks. Only a medicine with neither lands at zero.
-    const costPrice =
+    const listedCostPrice =
       dto.costPrice ?? medicine.purchaseRate ?? dto.mrpAtEntry ?? "0";
+    const billedQuantity = dto.quantity - (dto.freeQuantity ?? 0);
+    const costPrice = new Decimal(listedCostPrice)
+      .mul(billedQuantity)
+      .div(dto.quantity)
+      .toDecimalPlaces(2)
+      .toFixed(2);
 
     const batch = await this.batchRepo.createBatch({
       ...dto,
@@ -114,7 +121,7 @@ export class BatchService {
       movementType: "purchase",
       quantity: dto.quantity,
       performedBy: userId,
-      notes: `Initial batch receipt — batch no. ${dto.batchNo}`,
+      notes: `Initial batch receipt — batch no. ${dto.batchNo}; ${billedQuantity} billed + ${dto.freeQuantity ?? 0} free = ${dto.quantity} received`,
     });
 
     return { data: batch, message: "Batch created" };

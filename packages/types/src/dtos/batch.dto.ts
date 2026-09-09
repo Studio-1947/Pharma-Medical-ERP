@@ -8,6 +8,7 @@ export const createBatchSchema = z.object({
   manufactureDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD").optional(),
   expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD"),
   quantity: z.number().int().min(1),
+  freeQuantity: z.number().int().min(0).optional().default(0),
   /**
    * Optional. A pack often arrives before its invoice does, and refusing the
    * batch until someone knows the landed cost just keeps the stock off the
@@ -18,6 +19,9 @@ export const createBatchSchema = z.object({
   mrpAtEntry: z.string().regex(/^\d+(\.\d{1,2})?$/),
   poId: z.string().uuid().optional(),
   grnId: z.string().uuid().optional(),
+}).refine((batch) => batch.freeQuantity <= batch.quantity, {
+  message: "Free quantity cannot exceed total received quantity",
+  path: ["freeQuantity"],
 });
 
 export const updateBatchSchema = z.object({

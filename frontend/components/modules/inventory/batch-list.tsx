@@ -66,6 +66,7 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
     manufactureDate: "",
     expiryDate: "",
     quantity: "",
+    freeQuantity: "0",
     costPrice: "",
     mrpAtEntry: lockedMedicine ? parseFloat(lockedMedicine.priceMrp).toFixed(2) : "",
   });
@@ -167,6 +168,8 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
     if (!form.expiryDate) { setError("Expiry date is required."); return; }
     const qty = parseInt(form.quantity);
     if (!qty || qty < 1) { setError("Quantity must be at least 1."); return; }
+    const freeQty = parseInt(form.freeQuantity || "0");
+    if (freeQty < 0 || freeQty > qty) { setError("Free quantity must be between 0 and total received quantity."); return; }
     // Cost is optional — the invoice often turns up after the pack does. Left
     // blank, the server costs the batch from the medicine's purchase rate
     // rather than booking it at zero into stock valuation. A typed value still
@@ -187,6 +190,7 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
       ...(form.manufactureDate ? { manufactureDate: form.manufactureDate } : {}),
       expiryDate: form.expiryDate,
       quantity: qty,
+      ...(freeQty > 0 ? { freeQuantity: freeQty } : {}),
       ...(costEntered ? { costPrice: cost.toFixed(2) } : {}),
       mrpAtEntry: mrp.toFixed(2),
     });
@@ -260,7 +264,7 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
           )}
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-gray-700">Batch Number *</label>
             <input
@@ -282,12 +286,6 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
             )}
           </div>
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-700">Manufacturing Date</label>
-            <input type="date" max={form.expiryDate || undefined} value={form.manufactureDate}
-              onChange={(e) => setForm((f) => ({ ...f, manufactureDate: e.target.value }))}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
-          </div>
-          <div className="space-y-1.5">
             <label className="text-sm font-medium text-gray-700">Expiry Date *</label>
             <input
               type="date"
@@ -295,6 +293,12 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
               onChange={(e) => setForm((f) => ({ ...f, expiryDate: e.target.value }))}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Manufacturing Date</label>
+            <input type="date" max={form.expiryDate || undefined} value={form.manufactureDate}
+              onChange={(e) => setForm((f) => ({ ...f, manufactureDate: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
           </div>
         </div>
 
@@ -309,6 +313,13 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
               onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-gray-700">Free Quantity</label>
+            <input type="number" min={0} max={form.quantity || undefined} inputMode="numeric"
+              value={form.freeQuantity} onChange={(e) => setForm((f) => ({ ...f, freeQuantity: e.target.value }))}
+              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+            <p className="text-[11px] text-muted-foreground">Billed: {Math.max(0, Number(form.quantity || 0) - Number(form.freeQuantity || 0))}</p>
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-gray-700">
