@@ -178,18 +178,26 @@ async function takeOnCredit(user: ReturnType<typeof userEvent.setup>) {
   await user.type(screen.getByLabelText(/Phone number/i), "9876543210");
 }
 
+/** Normal paid sales now open the shared tender dialog before posting. */
+async function confirmCheckout(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(
+    await screen.findByRole("button", { name: /Confirm Payment/i }),
+  );
+}
+
 describe("OTC counter sale", () => {
   it("bills the sale by default and tenders exactly the amount it displays", async () => {
     const user = userEvent.setup();
     renderModal();
 
     // One strip of 10 at 85.50 pre-tax + 12% GST.
-    const button = await screen.findByRole("button", { name: /Bill ₹95\.76/ });
+    const button = await screen.findByRole("button", { name: /Pay & checkout ₹95\.76/ });
     // Once on the medicine's own line, once as the amount to collect — the
     // sale carries a list now, so a line and the bill total both show it.
     expect(screen.getAllByText("₹95.76").length).toBeGreaterThan(0);
 
     await user.click(button);
+    await confirmCheckout(user);
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     const [url, payload] = post.mock.calls[0] as [string, any];
@@ -207,22 +215,24 @@ describe("OTC counter sale", () => {
   it("shows the bill after a successful sale", async () => {
     const user = userEvent.setup();
     renderModal();
-    await user.click(await screen.findByRole("button", { name: /Bill ₹/ }));
+    await user.click(await screen.findByRole("button", { name: /Pay & checkout ₹/ }));
+    await confirmCheckout(user);
     expect(await screen.findByTestId("invoice-detail")).toHaveTextContent("inv-9");
   });
 
   it("carries the discount into the payload and re-prices before GST", async () => {
     const user = userEvent.setup();
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹/ });
 
     const discount = screen.getByLabelText(/Discount %/i, { selector: "input" });
     await user.clear(discount);
     await user.type(discount, "10");
 
     // 85.50 less 10% = 76.95 taxable, GST 9.23, total 86.18.
-    const button = await screen.findByRole("button", { name: /Bill ₹86\.18/ });
+    const button = await screen.findByRole("button", { name: /Pay & checkout ₹86\.18/ });
     await user.click(button);
+    await confirmCheckout(user);
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     const [, payload] = post.mock.calls[0] as [string, any];
@@ -233,11 +243,17 @@ describe("OTC counter sale", () => {
   it("records a UPI reference against the payment", async () => {
     const user = userEvent.setup();
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹/ });
 
     await user.click(screen.getByRole("button", { name: "upi" }));
-    await user.type(screen.getByPlaceholderText(/UPI transaction ID/i), "UPI-77");
-    await user.click(screen.getByRole("button", { name: /Bill ₹/ }));
+    await user.click(screen.getByRole("button", { name: /Pay & checkout ₹/ }));
+    const paymentPanel = (await screen.findByText("Collect Payment")).parentElement
+      ?.parentElement as HTMLElement;
+    await user.type(
+      within(paymentPanel).getByPlaceholderText(/UPI123/i),
+      "UPI-77",
+    );
+    await confirmCheckout(user);
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     const [, payload] = post.mock.calls[0] as [string, any];
@@ -247,7 +263,7 @@ describe("OTC counter sale", () => {
   it("keeps a free hand-out off the billing route entirely", async () => {
     const user = userEvent.setup();
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹/ });
 
     await user.click(screen.getByRole("button", { name: /Free — no charge/ }));
     await user.click(screen.getByRole("button", { name: /Record Free Hand-out/ }));
@@ -265,7 +281,7 @@ describe("OTC counter sale", () => {
     expect(
       await screen.findByText(/cannot be handed over without a prescription/i),
     ).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: /Bill ₹/ })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: /Pay & checkout ₹/ })).toBeDisabled();
     // Both ways out are offered rather than sending staff to another screen.
     expect(screen.getByRole("button", { name: /Scan \/ attach prescription/i })).toBeEnabled();
     expect(screen.getByRole("button", { name: /I verified it/i })).toBeEnabled();
@@ -276,9 +292,10 @@ describe("OTC counter sale", () => {
     renderModal({ ...MEDICINE, requiresPrescription: true, scheduleClass: "H" });
 
     await user.click(await screen.findByRole("button", { name: /I verified it/i }));
-    const bill = await screen.findByRole("button", { name: /Bill ₹/ });
+    const bill = await screen.findByRole("button", { name: /Pay & checkout ₹/ });
     expect(bill).toBeEnabled();
     await user.click(bill);
+    await confirmCheckout(user);
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     const [, payload] = post.mock.calls[0] as [string, any];
@@ -296,7 +313,8 @@ describe("OTC counter sale", () => {
     await user.click(await screen.findByRole("button", { name: "pick-rx" }));
 
     expect(await screen.findByText(/from Dr Rao/i)).toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: /Bill ₹/ }));
+    await user.click(await screen.findByRole("button", { name: /Pay & checkout ₹/ }));
+    await confirmCheckout(user);
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     const [, payload] = post.mock.calls[0] as [string, any];
@@ -317,7 +335,8 @@ describe("OTC counter sale", () => {
     await user.click(await screen.findByRole("button", { name: "pick-rx" }));
 
     expect(await screen.findByText(/is attached to this sale/i)).toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: /Bill ₹/ }));
+    await user.click(await screen.findByRole("button", { name: /Pay & checkout ₹/ }));
+    await confirmCheckout(user);
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     const [, payload] = post.mock.calls[0] as [string, any];
@@ -337,7 +356,7 @@ describe("OTC counter sale", () => {
       await screen.findByRole("button", { name: /Scan \/ upload prescription/i }),
     ).toBeInTheDocument();
     expect(screen.queryByText(/cannot be handed over without a prescription/i)).not.toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: /Bill ₹/ })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: /Pay & checkout ₹/ })).toBeEnabled();
   });
 
   it("lets an attached prescription be removed again", async () => {
@@ -352,7 +371,8 @@ describe("OTC counter sale", () => {
 
     await user.click(screen.getByRole("button", { name: /^Remove$/ }));
 
-    await user.click(await screen.findByRole("button", { name: /Bill ₹/ }));
+    await user.click(await screen.findByRole("button", { name: /Pay & checkout ₹/ }));
+    await confirmCheckout(user);
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     const [, payload] = post.mock.calls[0] as [string, any];
     // Attaching the wrong customer's prescription must be undoable, or the
@@ -386,13 +406,13 @@ describe("OTC counter sale", () => {
     renderModal({ ...MEDICINE, requiresPrescription: false, scheduleClass: "H1" });
 
     expect(await screen.findByText(/Schedule H1 cannot be handed over/i)).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: /Bill ₹/ })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: /Pay & checkout ₹/ })).toBeDisabled();
   });
 
   it("caps the quantity at what the branch actually holds", async () => {
     const user = userEvent.setup();
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹/ });
 
     const qty = screen.getByLabelText(/^Quantity/i, { selector: "input" });
     await user.clear(qty);
@@ -405,15 +425,16 @@ describe("OTC counter sale", () => {
   it("bills several medicines on one invoice, with one payment for the lot", async () => {
     const user = userEvent.setup();
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹95\.76/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹95\.76/ });
 
     // A walk-in rarely buys one thing — the second medicine joins the same bill.
     await user.type(screen.getByLabelText(/Search medicines/i), "cet");
     await user.click(await screen.findByRole("button", { name: /Cetirizine 10 mg/ }));
 
     // 85.50 + 12% = 95.76, 40.00 + 12% = 44.80 — one bill of 140.56.
-    const bill = await screen.findByRole("button", { name: /Bill ₹140\.56/ });
+    const bill = await screen.findByRole("button", { name: /Pay & checkout ₹140\.56/ });
     await user.click(bill);
+    await confirmCheckout(user);
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     const [url, payload] = post.mock.calls[0] as [string, any];
@@ -429,7 +450,7 @@ describe("OTC counter sale", () => {
   it("prices each medicine's quantity and discount on its own line", async () => {
     const user = userEvent.setup();
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹/ });
 
     await user.type(screen.getByLabelText(/Search medicines/i), "cet");
     await user.click(await screen.findByRole("button", { name: /Cetirizine 10 mg/ }));
@@ -443,7 +464,8 @@ describe("OTC counter sale", () => {
     const discounts = screen.getAllByLabelText(/Discount %/i, { selector: "input" });
     fireEvent.change(discounts[1]!, { target: { value: "10" } });
 
-    await user.click(await screen.findByRole("button", { name: /Bill ₹176\.40/ }));
+    await user.click(await screen.findByRole("button", { name: /Pay & checkout ₹176\.40/ }));
+    await confirmCheckout(user);
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     const [, payload] = post.mock.calls[0] as [string, any];
@@ -457,21 +479,21 @@ describe("OTC counter sale", () => {
   it("drops a medicine back off the bill without disturbing the rest", async () => {
     const user = userEvent.setup();
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹95\.76/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹95\.76/ });
 
     await user.type(screen.getByLabelText(/Search medicines/i), "cet");
     await user.click(await screen.findByRole("button", { name: /Cetirizine 10 mg/ }));
-    await screen.findByRole("button", { name: /Bill ₹140\.56/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹140\.56/ });
 
     await user.click(screen.getByRole("button", { name: /Remove Cetirizine 10 mg/i }));
 
-    expect(await screen.findByRole("button", { name: /Bill ₹95\.76/ })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: /Pay & checkout ₹95\.76/ })).toBeEnabled();
   });
 
   it("holds the whole bill back when any medicine on it needs a prescription", async () => {
     const user = userEvent.setup();
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹95\.76/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹95\.76/ });
 
     get.mockImplementation((url: string) => {
       if (url === "/inventory/medicines")
@@ -488,7 +510,7 @@ describe("OTC counter sale", () => {
     expect(
       await screen.findByText(/cannot be handed over without a prescription/i),
     ).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: /Bill ₹/ })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: /Pay & checkout ₹/ })).toBeDisabled();
     expect(post).not.toHaveBeenCalled();
   });
 
@@ -499,7 +521,7 @@ describe("OTC counter sale", () => {
     // attach later" — with no Rx panel left on screen to undo it.
     const user = userEvent.setup();
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹95\.76/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹95\.76/ });
 
     get.mockImplementation((url: string) => {
       if (url === "/inventory/medicines")
@@ -525,7 +547,8 @@ describe("OTC counter sale", () => {
       ).not.toBeInTheDocument(),
     );
 
-    await user.click(await screen.findByRole("button", { name: /Bill ₹95\.76/ }));
+    await user.click(await screen.findByRole("button", { name: /Pay & checkout ₹95\.76/ }));
+    await confirmCheckout(user);
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     const [, payload] = post.mock.calls[0] as [string, any];
@@ -544,7 +567,7 @@ describe("OTC counter sale", () => {
     // nobody ever showed them.
     const user = userEvent.setup();
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹95\.76/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹95\.76/ });
 
     const controlled = (id: string, name: string) => ({
       ...MEDICINE_2,
@@ -584,7 +607,7 @@ describe("OTC counter sale", () => {
     expect(
       await screen.findByText(/cannot be handed over without a prescription/i),
     ).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: /Bill ₹/ })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: /Pay & checkout ₹/ })).toBeDisabled();
     expect(post).not.toHaveBeenCalled();
   });
 
@@ -600,7 +623,7 @@ describe("OTC counter sale", () => {
 
     // Search on the left, the bill on the right, both on the desk itself.
     expect(await screen.findByLabelText(/Search medicines/i)).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: /Bill ₹95\.76/ })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: /Pay & checkout ₹95\.76/ })).toBeEnabled();
     expect(screen.getByText(/On this bill/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /Back to search/i }));
@@ -634,7 +657,7 @@ describe("OTC counter sale", () => {
     const user = userEvent.setup();
     postByUrl();
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹95\.76/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹95\.76/ });
 
     await takeOnCredit(user);
     await user.click(await screen.findByRole("button", { name: /on account/i }));
@@ -657,7 +680,7 @@ describe("OTC counter sale", () => {
   it("will not bill on credit until the customer is named and reachable", async () => {
     const user = userEvent.setup();
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹/ });
 
     await user.click(screen.getByRole("button", { name: /Due \/ Credit/i }));
     expect(await screen.findByRole("button", { name: /on account/i })).toBeDisabled();
@@ -689,7 +712,7 @@ describe("OTC counter sale", () => {
       return Promise.resolve({ data: BATCHES });
     });
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹/ });
 
     await takeOnCredit(user);
     await user.click(await screen.findByRole("button", { name: /on account/i }));
@@ -723,7 +746,7 @@ describe("OTC counter sale", () => {
       return Promise.resolve({ data: BATCHES });
     });
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹/ });
 
     await user.click(screen.getByRole("button", { name: /Due \/ Credit/i }));
     // Name only. The submit-time match was on phone alone, which is exactly
@@ -769,7 +792,7 @@ describe("OTC counter sale", () => {
       return Promise.resolve({ data: BATCHES });
     });
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹/ });
 
     await user.click(screen.getByRole("button", { name: /Due \/ Credit/i }));
     await user.type(screen.getByLabelText(/Customer name/i), "Das");
@@ -797,7 +820,7 @@ describe("OTC counter sale", () => {
       return Promise.resolve({ data: BATCHES });
     });
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹/ });
 
     await user.click(screen.getByRole("button", { name: /Due \/ Credit/i }));
     await user.type(screen.getByLabelText(/Customer name/i), "Ramesh");
@@ -823,7 +846,7 @@ describe("OTC counter sale", () => {
       return Promise.resolve({ data: BATCHES });
     });
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹/ });
 
     await user.click(screen.getByRole("button", { name: /Due \/ Credit/i }));
     await user.type(screen.getByLabelText(/Customer name/i), "Brand New Person");
@@ -836,7 +859,7 @@ describe("OTC counter sale", () => {
     const user = userEvent.setup();
     postByUrl();
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹95\.76/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹95\.76/ });
 
     await takeOnCredit(user);
     fireEvent.change(screen.getByLabelText(/Paying now/i), { target: { value: "50" } });
@@ -858,10 +881,11 @@ describe("OTC counter sale", () => {
   it("tags an untagged counter sale to the doctor it came from", async () => {
     const user = userEvent.setup();
     renderModal();
-    await screen.findByRole("button", { name: /Bill ₹/ });
+    await screen.findByRole("button", { name: /Pay & checkout ₹/ });
 
     await user.selectOptions(await screen.findByLabelText(/^Doctor/i), "doc-1");
-    await user.click(screen.getByRole("button", { name: /Bill ₹/ }));
+    await user.click(screen.getByRole("button", { name: /Pay & checkout ₹/ }));
+    await confirmCheckout(user);
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     const [, payload] = post.mock.calls[0] as [string, any];
@@ -879,7 +903,8 @@ describe("OTC counter sale", () => {
     await user.click(await screen.findByRole("button", { name: "pick-rx" }));
 
     expect(screen.queryByLabelText(/^Doctor/i)).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: /Bill ₹/ }));
+    await user.click(await screen.findByRole("button", { name: /Pay & checkout ₹/ }));
+    await confirmCheckout(user);
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     const [, payload] = post.mock.calls[0] as [string, any];
