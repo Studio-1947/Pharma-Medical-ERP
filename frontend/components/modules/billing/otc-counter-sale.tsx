@@ -35,6 +35,7 @@ import { RxPickerModal } from "./rx-picker-modal";
 import { InvoiceDetailModal } from "./invoice-detail-modal";
 import { PaymentModal } from "./payment-modal";
 import { Modal } from "@/components/ui/modal";
+import { MedicineStockModal } from "@/components/modules/inventory/medicine-stock-modal";
 
 /**
  * OTC counter supply — medicines handed over without a prescription.
@@ -81,7 +82,7 @@ type OtcLine = {
   saleUnit: "pack" | "loose";
   quantity: number;
   discountPct: number;
-  /** Free hand-outs come off one named batch; a billed sale is FEFO'd server-side. */
+  /** Empty means automatic FEFO; otherwise checkout is pinned to this batch. */
   batchId: string;
 };
 
@@ -130,6 +131,7 @@ export function OtcCounterSale({
 
   const canBill = can("billing.create");
   const canGiveFree = can("inventory.adjust");
+  const canReceiveStock = can("inventory.write");
 
   const [lines, setLines] = useState<OtcLine[]>([]);
   const [mode, setMode] = useState<"bill" | "free">("bill");
@@ -163,6 +165,7 @@ export function OtcCounterSale({
   const [notes, setNotes] = useState("");
   const [billedInvoiceId, setBilledInvoiceId] = useState<string | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [restockOpen, setRestockOpen] = useState(false);
   // Inactive medicine MRP edit state
   const [inactiveMrpTarget, setInactiveMrpTarget] = useState<any | null>(null);
   const [inactiveMrpValue, setInactiveMrpValue] = useState("");
@@ -281,8 +284,14 @@ export function OtcCounterSale({
     // units.
     const unitsPerSalePack = canSellLoose ? stripSize : 1;
     const baseUnits = line.saleUnit === "pack" ? line.quantity * unitsPerSalePack : line.quantity;
+    const explicitlySelectedBatch = batches.find((b) => b.id === line.batchId) ?? null;
+    const pricedBatches = explicitlySelectedBatch ? [explicitlySelectedBatch] : batches;
+    const pricedAvailable = pricedBatches.reduce(
+      (sum, b) => sum + Math.max(0, Number(b.quantity ?? 0) - Number(b.reservedQty ?? 0)),
+      0,
+    );
     const maxQty =
-      line.saleUnit === "pack" ? Math.floor(totalAvailable / unitsPerSalePack) : totalAvailable;
+      line.saleUnit === "pack" ? Math.floor(pricedAvailable / unitsPerSalePack) : pricedAvailable;
     const selectedBatch = batches.find((b) => b.id === line.batchId) ?? batches[0] ?? null;
     const freeMax = Number(selectedBatch?.quantity ?? 0);
 
@@ -299,6 +308,8 @@ export function OtcCounterSale({
       schedule,
       controlled,
       totalAvailable,
+      pricedBatches,
+      explicitlySelectedBatch,
       baseUnits,
       maxQty,
       selectedBatch,
@@ -314,7 +325,9 @@ export function OtcCounterSale({
    */
   const quote = quoteOtcSaleLines(
     rows.map((r) => ({
-      batches: r.batches,
+      // A named batch must price exactly like the server's preferredBatchId
+      // allocation. With no choice, retain pooled FEFO across every batch.
+      batches: r.pricedBatches,
       units: r.baseUnits,
       discountPct: r.line.discountPct,
       taxPct: r.taxPct,
@@ -535,6 +548,7 @@ export function OtcCounterSale({
         branchId: activeBranchId,
         items: rows.map((r) => ({
           medicineId: r.line.medicine.id,
+          ...(r.line.batchId ? { batchId: r.line.batchId } : {}),
           quantity: r.baseUnits,
           discountPct: r.line.discountPct.toFixed(2),
         })),
@@ -1206,26 +1220,91 @@ export function OtcCounterSale({
                         </select>
                       </div>
                     ) : (
-                      /* Billed sale: the server picks batches by FEFO, splitting
-                         across them when one runs short — show what it will pull. */
-                      <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2">
-                        <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                          Batches used (FEFO — earliest expiry first)
-                        </p>
-                        {!lineQuote || lineQuote.used.length === 0 ? (
-                          <p className="text-xs text-slate-500 mt-1">
-                            Enter a quantity to see which batch is pulled.
-                          </p>
-                        ) : (
-                          <ul className="mt-1 space-y-0.5">
-                            {lineQuote.used.map((u) => (
-                              <li key={u.batchNo} className="text-xs text-slate-700 font-medium">
-                                {u.batchNo} — {u.units} unit{u.units === 1 ? "" : "s"}
-                                {u.expiryDate ? ` · exp ${u.expiryDate.slice(0, 7)}` : ""}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Choose stock batch</p>
+                            <p className="text-[11px] text-slate-400">FEFO is safest; select a batch only when the pack in hand is different.</p>
+                          </div>
+                          <div className="flex shrink-0 items-center gap-2">
+                            {r.line.batchId && (
+                              <button type="button" onClick={() => updateLine(r.idx, { batchId: "" })} className="text-xs font-bold text-emerald-700 hover:text-emerald-800">
+                                Use FEFO
+                              </button>
+                            )}
+                            {canReceiveStock && (
+                              <button
+                                type="button"
+                                onClick={() => setRestockOpen(true)}
+                                className="inline-flex items-center gap-1.5 rounded-full bg-orange-500 px-3 py-1.5 text-xs font-extrabold text-white shadow-sm hover:bg-orange-600"
+                              >
+                                <Plus size={12} strokeWidth={3} />
+                                Receive new batch
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                          <button
+                            type="button"
+                            aria-pressed={!r.line.batchId}
+                            onClick={() => updateLine(r.idx, { batchId: "" })}
+                            className={`rounded-xl border p-3 text-left transition-colors ${!r.line.batchId ? "border-emerald-500 bg-emerald-50 ring-1 ring-emerald-500" : "border-slate-200 bg-white hover:border-slate-300"}`}
+                          >
+                            <span className="block text-xs font-extrabold text-slate-800">Automatic FEFO</span>
+                            <span className="mt-1 block text-[11px] leading-4 text-slate-500">Earliest expiry first; splits across batches if required.</span>
+                          </button>
+
+                          {r.batches.map((b) => {
+                            const sellable = Math.max(0, Number(b.quantity ?? 0) - Number(b.reservedQty ?? 0));
+                            const selected = r.line.batchId === b.id;
+                            return (
+                              <button
+                                type="button"
+                                key={b.id}
+                                aria-pressed={selected}
+                                aria-label={`Select batch ${b.batchNo}`}
+                                onClick={() => updateLine(r.idx, { batchId: b.id })}
+                                disabled={sellable <= 0}
+                                className={`rounded-xl border p-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${selected ? "border-orange-500 bg-orange-50 ring-1 ring-orange-500" : "border-slate-200 bg-white hover:border-orange-300"}`}
+                              >
+                                <span className="flex items-center justify-between gap-2">
+                                  <span className="font-mono text-xs font-extrabold text-slate-800">{b.batchNo}</span>
+                                  <span className="text-[10px] font-bold text-emerald-700">{formatStockUnit(sellable, r.unitInfo)}</span>
+                                </span>
+                                <span className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                                  <span className="text-slate-400">CP</span>
+                                  <span className="text-right font-semibold text-slate-700">{b.costPrice != null ? inr(Number(b.costPrice)) : "Not set"}</span>
+                                  <span className="text-slate-400">Selling / MRP</span>
+                                  <span className="text-right font-extrabold text-slate-900">{inr(Number(b.mrpAtEntry ?? 0))}</span>
+                                  <span className="text-slate-400">Expiry</span>
+                                  <span className="text-right font-semibold text-slate-700">{b.expiryDate ? b.expiryDate.slice(0, 10) : "--"}</span>
+                                  <span className="text-slate-400">Manufactured</span>
+                                  <span className="text-right font-semibold text-slate-700">{b.manufactureDate ? String(b.manufactureDate).slice(0, 10) : "--"}</span>
+                                  <span className="text-slate-400">Received</span>
+                                  <span className="text-right font-semibold text-slate-700">{b.createdAt ? String(b.createdAt).slice(0, 10) : "--"}</span>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        <div className="rounded-lg border border-slate-200 bg-slate-50/70 px-3 py-2">
+                          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{r.line.batchId ? "Selected batch allocation" : "Batches used (FEFO)"}</p>
+                          {!lineQuote || lineQuote.used.length === 0 ? (
+                            <p className="mt-1 text-xs text-slate-500">Enter a quantity to preview stock and price.</p>
+                          ) : (
+                            <ul className="mt-1 space-y-0.5">
+                              {lineQuote.used.map((u) => (
+                                <li key={u.batchNo} className="text-xs font-medium text-slate-700">
+                                  {u.batchNo} — {u.units} unit{u.units === 1 ? "" : "s"}
+                                  {u.expiryDate ? ` · exp ${u.expiryDate.slice(0, 7)}` : ""}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
                       </div>
                     )}
 
@@ -1775,6 +1854,19 @@ export function OtcCounterSale({
           billMutation.mutate(payments);
         }}
         loading={billMutation.isPending}
+      />
+
+      <MedicineStockModal
+        open={restockOpen}
+        onClose={() => {
+          setRestockOpen(false);
+          void qc.invalidateQueries({
+            queryKey: ["otc-supply-batches", medicine?.id, activeBranchId],
+          });
+        }}
+        medicineId={medicine?.id ?? null}
+        medicineName={medicine?.name}
+        autoOpenAddStock
       />
 
       <Modal

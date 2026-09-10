@@ -40,7 +40,7 @@ import { CounterDeskModals, DeskModalView } from "@/components/modules/billing/c
 import { DoctorMedicinesPanel } from "@/components/modules/billing/doctor-medicines-panel";
 import { DoctorsOverview } from "@/components/modules/billing/doctors-overview";
 import { DoctorMedicineManager } from "@/components/modules/clinic/doctor-medicine-manager";
-import { OtcCounterSale } from "@/components/modules/billing/otc-counter-sale";
+import { MedicineBatchPickerModal } from "@/components/modules/billing/medicine-batch-picker-modal";
 import { InvoiceDetailModal } from "@/components/modules/billing/invoice-detail-modal";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
 import { useToast } from "@/components/ui/toast";
@@ -1035,14 +1035,7 @@ export function PatientFirstBilling({
           searches on the left and watches the bill grow on the right, in the
           same viewport, rather than through a dialog that hides the desk. */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        {otcSupplyTarget ? (
-          <div className="p-5">
-            <OtcCounterSale
-              medicine={otcSupplyTarget}
-              onClose={() => setOtcSupplyTarget(null)}
-            />
-          </div>
-        ) : !cart.patientId ? (
+        {!cart.patientId ? (
           <div className="p-6">
             {registering ? (
               <QuickPatientForm
@@ -1333,7 +1326,17 @@ export function PatientFirstBilling({
                             key={m.id}
                             className="w-full flex items-center gap-3 px-4 py-3 hover:bg-orange-50/40 transition-colors"
                           >
-                            <div className="min-w-0 flex-1">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (m.isActive !== false && Number(m.totalStock || 0) > 0 && canOtc) {
+                                  setOtcSupplyTarget(m);
+                                }
+                              }}
+                              disabled={m.isActive === false || Number(m.totalStock || 0) <= 0 || !canOtc}
+                              className="min-w-0 flex-1 text-left rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 disabled:cursor-default"
+                              title={Number(m.totalStock || 0) > 0 ? `View physical batches for ${m.name}` : undefined}
+                            >
                               <p className="text-sm font-bold text-slate-800 truncate">
                                 {m.name}
                                 {m.isActive === false && (
@@ -1359,7 +1362,7 @@ export function PatientFirstBilling({
                                   </span>
                                 )}
                               </p>
-                            </div>
+                            </button>
                             {/* Stock gets its own fixed column so the sale
                                 buttons line up down the list instead of
                                 shuffling left and right with the length of
@@ -1799,7 +1802,7 @@ export function PatientFirstBilling({
       </div>
 
       {/* Step 3 — bill summary + hand off to POS */}
-      {cart.patientId && (
+      {(cart.patientId || cart.items.length > 0) && (
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
           <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -1865,6 +1868,7 @@ export function PatientFirstBilling({
                       <p className="text-sm font-semibold text-slate-800 truncate">{item.name}</p>
                       <p className="text-xs text-slate-400 truncate">
                         {item.saleUnit === "loose" ? `${item.quantity} loose` : `${item.quantity} × ${item.saleUnit}`} · {item.taxPct > 0 ? `${item.taxPct}% GST` : "No GST"}
+                        <span className="font-mono font-semibold text-slate-500"> · Batch {item.batchNo}</span>
                         {discAmt > 0 && <span className="text-purple-600 font-semibold"> · −₹{discAmt.toFixed(2)}</span>}
                       </p>
                       <CartBatchPicker item={item} branchId={activeBranchId} />
@@ -1970,6 +1974,37 @@ export function PatientFirstBilling({
         medicineId={stockTarget?.id ?? null}
         medicineName={stockTarget?.name}
         autoOpenAddStock
+      />
+
+      {/* The medicine row and OTC action both open this physical-batch view.
+          A selected batch remains pinned through pricing and checkout. */}
+      <MedicineBatchPickerModal
+        medicine={otcSupplyTarget}
+        onClose={() => setOtcSupplyTarget(null)}
+        onAdd={(batch, quantity) => {
+          const m = otcSupplyTarget;
+          if (!m) return;
+          const sellable = Math.max(0, Number(batch.quantity ?? 0) - Number(batch.reservedQty ?? 0));
+          cart.addItem({
+            medicineId: m.id,
+            batchId: batch.id,
+            name: m.name,
+            sku: m.sku,
+            batchNo: batch.batchNo,
+            unitPrice: Number(batch.mrpAtEntry ?? m.priceMrp ?? 0),
+            stripSize: Math.max(1, Number(m.stripSize ?? 1) || 1),
+            taxPct: Number(m.taxPercent ?? 0),
+            discountPct: 0,
+            quantity,
+            scheduleClass: m.scheduleClass,
+            requiresPrescription: m.requiresPrescription,
+            unit: m.unit,
+            batchStock: sellable,
+            totalStock: Number(m.totalStock ?? sellable),
+          });
+          toastSuccess(`${m.name} added`, `Batch ${batch.batchNo} · ${quantity} added to the bill.`);
+          setOtcSupplyTarget(null);
+        }}
       />
 
       {/* Register a medicine the catalogue has never seen. Defaults to

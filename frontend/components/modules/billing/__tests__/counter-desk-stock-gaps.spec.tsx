@@ -86,6 +86,20 @@ vi.mock("@/components/modules/billing/doctors-overview", () => ({
 vi.mock("@/components/modules/billing/otc-counter-sale", () => ({
   OtcCounterSale: () => null,
 }));
+vi.mock("@/components/modules/billing/medicine-batch-picker-modal", () => ({
+  MedicineBatchPickerModal: ({ medicine, onAdd }: any) =>
+    medicine ? (
+      <div role="dialog">
+        <span>Select physical batch</span>
+        <button
+          type="button"
+          onClick={() => onAdd({ id: "batch-2", batchNo: "BATCH-2", quantity: 50, reservedQty: 0, mrpAtEntry: "75.00" }, 2)}
+        >
+          Add selected batch to bill
+        </button>
+      </div>
+    ) : null,
+}));
 vi.mock("@/components/modules/billing/invoice-detail-modal", () => ({
   InvoiceDetailModal: () => null,
 }));
@@ -251,6 +265,24 @@ describe("counter desk — closing stock gaps from the search results", () => {
     await userEvent.click(screen.getByRole("button", { name: /Add stock — receive another batch/i }));
 
     expect(await screen.findByTestId("stock-modal")).toHaveAttribute("data-medicine-id", "med-2");
+  });
+
+  it("opens the physical batch sale modal when the medicine row is clicked", async () => {
+    stubApi({ medicines: [IN_STOCK] });
+    renderDesk();
+    await search("aceclo");
+
+    const medicine = await screen.findByRole("button", {
+      name: new RegExp(IN_STOCK.name, "i"),
+    });
+    await userEvent.click(medicine);
+
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText(/Select physical batch/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Add selected batch to bill/i }));
+    expect(await screen.findByText("Bill summary")).toBeInTheDocument();
+    expect(screen.getByText(/BATCH-2/)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("registers a medicine the catalogue has never seen, name prefilled", async () => {
