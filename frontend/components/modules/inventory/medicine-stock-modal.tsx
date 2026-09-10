@@ -46,7 +46,10 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
   // New batch form state
   const [newBatchNo, setNewBatchNo] = useState("");
   const [newExpiry, setNewExpiry] = useState("");
+  const [newManufactureDate, setNewManufactureDate] = useState("");
   const [newQty, setNewQty] = useState<number>(50);
+  const [newFreeQty, setNewFreeQty] = useState<number>(0);
+  const [qtyMode, setQtyMode] = useState<"units" | "strips">("units");
   const [newPurchasePrice, setNewPurchasePrice] = useState<string>("");
   const [newMrp, setNewMrp] = useState<string>("");
 
@@ -97,7 +100,9 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
       setAddStockOpen(false);
       setNewBatchNo("");
       setNewExpiry("");
+      setNewManufactureDate("");
       setNewQty(50);
+      setNewFreeQty(0);
       setNewPurchasePrice("");
       setNewMrp("");
     },
@@ -119,7 +124,9 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
       // be sitting there when the next medicine's form opens.
       setNewBatchNo("");
       setNewExpiry("");
+      setNewManufactureDate("");
       setNewQty(50);
+      setNewFreeQty(0);
       setNewPurchasePrice("");
       setNewMrp("");
       return;
@@ -146,6 +153,11 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
   const handleAddStockSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!medicineId || !newBatchNo.trim() || !newExpiry) return;
+    const unitMultiplier = qtyMode === "strips" ? Math.max(1, Number(medicine?.stripSize ?? 1)) : 1;
+    if (newFreeQty < 0 || newFreeQty > newQty) {
+      toastError("Invalid free quantity", "Free count cannot exceed total received count.");
+      return;
+    }
 
     // An inactive medicine is only promoted back to active by a batch that
     // carries a real MRP (batch.service.ts). Receiving one at zero would
@@ -167,7 +179,9 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
       branchId: activeBranchId,
       batchNo: newBatchNo.trim().toUpperCase(),
       expiryDate: newExpiry, // YYYY-MM-DD format
-      quantity: Number(newQty),
+      ...(newManufactureDate ? { manufactureDate: newManufactureDate } : {}),
+      quantity: Number(newQty) * unitMultiplier,
+      ...(newFreeQty > 0 ? { freeQuantity: Number(newFreeQty) * unitMultiplier } : {}),
       costPrice: cost,
       mrpAtEntry: mrp,
     });
@@ -274,7 +288,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                 </div>
               )}
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">Batch No *</label>
                   <input
@@ -296,15 +310,42 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Received Qty *</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Mfg Date</label>
+                  <input type="date" max={newExpiry || undefined} value={newManufactureDate}
+                    onChange={(e) => setNewManufactureDate(e.target.value)}
+                    className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Received Count *</label>
+                  <div className="flex">
                   <input
                     required
                     type="number"
                     min={1}
                     value={newQty}
                     onChange={(e) => setNewQty(parseInt(e.target.value) || 1)}
-                    className="w-full text-xs font-bold bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    className="min-w-0 w-full text-xs font-bold bg-white border border-slate-200 rounded-l-lg px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
+                  <select value={qtyMode} onChange={(e) => setQtyMode(e.target.value as "units" | "strips")}
+                    className="text-xs border border-l-0 border-slate-200 rounded-r-lg bg-white px-1.5">
+                    <option value="units">Units</option>
+                    <option value="strips">Strips</option>
+                  </select>
+                  </div>
+                  {qtyMode === "strips" && <p className="mt-1 text-[10px] text-slate-500">{newQty} strips × {medicine?.stripSize ?? 1} = {newQty * Number(medicine?.stripSize ?? 1)} units</p>}
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Free Count</label>
+                  <input type="number" min={0} max={newQty} inputMode="numeric" value={newFreeQty}
+                    onChange={(e) => setNewFreeQty(Math.max(0, Number(e.target.value) || 0))}
+                    className="w-full text-xs font-bold bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  <p className="mt-1 text-[10px] text-slate-500">Billed {Math.max(0, newQty - newFreeQty)} + free {newFreeQty} = {newQty} {qtyMode}</p>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Cost Price / strip (₹)</label>
+                  <input type="number" min="0" step="0.01" inputMode="decimal" value={newPurchasePrice}
+                    onChange={(e) => setNewPurchasePrice(e.target.value)} placeholder="0.00"
+                    className="w-full text-xs font-bold bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
                 </div>
                 <div>
                   <label htmlFor="receive-batch-mrp" className="block text-[11px] font-bold text-slate-700 mb-1">

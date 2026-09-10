@@ -352,6 +352,7 @@ export class BillingService {
           // So an out-of-stock failure can name the product on the counter
           // screen rather than printing its id.
           medicineName: medicines.find(m => m.id === item.medicineId)?.name,
+          preferredBatchId: item.batchId,
         })),
         // Only this branch's shelves are sellable from this till.
         branchId,

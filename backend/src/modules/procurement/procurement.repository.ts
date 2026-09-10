@@ -401,6 +401,14 @@ export class ProcurementRepository {
         discountPct: poItem.discountPct,
         qty: billedQty,
       });
+      const effectiveUnitCost = item.receivedQty > 0
+        ? new Decimal(poItem.unitCost)
+            .mul(new Decimal(1).minus(new Decimal(poItem.discountPct ?? "0").div(100)))
+            .mul(billedQty)
+            .div(item.receivedQty)
+            .toDecimalPlaces(2)
+            .toFixed(2)
+        : "0.00";
       // Consignment items aren't owed on delivery — only once sold — so they
       // don't count toward the bill total that hits outstandingBalance.
       if (!poItem.isConsignment) grnTotal = grnTotal.plus(lineTotal);
@@ -416,7 +424,7 @@ export class ProcurementRepository {
           batchNo: item.batchNo,
           expiryDate: item.expiryDate,
           quantity: item.receivedQty,
-          costPrice: poItem.unitCost,
+          costPrice: effectiveUnitCost,
           mrpAtEntry: poItem.unitCost, // MRP default to cost if not provided, can be updated later
           status: "active",
           poId: dto.poId,

@@ -15,6 +15,7 @@ import { PurgeInactiveModal } from "./purge-inactive-modal";
 import { MedicineStockModal } from "./medicine-stock-modal";
 import { Layers } from "lucide-react";
 import type { CreateMedicineDto } from "@pharmerp/types";
+import { useDebounce } from "@/hooks/use-debounce";
 
 interface Medicine {
   id: string;
@@ -43,6 +44,7 @@ export function MedicineList() {
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
   const [search, setSearch] = useState("");
+  const debouncedSearch = useDebounce(search, 250);
   // Active-only by default, matching what the counter sees. "false" surfaces
   // the medicines a bulk import parked inactive for want of an MRP — they are
   // in the catalogue but sellable nowhere until someone prices them.
@@ -146,7 +148,7 @@ export function MedicineList() {
   };
 
   const params = {
-    search,
+    search: debouncedSearch,
     page,
     limit: 20,
     isActive: status,
@@ -157,6 +159,8 @@ export function MedicineList() {
     queryKey: queryKeys.medicines.list(params),
     queryFn: () =>
       apiClient.get("/inventory/medicines", { params }) as Promise<ApiListResponse>,
+    staleTime: 30_000,
+    placeholderData: (previous) => previous,
   });
 
   return (

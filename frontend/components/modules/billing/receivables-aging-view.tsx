@@ -14,6 +14,7 @@ import {
   type AgingTotals,
 } from "@/components/shared/aging-report";
 import { PatientLedgerModal } from "@/components/modules/patients/patient-ledger-modal";
+import { SettleDueModal } from "@/components/modules/patients/settle-due-modal";
 import { BookOpen } from "lucide-react";
 
 interface ReceivablesRow extends AgingRow {
@@ -38,6 +39,7 @@ export function ReceivablesAgingView() {
   const canPickBranch = user?.role === "super_admin";
   const [branchId, setBranchId] = useState("");
   const [drilldown, setDrilldown] = useState<ReceivablesRow | null>(null);
+  const [collecting, setCollecting] = useState<ReceivablesRow | null>(null);
 
   const params = branchId ? { branchId } : {};
 
@@ -142,7 +144,13 @@ export function ReceivablesAgingView() {
           patientId={drilldown.patientId}
           patientName={drilldown.patientName}
           onClose={() => setDrilldown(null)}
+          onCollect={() => { setCollecting(drilldown); setDrilldown(null); }}
         />
+      )}
+
+      {collecting?.patientId && (
+        <SettleDueModal open patientId={collecting.patientId} patientName={collecting.patientName}
+          outstandingBalance={collecting.total} onClose={() => setCollecting(null)} />
       )}
 
       {!isLoading && aging && aging.patients.length > 0 && (

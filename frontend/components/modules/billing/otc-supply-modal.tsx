@@ -9,9 +9,9 @@ import { OtcCounterSale, type OtcMedicine } from "./otc-counter-sale";
  * The OTC counter sale in a dialog, for screens that have no room to give it —
  * the POS terminal opens it over the till.
  *
- * The counter desk renders {@link OtcCounterSale} inline instead, so the search
- * and the growing bill sit side by side in the same viewport. Both share one
- * implementation; this file is only the dialog chrome around it.
+ * Used by both the counter desk and classic POS. The counter desk opens it from
+ * the medicine row so the operator can match the physical pack to its batch
+ * before that batch and its own price are added to the bill.
  */
 export function OtcSupplyModal({
   medicine,

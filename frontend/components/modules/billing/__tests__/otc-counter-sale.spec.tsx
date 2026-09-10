@@ -66,6 +66,17 @@ vi.mock("../invoice-detail-modal", () => ({
   ),
 }));
 
+vi.mock("@/components/modules/inventory/medicine-stock-modal", () => ({
+  MedicineStockModal: ({ open, medicineId, autoOpenAddStock }: any) =>
+    open ? (
+      <div
+        data-testid="receive-batch-modal"
+        data-medicine-id={medicineId}
+        data-auto-open={String(autoOpenAddStock)}
+      />
+    ) : null,
+}));
+
 import { OtcSupplyModal } from "../otc-supply-modal";
 import { OtcCounterSale } from "../otc-counter-sale";
 
@@ -75,6 +86,7 @@ const BATCHES = [
     batchNo: "NEAR01",
     quantity: 40,
     reservedQty: 0,
+    costPrice: "62.00",
     mrpAtEntry: "85.50",
     expiryDate: "2026-10-31",
   },
@@ -83,6 +95,7 @@ const BATCHES = [
     batchNo: "FRESH01",
     quantity: 200,
     reservedQty: 0,
+    costPrice: "70.00",
     mrpAtEntry: "85.50",
     expiryDate: "2027-10-31",
   },
@@ -210,6 +223,55 @@ describe("OTC counter sale", () => {
     expect(payload.payments).toEqual([{ mode: "cash", amount: "95.76" }]);
     expect(payload.notes).toContain("OTC counter sale");
     expect(payload.clientRef).toMatch(/^OTC-\d+-[A-Z0-9]{5}$/);
+  });
+
+  it("shows batch-wise CP and selling price and bills from the selected batch", async () => {
+    const user = userEvent.setup();
+    get.mockImplementation((url: string) => {
+      if (url.includes("med-1")) {
+        return Promise.resolve({
+          data: BATCHES.map((batch) =>
+            batch.id === "batch-fresh" ? { ...batch, mrpAtEntry: "95.00" } : batch,
+          ),
+        });
+      }
+      if (url === "/clinic/doctors") return Promise.resolve({ data: DOCTORS });
+      return Promise.resolve({ data: [] });
+    });
+    renderModal();
+
+    expect(await screen.findByText("Automatic FEFO")).toBeInTheDocument();
+    expect(screen.getByText("₹62.00")).toBeInTheDocument();
+    expect(screen.getByText("₹70.00")).toBeInTheDocument();
+    expect(screen.getAllByText("₹85.50").length).toBeGreaterThan(0);
+    expect(screen.getByText("₹95.00")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Select batch FRESH01" }));
+    const button = await screen.findByRole("button", { name: /Pay & checkout ₹106\.40/ });
+    await user.click(button);
+    await confirmCheckout(user);
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [, payload] = post.mock.calls[0] as [string, any];
+    expect(payload.items).toEqual([
+      {
+        medicineId: "med-1",
+        batchId: "batch-fresh",
+        quantity: 10,
+        discountPct: "0.00",
+      },
+    ]);
+    expect(payload.payments).toEqual([{ mode: "cash", amount: "106.40" }]);
+  });
+
+  it("lets authorised staff receive another batch without leaving the sale", async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    await user.click(await screen.findByRole("button", { name: /Receive new batch/i }));
+    const restock = screen.getByTestId("receive-batch-modal");
+    expect(restock).toHaveAttribute("data-medicine-id", "med-1");
+    expect(restock).toHaveAttribute("data-auto-open", "true");
   });
 
   it("shows the bill after a successful sale", async () => {
