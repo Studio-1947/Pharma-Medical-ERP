@@ -44,7 +44,9 @@ export function MedicineList() {
   const isAdmin = user?.role === "admin" || user?.role === "super_admin";
 
   const [search, setSearch] = useState("");
+  const [submittedSearch, setSubmittedSearch] = useState<string | null>(null);
   const debouncedSearch = useDebounce(search, 250);
+  const effectiveSearch = submittedSearch ?? debouncedSearch;
   // Active-only by default, matching what the counter sees. "false" surfaces
   // the medicines a bulk import parked inactive for want of an MRP — they are
   // in the catalogue but sellable nowhere until someone prices them.
@@ -148,7 +150,7 @@ export function MedicineList() {
   };
 
   const params = {
-    search: debouncedSearch,
+    search: effectiveSearch,
     page,
     limit: 20,
     isActive: status,
@@ -177,7 +179,14 @@ export function MedicineList() {
               type="text"
               placeholder="Search medicines by name, barcode..."
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              onChange={(e) => { setSearch(e.target.value); setSubmittedSearch(null); setPage(1); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  setSubmittedSearch(search.trim());
+                  setPage(1);
+                }
+              }}
               className="w-full border rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
             />
           </div>

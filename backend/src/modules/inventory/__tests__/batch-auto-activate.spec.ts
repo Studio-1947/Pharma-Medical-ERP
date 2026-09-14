@@ -35,6 +35,8 @@ describe("BatchService.create — auto-activate inactive medicine", () => {
   beforeEach(() => {
     mockBatchRepo = {
       createBatch: vi.fn().mockResolvedValue({ id: "batch-new", medicineId: "med-inactive", branchId }),
+      restockBatch: vi.fn(),
+      findBatchByIdentity: vi.fn().mockResolvedValue(undefined),
       findOrCreateDefaultLocationForBranch: vi.fn().mockResolvedValue("loc-1"),
     };
     mockMovementRepo = {

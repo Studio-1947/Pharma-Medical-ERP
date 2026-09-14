@@ -50,6 +50,8 @@ interface GrnLineItem {
   freeQty: number;
 }
 
+const monthToStoredDate = (month: string) => month ? `${month}-01` : "";
+
 function GrnModal({
   poId,
   poNumber,
@@ -121,7 +123,11 @@ function GrnModal({
       if (l.receivedQty <= 0) { setError("Received quantity must be greater than 0."); return; }
       if (l.freeQty < 0 || l.freeQty > l.receivedQty) { setError("Free quantity must be between 0 and total received quantity."); return; }
     }
-    mutation.mutate(lines);
+    mutation.mutate(lines.map((line) => ({
+      ...line,
+      batchNo: line.batchNo.trim().toUpperCase(),
+      expiryDate: monthToStoredDate(line.expiryDate),
+    })));
   };
 
   return (
@@ -193,7 +199,7 @@ function GrnModal({
                   <td className="py-2 pr-3">
                     <input
                       required
-                      type="date"
+                      type="month"
                       value={line.expiryDate}
                       onChange={(e) => updateLine(idx, "expiryDate", e.target.value)}
                       className="w-full border rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-400"

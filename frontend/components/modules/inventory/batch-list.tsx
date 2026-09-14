@@ -43,6 +43,9 @@ function expiryLabel(dateStr: string) {
   return { text: `${diffDays}d left`, cls: "bg-green-50 text-green-700", icon: "ok" };
 }
 
+const monthToStoredDate = (month: string) => month ? `${month}-01` : "";
+const storedDateToMonth = (date: string) => date ? date.slice(0, 7) : "";
+
 interface AddStockFormProps {
   onClose: () => void;
   onSuccess: () => void;
@@ -164,8 +167,10 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
       return;
     }
     if (!form.batchNo.trim()) { setError("Batch number is required."); return; }
-    if (isDuplicate) { setError(`Batch number "${form.batchNo.trim()}" already exists for this medicine.`); return; }
     if (!form.expiryDate) { setError("Expiry date is required."); return; }
+    if (form.manufactureDate && form.manufactureDate >= form.expiryDate) {
+      setError("Manufacturing month must be before the expiry month."); return;
+    }
     const qty = parseInt(form.quantity);
     if (!qty || qty < 1) { setError("Quantity must be at least 1."); return; }
     const freeQty = parseInt(form.freeQuantity || "0");
@@ -186,9 +191,9 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
     mutation.mutate({
       medicineId: selectedMedicine.id,
       ...(activeBranchId ? { branchId: activeBranchId } : {}),
-      batchNo: form.batchNo.trim(),
-      ...(form.manufactureDate ? { manufactureDate: form.manufactureDate } : {}),
-      expiryDate: form.expiryDate,
+      batchNo: form.batchNo.trim().toUpperCase(),
+      ...(form.manufactureDate ? { manufactureDate: monthToStoredDate(form.manufactureDate) } : {}),
+      expiryDate: monthToStoredDate(form.expiryDate),
       quantity: qty,
       ...(freeQty > 0 ? { freeQuantity: freeQty } : {}),
       ...(costEntered ? { costPrice: cost.toFixed(2) } : {}),
@@ -274,21 +279,21 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
               onChange={(e) => setForm((f) => ({ ...f, batchNo: e.target.value }))}
               className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 font-mono ${
                 isDuplicate
-                  ? "border-red-400 focus:ring-red-200 bg-red-50"
+                  ? "border-emerald-400 focus:ring-emerald-200 bg-emerald-50"
                   : "focus:ring-primary"
               }`}
             />
             {isDuplicate && (
-              <p className="text-xs text-red-600 flex items-center gap-1 mt-1">
-                <AlertTriangle size={11} />
-                This batch number already exists for the selected medicine.
+              <p className="text-xs text-emerald-700 flex items-center gap-1 mt-1">
+                <CheckCircle size={11} />
+                Existing batch: this receipt will add to its current stock.
               </p>
             )}
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-gray-700">Expiry Date *</label>
             <input
-              type="date"
+              type="month"
               value={form.expiryDate}
               onChange={(e) => setForm((f) => ({ ...f, expiryDate: e.target.value }))}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
@@ -296,7 +301,7 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-gray-700">Manufacturing Date</label>
-            <input type="date" max={form.expiryDate || undefined} value={form.manufactureDate}
+            <input type="month" max={form.expiryDate || undefined} value={form.manufactureDate}
               onChange={(e) => setForm((f) => ({ ...f, manufactureDate: e.target.value }))}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
           </div>
@@ -397,7 +402,7 @@ function EditBatchForm({ batch, onClose, onSuccess }: EditBatchFormProps) {
   const { success: toastSuccess, error: toastError } = useToast();
   const [form, setForm] = useState({
     batchNo: batch.batchNo,
-    expiryDate: batch.expiryDate.slice(0, 10),
+    expiryDate: storedDateToMonth(batch.expiryDate),
     costPrice: parseFloat(batch.costPrice).toFixed(2),
     mrpAtEntry: parseFloat(batch.mrpAtEntry).toFixed(2),
     status: batch.status,
@@ -431,7 +436,7 @@ function EditBatchForm({ batch, onClose, onSuccess }: EditBatchFormProps) {
 
     mutation.mutate({
       batchNo: form.batchNo.trim(),
-      expiryDate: form.expiryDate,
+      expiryDate: monthToStoredDate(form.expiryDate),
       costPrice: cost.toFixed(2),
       mrpAtEntry: mrp.toFixed(2),
       status: form.status,
@@ -460,7 +465,7 @@ function EditBatchForm({ batch, onClose, onSuccess }: EditBatchFormProps) {
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-gray-700">Expiry Date *</label>
             <input
-              type="date"
+              type="month"
               value={form.expiryDate}
               onChange={(e) => setForm((f) => ({ ...f, expiryDate: e.target.value }))}
               className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
@@ -708,9 +713,11 @@ export function BatchList({ medicineId, medicine }: Props) {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState("");
   const [search, setSearch] = useState("");
+  const [submittedSearch, setSubmittedSearch] = useState<string | null>(null);
   // Typed, not scanned — a shelf search is a person spelling a brand name, so
   // hold each keystroke rather than fire a query per character.
   const debouncedSearch = useDebounce(search.trim(), 250);
+  const effectiveSearch = submittedSearch ?? debouncedSearch;
   const [addOpen, setAddOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Batch | null>(null);
   const [adjustTarget, setAdjustTarget] = useState<Batch | null>(null);
@@ -724,7 +731,7 @@ export function BatchList({ medicineId, medicine }: Props) {
   const params: Record<string, any> = { page, limit: 20 };
   if (medicineId) params.medicineId = medicineId;
   if (status) params.status = status;
-  if (debouncedSearch) params.search = debouncedSearch;
+  if (effectiveSearch) params.search = effectiveSearch;
 
   const { data, isLoading } = useQuery({
     queryKey: ["batches", params],
@@ -783,7 +790,14 @@ export function BatchList({ medicineId, medicine }: Props) {
             <input
               type="text"
               value={search}
-              onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+              onChange={(e) => { setSearch(e.target.value); setSubmittedSearch(null); setPage(1); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  setSubmittedSearch(search.trim());
+                  setPage(1);
+                }
+              }}
               placeholder="Search by medicine or batch number..."
               aria-label="Search batches"
               className="w-full border rounded-lg pl-9 pr-8 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary bg-white"
@@ -791,7 +805,7 @@ export function BatchList({ medicineId, medicine }: Props) {
             {search && (
               <button
                 type="button"
-                onClick={() => { setSearch(""); setPage(1); }}
+                onClick={() => { setSearch(""); setSubmittedSearch(null); setPage(1); }}
                 aria-label="Clear batch search"
                 className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-slate-700"
               >

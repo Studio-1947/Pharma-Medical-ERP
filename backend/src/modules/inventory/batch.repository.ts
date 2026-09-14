@@ -126,7 +126,7 @@ export class BatchRepository {
   ): Promise<boolean> {
     const conditions: any[] = [
       eq(schema.inventoryBatches.medicineId, medicineId),
-      eq(schema.inventoryBatches.batchNo, batchNo),
+      sql`lower(${schema.inventoryBatches.batchNo}) = lower(${batchNo})`,
       eq(schema.inventoryBatches.branchId, branchId),
     ];
     if (excludeId) {
@@ -140,6 +140,16 @@ export class BatchRepository {
     return !!row;
   }
 
+  async findBatchByIdentity(medicineId: string, batchNo: string, branchId: string) {
+    return this.db.query.inventoryBatches.findFirst({
+      where: and(
+        eq(schema.inventoryBatches.medicineId, medicineId),
+        sql`lower(${schema.inventoryBatches.batchNo}) = lower(${batchNo})`,
+        eq(schema.inventoryBatches.branchId, branchId),
+      ),
+    });
+  }
+
   async createBatch(
     // costPrice is optional on the DTO but the column is NOT NULL — the
     // service resolves it before we get here, so it is required again.
@@ -149,17 +159,6 @@ export class BatchRepository {
       costPrice: string;
     },
   ) {
-    const duplicate = await this.checkBatchNoExists(
-      data.medicineId,
-      data.batchNo,
-      data.branchId,
-    );
-    if (duplicate) {
-      throw new UnprocessableEntityException(
-        `Batch number "${data.batchNo}" already exists for this medicine in this branch. Use a unique batch number.`,
-      );
-    }
-
     const [batch] = await this.db
       .insert(schema.inventoryBatches)
       .values({
@@ -175,6 +174,33 @@ export class BatchRepository {
         poId: data.poId,
         grnId: data.grnId,
       })
+      .onConflictDoUpdate({
+        target: [
+          schema.inventoryBatches.medicineId,
+          schema.inventoryBatches.batchNo,
+          schema.inventoryBatches.branchId,
+        ],
+        set: {
+          quantity: sql`${schema.inventoryBatches.quantity} + ${data.quantity}`,
+          costPrice: sql`ROUND(((${schema.inventoryBatches.costPrice} * ${schema.inventoryBatches.quantity}) + (${data.costPrice} * ${data.quantity})) / NULLIF(${schema.inventoryBatches.quantity} + ${data.quantity}, 0), 2)`,
+          status: sql`CASE WHEN ${schema.inventoryBatches.status} = 'depleted' THEN 'active'::batch_status ELSE ${schema.inventoryBatches.status} END`,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return batch!;
+  }
+
+  async restockBatch(id: string, quantity: number, costPrice: string) {
+    const [batch] = await this.db
+      .update(schema.inventoryBatches)
+      .set({
+        costPrice: sql`ROUND(((${schema.inventoryBatches.costPrice} * ${schema.inventoryBatches.quantity}) + (${costPrice} * ${quantity})) / NULLIF(${schema.inventoryBatches.quantity} + ${quantity}, 0), 2)`,
+        quantity: sql`${schema.inventoryBatches.quantity} + ${quantity}`,
+        status: sql`CASE WHEN ${schema.inventoryBatches.status} = 'depleted' THEN 'active'::batch_status ELSE ${schema.inventoryBatches.status} END`,
+        updatedAt: new Date(),
+      })
+      .where(eq(schema.inventoryBatches.id, id))
       .returning();
     return batch!;
   }

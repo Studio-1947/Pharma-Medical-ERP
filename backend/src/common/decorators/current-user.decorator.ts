@@ -19,6 +19,8 @@ export interface JwtPayload {
   act?: ImpersonationActor;
   iat: number;
   exp: number;
+  /** Millisecond password-change version captured when this token was issued. */
+  pwd?: number;
 }
 
 export interface ImpersonationActor {

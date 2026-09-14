@@ -29,6 +29,8 @@ describe("BatchService.create — optional cost price", () => {
   beforeEach(() => {
     batchRepo = {
       createBatch: vi.fn().mockResolvedValue({ id: "batch-new", branchId }),
+      restockBatch: vi.fn().mockResolvedValue({ id: "batch-existing", branchId }),
+      findBatchByIdentity: vi.fn().mockResolvedValue(undefined),
       findOrCreateDefaultLocationForBranch: vi.fn().mockResolvedValue("loc-1"),
     };
     inventoryRepo = {
@@ -88,6 +90,59 @@ describe("BatchService.create — optional cost price", () => {
     await service.create({ ...baseDto, costPrice: "41.00" } as any, "user-1", branchId);
 
     expect(costOf()).toBe("41.00");
+  });
+
+  it("restocks an existing batch when its expiry matches", async () => {
+    inventoryRepo.findMedicineById.mockResolvedValue({
+      id: baseDto.medicineId,
+      isActive: true,
+      purchaseRate: "62.50",
+      priceMrp: "100.00",
+    });
+    batchRepo.findBatchByIdentity.mockResolvedValue({
+      id: "batch-existing",
+      expiryDate: baseDto.expiryDate,
+    });
+
+    const result = await service.create(baseDto as any, "user-1", branchId);
+
+    expect(batchRepo.createBatch).not.toHaveBeenCalled();
+    expect(batchRepo.restockBatch).toHaveBeenCalledWith("batch-existing", 50, "62.50");
+    expect(result.message).toBe("Batch restocked");
+    expect(result.data.id).toBe("batch-existing");
+  });
+
+  it("rejects the same batch number with a different expiry", async () => {
+    inventoryRepo.findMedicineById.mockResolvedValue({
+      id: baseDto.medicineId,
+      isActive: true,
+      purchaseRate: "62.50",
+      priceMrp: "100.00",
+    });
+    batchRepo.findBatchByIdentity.mockResolvedValue({
+      id: "batch-existing",
+      expiryDate: "2028-01-31",
+    });
+
+    await expect(service.create(baseDto as any, "user-1", branchId)).rejects.toThrow(
+      /same expiry month to restock/i,
+    );
+    expect(batchRepo.createBatch).not.toHaveBeenCalled();
+  });
+
+  it("rejects a manufacturing date in or after the expiry month", async () => {
+    inventoryRepo.findMedicineById.mockResolvedValue({
+      id: baseDto.medicineId,
+      isActive: true,
+      purchaseRate: "62.50",
+      priceMrp: "100.00",
+    });
+
+    await expect(service.create({
+      ...baseDto,
+      manufactureDate: baseDto.expiryDate,
+    } as any, "user-1", branchId)).rejects.toThrow(/before the expiry date/i);
+    expect(batchRepo.createBatch).not.toHaveBeenCalled();
   });
 });
 

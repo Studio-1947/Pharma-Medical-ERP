@@ -25,6 +25,8 @@ import { invalidateMedicineViews } from "@/lib/query-invalidation";
 import { useActiveBranchId } from "@/hooks/use-branch";
 import { BarcodeLabelModal } from "./barcode-label-modal";
 
+const monthToStoredDate = (month: string) => month ? `${month}-01` : "";
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -153,6 +155,10 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
   const handleAddStockSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!medicineId || !newBatchNo.trim() || !newExpiry) return;
+    if (newManufactureDate && newManufactureDate >= newExpiry) {
+      toastError("Invalid dates", "Manufacturing month must be before the expiry month.");
+      return;
+    }
     const unitMultiplier = qtyMode === "strips" ? Math.max(1, Number(medicine?.stripSize ?? 1)) : 1;
     if (newFreeQty < 0 || newFreeQty > newQty) {
       toastError("Invalid free quantity", "Free count cannot exceed total received count.");
@@ -178,8 +184,8 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
       medicineId,
       branchId: activeBranchId,
       batchNo: newBatchNo.trim().toUpperCase(),
-      expiryDate: newExpiry, // YYYY-MM-DD format
-      ...(newManufactureDate ? { manufactureDate: newManufactureDate } : {}),
+      expiryDate: monthToStoredDate(newExpiry),
+      ...(newManufactureDate ? { manufactureDate: monthToStoredDate(newManufactureDate) } : {}),
       quantity: Number(newQty) * unitMultiplier,
       ...(newFreeQty > 0 ? { freeQuantity: Number(newFreeQty) * unitMultiplier } : {}),
       costPrice: cost,
@@ -295,7 +301,17 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                     required
                     placeholder="e.g. BATCH-992"
                     value={newBatchNo}
-                    onChange={(e) => setNewBatchNo(e.target.value)}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setNewBatchNo(value);
+                      const existing = batches.find(
+                        (b) => String(b.batchNo).toLowerCase() === value.trim().toLowerCase(),
+                      );
+                      if (existing) {
+                        setNewExpiry(String(existing.expiryDate).slice(0, 7));
+                        setNewManufactureDate(String(existing.manufactureDate ?? "").slice(0, 7));
+                      }
+                    }}
                     className="w-full text-xs font-mono font-bold bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
@@ -303,7 +319,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">Expiry Date *</label>
                   <input
                     required
-                    type="date"
+                    type="month"
                     value={newExpiry}
                     onChange={(e) => setNewExpiry(e.target.value)}
                     className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
@@ -311,7 +327,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">Mfg Date</label>
-                  <input type="date" max={newExpiry || undefined} value={newManufactureDate}
+                  <input type="month" max={newExpiry || undefined} value={newManufactureDate}
                     onChange={(e) => setNewManufactureDate(e.target.value)}
                     className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
                 </div>

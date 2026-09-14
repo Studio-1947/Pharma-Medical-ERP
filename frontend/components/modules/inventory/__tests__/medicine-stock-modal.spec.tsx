@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -117,8 +117,8 @@ describe("medicine stock modal — direct receive", () => {
     const batchNo = await screen.findByPlaceholderText("e.g. BATCH-992");
     await userEvent.type(batchNo, "bat-77");
 
-    const expiry = document.querySelector('input[type="date"]') as HTMLInputElement;
-    await userEvent.type(expiry, "2027-10-31");
+    const expiry = document.querySelector('input[type="month"]') as HTMLInputElement;
+    fireEvent.change(expiry, { target: { value: "2027-10" } });
 
     await userEvent.click(screen.getByRole("button", { name: /Confirm Receive Stock/i }));
 
@@ -127,7 +127,7 @@ describe("medicine stock modal — direct receive", () => {
       medicineId: "med-1",
       branchId: "branch-1",
       batchNo: "BAT-77",
-      expiryDate: "2027-10-31",
+      expiryDate: "2027-10-01",
       quantity: 50,
       // Reading medicine.purchasePrice — a field that does not exist on the
       // record — used to send "0.00" here for every direct receive.
@@ -177,8 +177,8 @@ describe("medicine stock modal — direct receive", () => {
 
     const batchNo = await screen.findByPlaceholderText("e.g. BATCH-992");
     await userEvent.type(batchNo, "bat-88");
-    const expiry = document.querySelector('input[type="date"]') as HTMLInputElement;
-    await userEvent.type(expiry, "2027-10-31");
+    const expiry = document.querySelector('input[type="month"]') as HTMLInputElement;
+    fireEvent.change(expiry, { target: { value: "2027-10" } });
     await userEvent.type(screen.getByLabelText(/MRP/i), "0");
 
     const mrp = screen.getByLabelText(/MRP/i) as HTMLInputElement;
@@ -199,8 +199,8 @@ describe("medicine stock modal — direct receive", () => {
 
     const batchNo = await screen.findByPlaceholderText("e.g. BATCH-992");
     await userEvent.type(batchNo, "bat-88");
-    const expiry = document.querySelector('input[type="date"]') as HTMLInputElement;
-    await userEvent.type(expiry, "2027-10-31");
+    const expiry = document.querySelector('input[type="month"]') as HTMLInputElement;
+    fireEvent.change(expiry, { target: { value: "2027-10" } });
     await userEvent.type(screen.getByLabelText(/MRP/i), "0");
 
     // Submitting the form directly is what a browser that skips constraint
@@ -220,8 +220,8 @@ describe("medicine stock modal — direct receive", () => {
 
     const batchNo = await screen.findByPlaceholderText("e.g. BATCH-992");
     await userEvent.type(batchNo, "bat-88");
-    const expiry = document.querySelector('input[type="date"]') as HTMLInputElement;
-    await userEvent.type(expiry, "2027-10-31");
+    const expiry = document.querySelector('input[type="month"]') as HTMLInputElement;
+    fireEvent.change(expiry, { target: { value: "2027-10" } });
     await userEvent.type(screen.getByLabelText(/MRP/i), "142.75");
 
     await userEvent.click(screen.getByRole("button", { name: /Confirm Receive Stock/i }));

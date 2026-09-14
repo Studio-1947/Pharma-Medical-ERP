@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, UnprocessableEntityException } from "@nestjs/common";
 import { and, asc, desc, eq, ilike, inArray, isNull, or, sql, gte, lte } from "drizzle-orm";
 import Decimal from "decimal.js";
 import { DrizzleService } from "../../database/drizzle.service";
@@ -394,6 +394,7 @@ export class ProcurementRepository {
       if (!poItem) continue;
 
       const freeQty = item.freeQty ?? 0;
+      const normalizedBatchNo = item.batchNo.trim().toUpperCase();
       const billedQty = Math.max(0, item.receivedQty - freeQty);
       const { lineTotal } = calculateLine({
         unitCost: poItem.unitCost,
@@ -413,15 +414,43 @@ export class ProcurementRepository {
       // don't count toward the bill total that hits outstandingBalance.
       if (!poItem.isConsignment) grnTotal = grnTotal.plus(lineTotal);
 
-      // Create inventory batch
-      const [batch] = await db
-        .insert(schema.inventoryBatches)
-        .values({
+      // A manufacturer batch may arrive across multiple deliveries. Keep one
+      // stock row per medicine/batch/branch and attach each receipt through its
+      // own GRN item and stock movement.
+      const existingBatch = await db.query.inventoryBatches.findFirst({
+        where: and(
+          eq(schema.inventoryBatches.medicineId, poItem.medicineId),
+          eq(schema.inventoryBatches.batchNo, normalizedBatchNo),
+          eq(schema.inventoryBatches.branchId, branchId),
+        ),
+      });
+      if (existingBatch && existingBatch.expiryDate.slice(0, 7) !== item.expiryDate.slice(0, 7)) {
+        throw new UnprocessableEntityException(
+          `Batch ${normalizedBatchNo} already exists with expiry ${existingBatch.expiryDate}. Use the same expiry month to restock it.`,
+        );
+      }
+
+      // Create or restock the inventory batch atomically. The conflict clause
+      // also protects concurrent goods-receipt requests from creating a race.
+      let batch: any;
+      if (existingBatch) {
+        [batch] = await db
+          .update(schema.inventoryBatches)
+          .set({
+            quantity: sql`${schema.inventoryBatches.quantity} + ${item.receivedQty}`,
+            costPrice: sql`ROUND(((${schema.inventoryBatches.costPrice} * ${schema.inventoryBatches.quantity}) + (${effectiveUnitCost} * ${item.receivedQty})) / NULLIF(${schema.inventoryBatches.quantity} + ${item.receivedQty}, 0), 2)`,
+            status: sql`CASE WHEN ${schema.inventoryBatches.status} = 'depleted' THEN 'active'::batch_status ELSE ${schema.inventoryBatches.status} END`,
+            updatedAt: new Date(),
+          })
+          .where(eq(schema.inventoryBatches.id, existingBatch.id))
+          .returning();
+      } else {
+        [batch] = await db.insert(schema.inventoryBatches).values({
           medicineId: poItem.medicineId,
           // Stamped from the PO's branch — the correctness hinge of goods inward.
           branchId,
           locationId: location!.id,
-          batchNo: item.batchNo,
+          batchNo: normalizedBatchNo,
           expiryDate: item.expiryDate,
           quantity: item.receivedQty,
           costPrice: effectiveUnitCost,
@@ -430,8 +459,20 @@ export class ProcurementRepository {
           poId: dto.poId,
           grnId: grn!.id,
           isConsignment: poItem.isConsignment ?? false,
-        })
-        .returning();
+        }).onConflictDoUpdate({
+          target: [
+            schema.inventoryBatches.medicineId,
+            schema.inventoryBatches.batchNo,
+            schema.inventoryBatches.branchId,
+          ],
+          set: {
+            quantity: sql`${schema.inventoryBatches.quantity} + ${item.receivedQty}`,
+            costPrice: sql`ROUND(((${schema.inventoryBatches.costPrice} * ${schema.inventoryBatches.quantity}) + (${effectiveUnitCost} * ${item.receivedQty})) / NULLIF(${schema.inventoryBatches.quantity} + ${item.receivedQty}, 0), 2)`,
+            status: sql`CASE WHEN ${schema.inventoryBatches.status} = 'depleted' THEN 'active'::batch_status ELSE ${schema.inventoryBatches.status} END`,
+            updatedAt: new Date(),
+          },
+        }).returning();
+      }
 
       createdBatchIds.push(batch!.id);
 
@@ -455,7 +496,7 @@ export class ProcurementRepository {
         receivedQty: item.receivedQty,
         rejectedQty: item.rejectedQty ?? 0,
         freeQty,
-        batchNo: item.batchNo,
+        batchNo: normalizedBatchNo,
         expiryDate: item.expiryDate,
       });
 
@@ -824,23 +865,52 @@ export class ProcurementRepository {
       .limit(1);
     if (!originalBatch) throw new Error(`Batch ${ret.batchId} not found`);
 
-    const [replacement] = await db
-      .insert(schema.inventoryBatches)
-      .values({
+    const normalizedBatchNo = dto.batchNo.trim().toUpperCase();
+    const existingReplacement = await db.query.inventoryBatches.findFirst({
+      where: and(
+        eq(schema.inventoryBatches.medicineId, originalBatch.medicineId),
+        sql`lower(${schema.inventoryBatches.batchNo}) = lower(${normalizedBatchNo})`,
+        eq(schema.inventoryBatches.branchId, originalBatch.branchId),
+      ),
+    });
+    if (
+      existingReplacement &&
+      existingReplacement.expiryDate.slice(0, 7) !== dto.expiryDate.slice(0, 7)
+    ) {
+      throw new UnprocessableEntityException(
+        `Batch ${normalizedBatchNo} already exists with expiry ${existingReplacement.expiryDate}. Use the same expiry month.`,
+      );
+    }
+
+    let replacement: any;
+    if (existingReplacement) {
+      [replacement] = await db
+        .update(schema.inventoryBatches)
+        .set({
+          quantity: sql`${schema.inventoryBatches.quantity} + ${ret.quantity}`,
+          status: sql`CASE WHEN ${schema.inventoryBatches.status} = 'depleted' THEN 'active'::batch_status ELSE ${schema.inventoryBatches.status} END`,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.inventoryBatches.id, existingReplacement.id))
+        .returning();
+    } else {
+      [replacement] = await db.insert(schema.inventoryBatches).values({
         medicineId: originalBatch.medicineId,
+        branchId: originalBatch.branchId,
         locationId: originalBatch.locationId,
-        batchNo: dto.batchNo,
+        batchNo: normalizedBatchNo,
         expiryDate: dto.expiryDate,
         quantity: ret.quantity,
-        costPrice: "0",
+        costPrice: originalBatch.costPrice,
         mrpAtEntry: originalBatch.mrpAtEntry,
         status: "active",
-      })
-      .returning();
+      }).returning();
+    }
 
     await db.insert(schema.stockMovements).values({
       batchId: replacement!.id,
       medicineId: originalBatch.medicineId,
+      branchId: originalBatch.branchId,
       movementType: "purchase",
       quantity: ret.quantity,
       performedBy: resolvedBy,

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -123,6 +123,16 @@ describe("BatchList — search", () => {
     );
   });
 
+  it("submits immediately when Enter is pressed", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("DA32636");
+
+    await user.type(screen.getByLabelText("Search batches"), "DA32636{Enter}");
+
+    await waitFor(() => expect(lastBatchListParams()?.search).toBe("DA32636"));
+  });
+
   it("goes back to page one when the search narrows, so results are not skipped past", async () => {
     const user = userEvent.setup();
     renderList();
@@ -152,8 +162,8 @@ describe("BatchList — Add Stock", () => {
     await user.type(screen.getByPlaceholderText(/Type name, SKU/i), "duph");
     await user.click(await screen.findByRole("button", { name: /Duphalac/i }));
     await user.type(screen.getByPlaceholderText("e.g. B2024001"), "0088");
-    const expiry = document.querySelector('input[type="date"]') as HTMLInputElement;
-    await user.type(expiry, "2027-12-01");
+    const expiry = document.querySelector('input[type="month"]') as HTMLInputElement;
+    fireEvent.change(expiry, { target: { value: "2027-12" } });
     await user.type(screen.getByPlaceholderText("100"), "100");
   }
 
@@ -200,6 +210,28 @@ describe("BatchList — Add Stock", () => {
 
     await waitFor(() => expect(post).toHaveBeenCalled());
     expect(post.mock.calls[0]![1]).toMatchObject({ costPrice: "300.00" });
+  });
+
+  it("allows a repeat batch number and posts the quantity as a restock", async () => {
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("DA32636");
+
+    await user.click(screen.getByRole("button", { name: /Add Stock/i }));
+    await user.type(screen.getByPlaceholderText(/Type name, SKU/i), "duph");
+    await user.click(await screen.findByRole("button", { name: /Duphalac/i }));
+    await user.type(screen.getByPlaceholderText("e.g. B2024001"), "DA32636");
+    expect(await screen.findByText(/will add to its current stock/i)).toBeInTheDocument();
+    fireEvent.change(document.querySelector('input[type="month"]')!, { target: { value: "2026-01" } });
+    await user.type(screen.getByPlaceholderText("100"), "10");
+    await user.click(submit());
+
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0]![1]).toMatchObject({
+      batchNo: "DA32636",
+      expiryDate: "2026-01-01",
+      quantity: 10,
+    });
   });
 
   it("says which branch is missing instead of letting the server say it", async () => {

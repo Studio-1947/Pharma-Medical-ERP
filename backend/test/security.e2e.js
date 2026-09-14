@@ -69,8 +69,8 @@ async function main() {
   const cash02Email = `cash02${uniq}@mederp.com`;
   await mk(docAEmail, "doctor", brn01.id);
   await mk(docBEmail, "doctor", brn01.id);
-  await mk(cash01Email, "cashier", brn01.id);
-  await mk(cash02Email, "cashier", brn02.id);
+  await mk(cash01Email, "shop_manager", brn01.id);
+  await mk(cash02Email, "shop_manager", brn02.id);
   console.log("[setup] created doctorA, doctorB, cashier (BRN01) + cashier (BRN02)");
 
   const docA = await login(docAEmail, "Passw0rd1");
@@ -202,6 +202,10 @@ async function main() {
   const rotated = await req("POST", "/auth/refresh", { body: { refreshToken: fresh.refresh } });
   check("first refresh rotates successfully", rotated.status === 200, rotated.status);
   const newRefresh = rotated.body?.refreshToken ?? rotated.body?.data?.refreshToken;
+  // Immediate duplicate refreshes are deliberately accepted for 10 seconds:
+  // browsers can race two API requests during one page load. Test theft/reuse
+  // after that documented concurrency window, not the supported retry path.
+  await new Promise((resolve) => setTimeout(resolve, 10_500));
   const replay = await req("POST", "/auth/refresh", { body: { refreshToken: fresh.refresh } });
   check("replaying the old refresh token is rejected (401)", replay.status === 401, replay.status);
   const afterReuse = await req("POST", "/auth/refresh", { body: { refreshToken: newRefresh } });

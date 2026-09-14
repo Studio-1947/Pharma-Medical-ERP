@@ -196,7 +196,13 @@ export class AuthService {
   // -----------------------------------------------------------------------
 
   private async issueTokens(
-    user: { id: string; email: string; role: string; branchId?: string | null },
+    user: {
+      id: string;
+      email: string;
+      role: string;
+      branchId?: string | null;
+      passwordChangedAt?: Date | null;
+    },
     meta: { ip?: string; userAgent?: string },
     /** Set when this pair replaces a token being rotated away, so the retired
      *  row can point at its successor. */
@@ -207,6 +213,7 @@ export class AuthService {
       email: user.email,
       role: user.role,
       branchId: user.branchId ?? undefined,
+      pwd: user.passwordChangedAt?.getTime() ?? 0,
     };
 
     const accessToken = this.jwt.sign(payload);

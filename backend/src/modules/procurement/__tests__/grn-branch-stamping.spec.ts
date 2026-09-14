@@ -51,6 +51,9 @@ function buildDbMock(opts: { locationExists: boolean }) {
           ],
         }),
       },
+      inventoryBatches: {
+        findFirst: vi.fn().mockResolvedValue(undefined),
+      },
     },
     select: () => selectChain,
     insert: (table: unknown) => ({
@@ -62,11 +65,26 @@ function buildDbMock(opts: { locationExists: boolean }) {
           if (table === schema.storageLocations) return Promise.resolve([{ id: LOCATION_ID }]);
           return Promise.resolve([{ id: "generic" }]);
         };
-        return { returning, then: (r: any) => returning().then(r) };
+        const conflictChain = {
+          returning,
+          then: (r: any) => returning().then(r),
+        };
+        return {
+          ...conflictChain,
+          onConflictDoUpdate: () => conflictChain,
+        };
       },
     }),
-    update: () => ({
-      set: () => ({ where: () => Promise.resolve([]) }),
+    update: (table: unknown) => ({
+      set: () => ({
+        where: () => {
+          const rows = table === schema.inventoryBatches ? [{ id: BATCH_ID }] : [];
+          return {
+            returning: () => Promise.resolve(rows),
+            then: (resolve: any) => Promise.resolve(rows).then(resolve),
+          };
+        },
+      }),
     }),
   };
 
@@ -158,5 +176,33 @@ describe("GRN branch stamping", () => {
 
     const batchInsert = fresh.inserts.find((i) => i.table === schema.inventoryBatches);
     expect(batchInsert!.values.branchId).toBe(BRANCH_ORDERING);
+  });
+
+  it("allows a GRN to restock the same batch when the expiry matches", async () => {
+    db.query.inventoryBatches.findFirst.mockResolvedValue({
+      id: BATCH_ID,
+      expiryDate: GRN_DTO.items[0].expiryDate,
+    });
+
+    const result = await repoWith(db).createGRN(GRN_DTO, "user-1");
+
+    expect(result.batchIds).toEqual([BATCH_ID]);
+    expect(inserts.find((i) => i.table === schema.stockMovements)?.values).toMatchObject({
+      batchId: BATCH_ID,
+      movementType: "purchase",
+      quantity: 100,
+    });
+  });
+
+  it("rejects a GRN restock when the existing batch has another expiry", async () => {
+    db.query.inventoryBatches.findFirst.mockResolvedValue({
+      id: BATCH_ID,
+      expiryDate: "2028-01-01",
+    });
+
+    await expect(repoWith(db).createGRN(GRN_DTO, "user-1")).rejects.toThrow(
+      /same expiry month to restock/i,
+    );
+    expect(inserts.find((i) => i.table === schema.inventoryBatches)).toBeUndefined();
   });
 });

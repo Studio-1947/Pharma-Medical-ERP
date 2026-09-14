@@ -93,13 +93,33 @@ export class BatchService {
       .div(dto.quantity)
       .toDecimalPlaces(2)
       .toFixed(2);
+    const normalizedBatchNo = dto.batchNo.trim().toUpperCase();
 
-    const batch = await this.batchRepo.createBatch({
-      ...dto,
-      costPrice,
-      branchId: resolvedBranchId,
-      resolvedLocationId,
-    });
+    const existingBatch = await this.batchRepo.findBatchByIdentity(
+      dto.medicineId,
+      normalizedBatchNo,
+      resolvedBranchId,
+    );
+    if (existingBatch && existingBatch.expiryDate.slice(0, 7) !== dto.expiryDate.slice(0, 7)) {
+      throw new UnprocessableEntityException(
+        `Batch ${normalizedBatchNo} already exists with expiry ${existingBatch.expiryDate}. Use the same expiry month to restock it.`,
+      );
+    }
+    if (dto.manufactureDate && dto.manufactureDate >= dto.expiryDate) {
+      throw new UnprocessableEntityException(
+        "Manufacturing date must be before the expiry date.",
+      );
+    }
+
+    const batch = existingBatch
+      ? await this.batchRepo.restockBatch(existingBatch.id, dto.quantity, costPrice)
+      : await this.batchRepo.createBatch({
+          ...dto,
+          batchNo: normalizedBatchNo,
+          costPrice,
+          branchId: resolvedBranchId,
+          resolvedLocationId,
+        });
 
     // If the medicine was inactive (no MRP set during CSV import) and this
     // batch carries a valid MRP, promote it: set the medicine's priceMrp and
@@ -121,10 +141,10 @@ export class BatchService {
       movementType: "purchase",
       quantity: dto.quantity,
       performedBy: userId,
-      notes: `Initial batch receipt — batch no. ${dto.batchNo}; ${billedQuantity} billed + ${dto.freeQuantity ?? 0} free = ${dto.quantity} received`,
+      notes: `${existingBatch ? "Batch restock" : "Initial batch receipt"} — batch no. ${normalizedBatchNo}; ${billedQuantity} billed + ${dto.freeQuantity ?? 0} free = ${dto.quantity} received`,
     });
 
-    return { data: batch, message: "Batch created" };
+    return { data: batch, message: existingBatch ? "Batch restocked" : "Batch created" };
   }
 
   async update(id: string, dto: UpdateBatchDto, user: JwtPayload) {

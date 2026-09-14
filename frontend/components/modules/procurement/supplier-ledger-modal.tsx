@@ -315,7 +315,11 @@ export function SupplierLedgerModal({
         toastError("Missing details", "Batch number and expiry date are required.");
         return;
       }
-      replaceMutation.mutate({ id: resolvingReturnId, batchNo: resolveForm.batchNo, expiryDate: resolveForm.expiryDate });
+      replaceMutation.mutate({
+        id: resolvingReturnId,
+        batchNo: resolveForm.batchNo.trim().toUpperCase(),
+        expiryDate: `${resolveForm.expiryDate}-01`,
+      });
     } else if (resolveMode === "credit-note") {
       if (!resolveForm.amount || parseFloat(resolveForm.amount) <= 0) {
         toastError("Invalid amount", "Enter a credit note amount greater than zero.");
@@ -880,7 +884,7 @@ export function SupplierLedgerModal({
                           <div className="space-y-1">
                             <label className="text-xs font-semibold">Expiry Date *</label>
                             <input
-                              type="date"
+                              type="month"
                               required
                               value={resolveForm.expiryDate}
                               onChange={(e) => setResolveForm({ ...resolveForm, expiryDate: e.target.value })}
