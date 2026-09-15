@@ -91,7 +91,18 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         return;
       }
 
-      switch (pgCode) {
+      const databaseUnavailable =
+        pgCode === "57P01" || // admin_shutdown
+        pgCode === "57P02" || // crash_shutdown
+        pgCode === "57P03" || // cannot_connect_now
+        /connection terminated|connection timeout|ECONNREFUSED/i.test(exception.message);
+
+      if (databaseUnavailable) {
+        status = HttpStatus.SERVICE_UNAVAILABLE;
+        message = "Database is temporarily unavailable - please retry in a moment";
+        code = "DATABASE_UNAVAILABLE";
+        this.logger.warn(`Temporary database connection failure: ${exception.message}`);
+      } else switch (pgCode) {
         case "23505": // unique_violation
           status = HttpStatus.CONFLICT;
           message = "Resource already exists";

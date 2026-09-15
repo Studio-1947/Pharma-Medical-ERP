@@ -182,7 +182,7 @@ export class BatchRepository {
         ],
         set: {
           quantity: sql`${schema.inventoryBatches.quantity} + ${data.quantity}`,
-          costPrice: sql`ROUND(((${schema.inventoryBatches.costPrice} * ${schema.inventoryBatches.quantity}) + (${data.costPrice} * ${data.quantity})) / NULLIF(${schema.inventoryBatches.quantity} + ${data.quantity}, 0), 2)`,
+          costPrice: sql`ROUND(((${schema.inventoryBatches.costPrice} * ${schema.inventoryBatches.quantity}) + (${data.costPrice}::numeric * ${data.quantity}::integer)) / NULLIF(${schema.inventoryBatches.quantity} + ${data.quantity}::integer, 0), 2)`,
           status: sql`CASE WHEN ${schema.inventoryBatches.status} = 'depleted' THEN 'active'::batch_status ELSE ${schema.inventoryBatches.status} END`,
           updatedAt: new Date(),
         },
@@ -200,7 +200,7 @@ export class BatchRepository {
     const [batch] = await this.db
       .update(schema.inventoryBatches)
       .set({
-        costPrice: sql`ROUND(((${schema.inventoryBatches.costPrice} * ${schema.inventoryBatches.quantity}) + (${costPrice} * ${quantity})) / NULLIF(${schema.inventoryBatches.quantity} + ${quantity}, 0), 2)`,
+        costPrice: sql`ROUND(((${schema.inventoryBatches.costPrice} * ${schema.inventoryBatches.quantity}) + (${costPrice}::numeric * ${quantity}::integer)) / NULLIF(${schema.inventoryBatches.quantity} + ${quantity}::integer, 0), 2)`,
         quantity: sql`${schema.inventoryBatches.quantity} + ${quantity}`,
         expiryDate: details.expiryDate,
         manufactureDate: details.manufactureDate,
