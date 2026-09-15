@@ -84,7 +84,11 @@ vi.mock("@/components/modules/billing/doctors-overview", () => ({
   DoctorsOverview: () => null,
 }));
 vi.mock("@/components/modules/billing/otc-counter-sale", () => ({
-  OtcCounterSale: () => null,
+  OtcCounterSale: ({ medicine }: any) => (
+    <div data-testid="otc-counter-sale" data-medicine-id={medicine?.id}>
+      OTC billing workspace
+    </div>
+  ),
 }));
 vi.mock("@/components/modules/billing/medicine-batch-picker-modal", () => ({
   MedicineBatchPickerModal: ({ medicine, onAdd }: any) =>
@@ -283,6 +287,20 @@ describe("counter desk — closing stock gaps from the search results", () => {
     expect(await screen.findByText("Bill summary")).toBeInTheDocument();
     expect(screen.getByText(/BATCH-2/)).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("opens the complete OTC billing workspace from the OTC sale action", async () => {
+    stubApi({ medicines: [IN_STOCK] });
+    renderDesk();
+    await search("aceclo");
+
+    await userEvent.click(await screen.findByRole("button", { name: /OTC sale/i }));
+
+    expect(await screen.findByTestId("otc-counter-sale")).toHaveAttribute(
+      "data-medicine-id",
+      IN_STOCK.id,
+    );
+    expect(screen.queryByText(/Select physical batch/i)).not.toBeInTheDocument();
   });
 
   it("registers a medicine the catalogue has never seen, name prefilled", async () => {

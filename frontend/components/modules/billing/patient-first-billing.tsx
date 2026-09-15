@@ -40,6 +40,7 @@ import { CounterDeskModals, DeskModalView } from "@/components/modules/billing/c
 import { DoctorMedicinesPanel } from "@/components/modules/billing/doctor-medicines-panel";
 import { DoctorsOverview } from "@/components/modules/billing/doctors-overview";
 import { DoctorMedicineManager } from "@/components/modules/clinic/doctor-medicine-manager";
+import { OtcCounterSale } from "@/components/modules/billing/otc-counter-sale";
 import { MedicineBatchPickerModal } from "@/components/modules/billing/medicine-batch-picker-modal";
 import { InvoiceDetailModal } from "@/components/modules/billing/invoice-detail-modal";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
@@ -396,6 +397,9 @@ export function PatientFirstBilling({
   // Whole medicine row, not just id+name: the OTC modal prices the sale from
   // its MRP, tax rate and strip size.
   const [otcSupplyTarget, setOtcSupplyTarget] = useState<any | null>(null);
+  // Clicking the medicine name is still a quick physical-batch inspection;
+  // the explicit OTC sale action opens the complete OTC billing workspace.
+  const [batchPickerTarget, setBatchPickerTarget] = useState<any | null>(null);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
   // Restock target for the counter desk's inline "Add stock" action.
   const [stockTarget, setStockTarget] = useState<any | null>(null);
@@ -1035,7 +1039,14 @@ export function PatientFirstBilling({
           searches on the left and watches the bill grow on the right, in the
           same viewport, rather than through a dialog that hides the desk. */}
       <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-        {!cart.patientId ? (
+        {otcSupplyTarget ? (
+          <div className="p-5">
+            <OtcCounterSale
+              medicine={otcSupplyTarget}
+              onClose={() => setOtcSupplyTarget(null)}
+            />
+          </div>
+        ) : !cart.patientId ? (
           <div className="p-6">
             {registering ? (
               <QuickPatientForm
@@ -1330,7 +1341,7 @@ export function PatientFirstBilling({
                               type="button"
                               onClick={() => {
                                 if (m.isActive !== false && Number(m.totalStock || 0) > 0 && canOtc) {
-                                  setOtcSupplyTarget(m);
+                                  setBatchPickerTarget(m);
                                 }
                               }}
                               disabled={m.isActive === false || Number(m.totalStock || 0) <= 0 || !canOtc}
@@ -1976,13 +1987,13 @@ export function PatientFirstBilling({
         autoOpenAddStock
       />
 
-      {/* The medicine row and OTC action both open this physical-batch view.
-          A selected batch remains pinned through pricing and checkout. */}
+      {/* Clicking the medicine row opens this quick physical-batch view. The
+          explicit OTC sale button uses the full OTC workspace above. */}
       <MedicineBatchPickerModal
-        medicine={otcSupplyTarget}
-        onClose={() => setOtcSupplyTarget(null)}
+        medicine={batchPickerTarget}
+        onClose={() => setBatchPickerTarget(null)}
         onAdd={(batch, quantity) => {
-          const m = otcSupplyTarget;
+          const m = batchPickerTarget;
           if (!m) return;
           const sellable = Math.max(0, Number(batch.quantity ?? 0) - Number(batch.reservedQty ?? 0));
           cart.addItem({
@@ -2003,7 +2014,7 @@ export function PatientFirstBilling({
             totalStock: Number(m.totalStock ?? sellable),
           });
           toastSuccess(`${m.name} added`, `Batch ${batch.batchNo} · ${quantity} added to the bill.`);
-          setOtcSupplyTarget(null);
+          setBatchPickerTarget(null);
         }}
       />
 

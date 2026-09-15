@@ -137,8 +137,8 @@ jobs:
     env:
       GHCR_USER: ${{ github.actor }}
       GHCR_TOKEN: ${{ github.token }}
-      PREBUILT_BACKEND_IMAGE: ghcr.io/${{ env.REGISTRY_NAMESPACE }}/pharmerp-backend:${{ github.sha }}
-      PREBUILT_FRONTEND_IMAGE: ghcr.io/${{ env.REGISTRY_NAMESPACE }}/pharmerp-frontend:${{ github.sha }}
+      PREBUILT_BACKEND_IMAGE: ghcr.io/studio-1947/pharmerp-backend:${{ github.sha }}
+      PREBUILT_FRONTEND_IMAGE: ghcr.io/studio-1947/pharmerp-frontend:${{ github.sha }}
 
     steps:
       - name: Trigger Automatic Deployment on VPS via SSH
