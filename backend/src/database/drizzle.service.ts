@@ -17,7 +17,10 @@ export class DrizzleService implements OnModuleInit, OnModuleDestroy {
       connectionString: this.config.getOrThrow<string>("DATABASE_URL"),
       max: 20,
       idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 2_000,
+      // Two seconds was too aggressive on the small VPS during container/image
+      // activity and converted short-lived database contention into user-facing
+      // 500s. Give the local Postgres container a reasonable recovery window.
+      connectionTimeoutMillis: 10_000,
     });
 
     this.db = drizzle(this.pool, {
