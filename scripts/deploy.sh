@@ -16,6 +16,8 @@ echo "============================================================"
 
 cd "${APP_DIR}"
 
+PREVIOUS_REVISION="$(git rev-parse HEAD 2>/dev/null || true)"
+
 compose() {
   docker compose --env-file .env.production -f docker-compose.prod.yml "$@"
 }
@@ -86,21 +88,66 @@ fail_and_rollback() {
 # 1. Fetch latest changes from private git repository
 echo "[1/5] Fetching latest code from GitHub..."
 git fetch origin "${BRANCH}"
-git reset --hard "origin/${BRANCH}"
+TARGET_REVISION="$(git rev-parse "origin/${BRANCH}")"
+
+backend_changed=false
+frontend_changed=false
+database_changed=false
+
+if [ -z "${PREVIOUS_REVISION}" ] || ! git cat-file -e "${PREVIOUS_REVISION}^{commit}" 2>/dev/null; then
+  backend_changed=true
+  frontend_changed=true
+  database_changed=true
+else
+  changed_files="$(git diff --name-only "${PREVIOUS_REVISION}" "${TARGET_REVISION}")"
+  if grep -Eq '^(backend/|packages/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|docker-compose\.prod\.yml$|\.dockerignore$)' <<<"${changed_files}"; then
+    backend_changed=true
+  fi
+  if grep -Eq '^(frontend/|packages/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|docker-compose\.prod\.yml$|\.dockerignore$)' <<<"${changed_files}"; then
+    frontend_changed=true
+  fi
+  if grep -Eq '^backend/(drizzle/|src/database/schema/)' <<<"${changed_files}"; then
+    database_changed=true
+  fi
+fi
+
+git reset --hard "${TARGET_REVISION}"
+
+services=()
+${backend_changed} && services+=(backend)
+${frontend_changed} && services+=(frontend)
+
+if [ "${#services[@]}" -eq 0 ]; then
+  echo "No application, shared-package, dependency, or container changes detected. Nothing to deploy."
+  exit 0
+fi
+
+echo "Changed services: ${services[*]}"
 
 # 2. Grant executable permissions to all scripts
 chmod +x scripts/*.sh
 
-# 3. Take a pre-deployment database backup for safety
-echo "[2/5] Creating pre-deployment safety database backup..."
-if [ -f "./scripts/backup-db.sh" ]; then
-  ./scripts/backup-db.sh || echo "Warning: Pre-deploy database backup failed or container not yet running. Continuing..."
+# 3. A database dump is valuable before schema changes, but dumping the entire
+# database for a CSS/component-only deploy is pure downtime and disk churn.
+if ${database_changed}; then
+  echo "[2/5] Database changes detected; creating pre-deployment safety backup..."
+  if [ -f "./scripts/backup-db.sh" ]; then
+    ./scripts/backup-db.sh || echo "Warning: Pre-deploy database backup failed or container not yet running. Continuing..."
+  fi
+else
+  echo "[2/5] No database changes; skipping pre-deployment backup."
 fi
 
 # 4. Rebuild and launch production containers
 echo "[3/5] Building and updating Docker containers..."
 save_rollback_images
-if ! compose up -d --no-deps --build --wait --wait-timeout 180 backend frontend; then
+# Compose v2/BuildKit builds independent services concurrently and reuses the
+# existing local layer cache. Keeping build and recreate separate also avoids
+# rebuilding an unchanged dependency just because `up --build` traversed it.
+if ! compose build "${services[@]}"; then
+  fail_and_rollback "one or more images failed to build."
+fi
+if ! compose up -d --no-deps --no-build --wait --wait-timeout 180 "${services[@]}"; then
   fail_and_rollback "one or more containers did not become healthy."
 fi
 

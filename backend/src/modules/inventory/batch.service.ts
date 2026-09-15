@@ -100,11 +100,6 @@ export class BatchService {
       normalizedBatchNo,
       resolvedBranchId,
     );
-    if (existingBatch && existingBatch.expiryDate.slice(0, 7) !== dto.expiryDate.slice(0, 7)) {
-      throw new UnprocessableEntityException(
-        `Batch ${normalizedBatchNo} already exists with expiry ${existingBatch.expiryDate}. Use the same expiry month to restock it.`,
-      );
-    }
     if (dto.manufactureDate && dto.manufactureDate >= dto.expiryDate) {
       throw new UnprocessableEntityException(
         "Manufacturing date must be before the expiry date.",
@@ -112,7 +107,11 @@ export class BatchService {
     }
 
     const batch = existingBatch
-      ? await this.batchRepo.restockBatch(existingBatch.id, dto.quantity, costPrice)
+      ? await this.batchRepo.restockBatch(existingBatch.id, dto.quantity, costPrice, {
+          expiryDate: dto.expiryDate,
+          manufactureDate: dto.manufactureDate,
+          mrpAtEntry: dto.mrpAtEntry,
+        })
       : await this.batchRepo.createBatch({
           ...dto,
           batchNo: normalizedBatchNo,
@@ -126,10 +125,10 @@ export class BatchService {
     // flip isActive so it becomes sellable through the POS without a separate
     // edit step.
     const batchMrp = parseFloat(dto.mrpAtEntry ?? "0");
-    if (!medicine.isActive && batchMrp > 0) {
+    if (batchMrp > 0 && (!medicine.isActive || medicine.priceMrp !== batchMrp.toFixed(2))) {
       await this.inventoryRepo.updateMedicine(medicine.id, {
         priceMrp: batchMrp.toFixed(2),
-        isActive: true,
+        ...(!medicine.isActive ? { isActive: true } : {}),
       });
     }
 

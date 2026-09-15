@@ -191,12 +191,20 @@ export class BatchRepository {
     return batch!;
   }
 
-  async restockBatch(id: string, quantity: number, costPrice: string) {
+  async restockBatch(
+    id: string,
+    quantity: number,
+    costPrice: string,
+    details: Pick<CreateBatchDto, "expiryDate" | "manufactureDate" | "mrpAtEntry">,
+  ) {
     const [batch] = await this.db
       .update(schema.inventoryBatches)
       .set({
         costPrice: sql`ROUND(((${schema.inventoryBatches.costPrice} * ${schema.inventoryBatches.quantity}) + (${costPrice} * ${quantity})) / NULLIF(${schema.inventoryBatches.quantity} + ${quantity}, 0), 2)`,
         quantity: sql`${schema.inventoryBatches.quantity} + ${quantity}`,
+        expiryDate: details.expiryDate,
+        manufactureDate: details.manufactureDate,
+        mrpAtEntry: details.mrpAtEntry,
         status: sql`CASE WHEN ${schema.inventoryBatches.status} = 'depleted' THEN 'active'::batch_status ELSE ${schema.inventoryBatches.status} END`,
         updatedAt: new Date(),
       })

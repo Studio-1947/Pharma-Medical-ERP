@@ -66,9 +66,9 @@ const INACTIVE_MEDICINE = {
   isActive: false,
 };
 
-function stubApi(medicine: Record<string, unknown> = MEDICINE) {
+function stubApi(medicine: Record<string, unknown> = MEDICINE, batches: Record<string, unknown>[] = []) {
   get.mockImplementation((url: string) => {
-    if (url.endsWith("/batches")) return Promise.resolve({ data: [] });
+    if (url.endsWith("/batches")) return Promise.resolve({ data: batches });
     return Promise.resolve({ data: medicine });
   });
   post.mockResolvedValue({ data: { id: "batch-new" } });
@@ -109,6 +109,28 @@ describe("medicine stock modal — direct receive", () => {
     renderModal({ autoOpenAddStock: true });
     expect(await screen.findByPlaceholderText("e.g. BATCH-992")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirm Receive Stock/i })).toBeInTheDocument();
+  });
+
+  it("opens Edit / Restock with the existing batch details", async () => {
+    stubApi(MEDICINE, [{
+      id: "batch-1",
+      batchNo: "SPT251457F",
+      manufactureDate: "2025-09-01",
+      expiryDate: "2027-08-01",
+      quantity: 110,
+      costPrice: "100.00",
+      mrpAtEntry: "120.00",
+      status: "active",
+    }]);
+    renderModal();
+
+    await userEvent.click(await screen.findByRole("button", { name: /Edit \/ Restock/i }));
+
+    expect(screen.getByPlaceholderText("e.g. BATCH-992")).toHaveValue("SPT251457F");
+    const monthInputs = document.querySelectorAll('input[type="month"]');
+    expect(monthInputs[0]).toHaveValue("2027-08");
+    expect(monthInputs[1]).toHaveValue("2025-09");
+    expect(screen.getByLabelText(/^MRP/i)).toHaveValue(120);
   });
 
   it("costs the received batch from the medicine's purchase rate", async () => {

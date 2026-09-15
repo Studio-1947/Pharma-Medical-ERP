@@ -17,6 +17,7 @@ import {
   TrendingDown,
   X,
   PlusCircle,
+  Pencil,
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
@@ -152,6 +153,15 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
   // unsellable, and receiving a priced batch is what brings them back.
   const medicineInactive = medicine?.isActive === false;
 
+  const beginBatchEdit = (batch: any) => {
+    setNewBatchNo(String(batch.batchNo ?? ""));
+    setNewExpiry(String(batch.expiryDate ?? "").slice(0, 7));
+    setNewManufactureDate(String(batch.manufactureDate ?? "").slice(0, 7));
+    setNewPurchasePrice(String(batch.costPrice ?? medicine?.purchaseRate ?? ""));
+    setNewMrp(String(batch.mrpAtEntry ?? batch.mrp ?? medicine?.priceMrp ?? ""));
+    setAddStockOpen(true);
+  };
+
   const handleAddStockSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!medicineId || !newBatchNo.trim() || !newExpiry) return;
@@ -276,7 +286,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
           {/* Inline Stock Addition Form */}
           {addStockOpen && (
             <form onSubmit={handleAddStockSubmit} className="bg-emerald-50/60 border border-emerald-200/80 rounded-2xl p-4 space-y-4 animate-in fade-in duration-150">
-              <div className="flex items-center justify-between border-b border-emerald-200/60 pb-2">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-emerald-200/60 pb-2">
                 <span className="text-xs font-extrabold text-emerald-900 flex items-center gap-1.5">
                   <Plus size={14} /> Direct Receive Batch & Stock
                 </span>
@@ -294,7 +304,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                 </div>
               )}
 
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">Batch No *</label>
                   <input
@@ -383,7 +393,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-1">
+              <div className="flex flex-wrap justify-end gap-2 pt-1">
                 <button
                   type="button"
                   onClick={() => setAddStockOpen(false)}
@@ -416,7 +426,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
               </div>
             ) : (
               <div className="overflow-x-auto">
-                <table className="w-full text-xs">
+                <table className="w-full min-w-[680px] text-xs">
                   <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider">
                     <tr>
                       <th className="px-4 py-2.5 text-left">Batch No</th>
@@ -466,12 +476,12 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                             {b.quantity}
                           </td>
                           <td className="px-4 py-3 text-right font-bold text-emerald-600">
-                            ₹{parseFloat(b.mrp ?? medicine?.priceMrp ?? "0").toFixed(2)}
+                            ₹{parseFloat(b.mrpAtEntry ?? b.mrp ?? medicine?.priceMrp ?? "0").toFixed(2)}
                           </td>
                           <td className="px-4 py-3 text-center">
                             <span
                               className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                                b.status === "ACTIVE"
+                                String(b.status ?? "active").toLowerCase() === "active"
                                   ? "bg-emerald-100 text-emerald-800"
                                   : "bg-amber-100 text-amber-800"
                               }`}
@@ -480,14 +490,24 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                             </span>
                           </td>
                           <td className="px-4 py-3 text-right">
-                            <button
-                              onClick={() => setSelectedBatchForLabel(b.id)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-bold transition-colors shadow-2xs"
-                              title="Print 50mm x 25mm barcode shelf sticker"
-                            >
-                              <Barcode size={12} />
-                              <span>Sticker</span>
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                              <button
+                                onClick={() => beginBatchEdit(b)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-[11px] font-bold transition-colors shadow-2xs"
+                                title="Edit batch details and receive more stock"
+                              >
+                                <Pencil size={12} />
+                                <span>Edit / Restock</span>
+                              </button>
+                              <button
+                                onClick={() => setSelectedBatchForLabel(b.id)}
+                                className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-[11px] font-bold transition-colors shadow-2xs"
+                                title="Print 50mm x 25mm barcode shelf sticker"
+                              >
+                                <Barcode size={12} />
+                                <span>Sticker</span>
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
