@@ -141,11 +141,25 @@ fi
 # 4. Rebuild and launch production containers
 echo "[3/5] Building and updating Docker containers..."
 save_rollback_images
-# Compose v2/BuildKit builds independent services concurrently and reuses the
-# existing local layer cache. Keeping build and recreate separate also avoids
-# rebuilding an unchanged dependency just because `up --build` traversed it.
-if ! compose build "${services[@]}"; then
-  fail_and_rollback "one or more images failed to build."
+if [ -n "${PREBUILT_BACKEND_IMAGE:-}" ] || [ -n "${PREBUILT_FRONTEND_IMAGE:-}" ]; then
+  # CI-built images keep expensive TypeScript/Next compilation off the small
+  # VPS. Save rollback tags first, then atomically retag each downloaded image
+  # to the stable names used by Compose.
+  for service in "${services[@]}"; do
+    if [ "${service}" = backend ]; then
+      source_image="${PREBUILT_BACKEND_IMAGE:?PREBUILT_BACKEND_IMAGE is required}"
+    else
+      source_image="${PREBUILT_FRONTEND_IMAGE:?PREBUILT_FRONTEND_IMAGE is required}"
+    fi
+    echo "Pulling prebuilt ${service} image: ${source_image}"
+    docker pull "${source_image}"
+    docker image tag "${source_image}" "pharmerp-${service}:current"
+  done
+else
+  # Manual deployments remain supported when no registry image was supplied.
+  if ! compose build "${services[@]}"; then
+    fail_and_rollback "one or more images failed to build."
+  fi
 fi
 if ! compose up -d --no-deps --no-build --wait --wait-timeout 180 "${services[@]}"; then
   fail_and_rollback "one or more containers did not become healthy."
