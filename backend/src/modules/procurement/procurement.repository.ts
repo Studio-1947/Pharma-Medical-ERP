@@ -438,7 +438,7 @@ export class ProcurementRepository {
           .update(schema.inventoryBatches)
           .set({
             quantity: sql`${schema.inventoryBatches.quantity} + ${item.receivedQty}`,
-            costPrice: sql`ROUND(((${schema.inventoryBatches.costPrice} * ${schema.inventoryBatches.quantity}) + (${effectiveUnitCost} * ${item.receivedQty})) / NULLIF(${schema.inventoryBatches.quantity} + ${item.receivedQty}, 0), 2)`,
+            costPrice: sql`ROUND(((${schema.inventoryBatches.costPrice} * ${schema.inventoryBatches.quantity}) + (${effectiveUnitCost}::numeric * ${item.receivedQty}::integer)) / NULLIF(${schema.inventoryBatches.quantity} + ${item.receivedQty}::integer, 0), 2)`,
             status: sql`CASE WHEN ${schema.inventoryBatches.status} = 'depleted' THEN 'active'::batch_status ELSE ${schema.inventoryBatches.status} END`,
             updatedAt: new Date(),
           })
@@ -467,7 +467,7 @@ export class ProcurementRepository {
           ],
           set: {
             quantity: sql`${schema.inventoryBatches.quantity} + ${item.receivedQty}`,
-            costPrice: sql`ROUND(((${schema.inventoryBatches.costPrice} * ${schema.inventoryBatches.quantity}) + (${effectiveUnitCost} * ${item.receivedQty})) / NULLIF(${schema.inventoryBatches.quantity} + ${item.receivedQty}, 0), 2)`,
+            costPrice: sql`ROUND(((${schema.inventoryBatches.costPrice} * ${schema.inventoryBatches.quantity}) + (${effectiveUnitCost}::numeric * ${item.receivedQty}::integer)) / NULLIF(${schema.inventoryBatches.quantity} + ${item.receivedQty}::integer, 0), 2)`,
             status: sql`CASE WHEN ${schema.inventoryBatches.status} = 'depleted' THEN 'active'::batch_status ELSE ${schema.inventoryBatches.status} END`,
             updatedAt: new Date(),
           },
