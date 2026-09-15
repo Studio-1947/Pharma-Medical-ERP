@@ -24,6 +24,20 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Detect affected applications
+        id: changes
+        shell: bash
+        run: |
+          changed_files="$(git diff --name-only HEAD^ HEAD)"
+          backend=false
+          frontend=false
+          if grep -Eq '^(backend/|packages/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|docker-compose\.prod\.yml$|\.dockerignore$)' <<<"$changed_files"; then backend=true; fi
+          if grep -Eq '^(frontend/|packages/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|docker-compose\.prod\.yml$|\.dockerignore$)' <<<"$changed_files"; then frontend=true; fi
+          echo "backend=$backend" >> "$GITHUB_OUTPUT"
+          echo "frontend=$frontend" >> "$GITHUB_OUTPUT"
 
       - name: Setup PNPM
         uses: pnpm/action-setup@v3
@@ -45,15 +59,19 @@ jobs:
           pnpm --filter @pharmerp/utils build || true
 
       - name: Typecheck Backend
+        if: steps.changes.outputs.backend == 'true'
         run: pnpm --filter backend typecheck
 
       - name: Typecheck Frontend
+        if: steps.changes.outputs.frontend == 'true'
         run: pnpm --filter frontend typecheck
 
       - name: Run Backend Tests
+        if: steps.changes.outputs.backend == 'true'
         run: pnpm --filter backend test
 
       - name: Run Frontend Tests
+        if: steps.changes.outputs.frontend == 'true'
         run: pnpm --filter frontend test
 
   deploy:

@@ -1,12 +1,20 @@
 import { z } from "zod";
 
+// Month inputs are what the stock-receive UI uses. Accept them at the API
+// boundary as well as full ISO dates so a cached/older frontend cannot turn a
+// harmless representation difference into a failed stock receipt.
+const inventoryDateSchema = z
+  .string()
+  .regex(/^\d{4}-\d{2}(?:-\d{2})?$/, "YYYY-MM or YYYY-MM-DD")
+  .transform((value) => value.length === 7 ? `${value}-01` : value);
+
 export const createBatchSchema = z.object({
   medicineId: z.string().uuid(),
   locationId: z.string().uuid().optional(),
   branchId: z.string().uuid().optional(),
   batchNo: z.string().min(1).max(100),
-  manufactureDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD").optional(),
-  expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD"),
+  manufactureDate: inventoryDateSchema.optional(),
+  expiryDate: inventoryDateSchema,
   quantity: z.number().int().min(1),
   freeQuantity: z.number().int().min(0).optional().default(0),
   /**

@@ -107,12 +107,16 @@ describe("BatchService.create — optional cost price", () => {
     const result = await service.create(baseDto as any, "user-1", branchId);
 
     expect(batchRepo.createBatch).not.toHaveBeenCalled();
-    expect(batchRepo.restockBatch).toHaveBeenCalledWith("batch-existing", 50, "62.50");
+    expect(batchRepo.restockBatch).toHaveBeenCalledWith("batch-existing", 50, "62.50", {
+      expiryDate: baseDto.expiryDate,
+      manufactureDate: undefined,
+      mrpAtEntry: baseDto.mrpAtEntry,
+    });
     expect(result.message).toBe("Batch restocked");
     expect(result.data.id).toBe("batch-existing");
   });
 
-  it("rejects the same batch number with a different expiry", async () => {
+  it("updates editable batch details while restocking the same batch number", async () => {
     inventoryRepo.findMedicineById.mockResolvedValue({
       id: baseDto.medicineId,
       isActive: true,
@@ -124,10 +128,22 @@ describe("BatchService.create — optional cost price", () => {
       expiryDate: "2028-01-31",
     });
 
-    await expect(service.create(baseDto as any, "user-1", branchId)).rejects.toThrow(
-      /same expiry month to restock/i,
-    );
+    await service.create({
+      ...baseDto,
+      manufactureDate: "2025-06-01",
+      expiryDate: "2027-05-01",
+      mrpAtEntry: "120.00",
+    } as any, "user-1", branchId);
+
     expect(batchRepo.createBatch).not.toHaveBeenCalled();
+    expect(batchRepo.restockBatch).toHaveBeenCalledWith("batch-existing", 50, "62.50", {
+      manufactureDate: "2025-06-01",
+      expiryDate: "2027-05-01",
+      mrpAtEntry: "120.00",
+    });
+    expect(inventoryRepo.updateMedicine).toHaveBeenCalledWith(baseDto.medicineId, {
+      priceMrp: "120.00",
+    });
   });
 
   it("rejects a manufacturing date in or after the expiry month", async () => {
@@ -150,6 +166,36 @@ describe("BatchService.create — optional cost price", () => {
  * The batches list is searchable. Without this a recall notice naming one
  * batch number meant paging through every batch in the branch to reach it.
  */
+describe("createBatchSchema - stock-receive dates", () => {
+  it("normalizes browser month values so cached clients cannot fail the request", () => {
+    const parsed = createBatchSchema.parse({
+      medicineId: "22222222-2222-2222-2222-222222222222",
+      batchNo: "SPT251457F",
+      manufactureDate: "2025-06",
+      expiryDate: "2027-05",
+      quantity: 50,
+      freeQuantity: 10,
+      costPrice: "100.00",
+      mrpAtEntry: "120.00",
+    });
+
+    expect(parsed.manufactureDate).toBe("2025-06-01");
+    expect(parsed.expiryDate).toBe("2027-05-01");
+  });
+
+  it("preserves already-normalized ISO dates", () => {
+    const parsed = createBatchSchema.parse({
+      medicineId: "22222222-2222-2222-2222-222222222222",
+      batchNo: "B-001",
+      expiryDate: "2027-05-01",
+      quantity: 1,
+      mrpAtEntry: "120.00",
+    });
+
+    expect(parsed.expiryDate).toBe("2027-05-01");
+  });
+});
+
 describe("queryBatchSchema — search", () => {
   it("accepts a free-text search term", () => {
     expect(queryBatchSchema.parse({ search: "crocin" }).search).toBe("crocin");
