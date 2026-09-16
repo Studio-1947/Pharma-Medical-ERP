@@ -204,6 +204,11 @@ export class InventoryRepository {
           and(
             eq(schema.medicines.id, schema.inventoryBatches.medicineId),
             eq(schema.inventoryBatches.status, "active"),
+            gt(schema.inventoryBatches.quantity, 0),
+            gte(schema.inventoryBatches.expiryDate, sql`CURRENT_DATE`),
+            params.branchId
+              ? eq(schema.inventoryBatches.branchId, params.branchId)
+              : undefined,
           ),
         )
         .where(and(...conditions))

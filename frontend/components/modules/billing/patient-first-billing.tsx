@@ -364,7 +364,12 @@ export function PatientFirstBilling({
     queryKey: ["medicine-search-counter", debounced, activeBranchId],
     queryFn: () =>
       apiClient.get("/inventory/medicines", {
-        params: { search: debounced, limit: MED_SEARCH_LIMIT, isActive: "all" },
+        params: {
+          search: debounced,
+          limit: MED_SEARCH_LIMIT,
+          isActive: "all",
+          ...branchParams,
+        },
       }) as any,
     enabled: searchActive,
   });

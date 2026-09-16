@@ -281,6 +281,12 @@ describe("counter desk — closing stock gaps from the search results", () => {
     expect(
       screen.getByRole("button", { name: /Add stock — receive another batch/i }),
     ).toBeInTheDocument();
+    expect(get).toHaveBeenCalledWith(
+      "/inventory/medicines",
+      expect.objectContaining({
+        params: expect.objectContaining({ branchId: "branch-1", search: "parace" }),
+      }),
+    );
   });
 
   it("opens the restock form for the medicine whose row was clicked", async () => {
