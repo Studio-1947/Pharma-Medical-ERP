@@ -199,6 +199,27 @@ async function confirmCheckout(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("OTC counter sale", () => {
+  it("labels divisible stock as tablets and explains a full-strip shortage", async () => {
+    get.mockImplementation((url: string) => {
+      if (url.includes("med-1")) {
+        return Promise.resolve({ data: [{ ...BATCHES[0], quantity: 8 }] });
+      }
+      if (url === "/clinic/doctors") return Promise.resolve({ data: DOCTORS });
+      return Promise.resolve({ data: [] });
+    });
+
+    renderModal();
+
+    expect(await screen.findByText("8 tablets available")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Full Strip (10 tablets)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Loose tablets" })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /need 10 tablets \(1 Strip\), but only 8 tablets available\. Short by 2 tablets\./i,
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("bills the sale by default and tenders exactly the amount it displays", async () => {
     const user = userEvent.setup();
     renderModal();

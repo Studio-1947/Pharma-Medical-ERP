@@ -25,7 +25,7 @@ import { apiClient, queryKeys } from "@/lib/api-client";
 import { useActiveBranchId } from "@/hooks/use-branch";
 import { useDebounce } from "@/hooks/use-debounce";
 import { usePermissions } from "@/hooks/use-permissions";
-import { canSellLooseUnits, formatStockUnit, getUnitLabel } from "@/lib/stock-unit-formatter";
+import { canSellLooseUnits, formatStockUnit, getLooseUnitLabel, getUnitLabel } from "@/lib/stock-unit-formatter";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
 import { quoteOtcSaleLines } from "@/lib/otc-quote";
 import { scheduleLabel } from "@/lib/schedule-class";
@@ -317,6 +317,7 @@ export function OtcCounterSale({
       controlled,
       totalAvailable,
       pricedBatches,
+      pricedAvailable,
       explicitlySelectedBatch,
       baseUnits,
       maxQty,
@@ -1159,6 +1160,7 @@ export function OtcCounterSale({
               )}
               {rows.map((r) => {
                 const unitLabel = getUnitLabel(r.line.quantity, r.unitInfo);
+                const looseUnitLabel = getLooseUnitLabel(2, r.unitInfo);
                 const lineQuote = quote.lines[r.idx];
                 const outOfStock = !r.loading && r.totalAvailable <= 0;
 
@@ -1281,7 +1283,11 @@ export function OtcCounterSale({
                               >
                                 <span className="flex items-center justify-between gap-2">
                                   <span className="font-mono text-xs font-extrabold text-slate-800">{b.batchNo}</span>
-                                  <span className="text-[10px] font-bold text-emerald-700">{formatStockUnit(sellable, r.unitInfo)}</span>
+                                  <span className="text-[10px] font-bold text-emerald-700">
+                                    {r.canSellLoose
+                                      ? `${sellable} ${getLooseUnitLabel(sellable, r.unitInfo)} available`
+                                      : formatStockUnit(sellable, r.unitInfo)}
+                                  </span>
                                 </span>
                                 <span className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
                                   <span className="text-slate-400">CP</span>
@@ -1308,7 +1314,10 @@ export function OtcCounterSale({
                             <ul className="mt-1 space-y-0.5">
                               {lineQuote.used.map((u) => (
                                 <li key={u.batchNo} className="text-xs font-medium text-slate-700">
-                                  {u.batchNo} — {u.units} unit{u.units === 1 ? "" : "s"}
+                                  {u.batchNo} — {u.units}{" "}
+                                  {r.canSellLoose
+                                    ? getLooseUnitLabel(u.units, r.unitInfo)
+                                    : getUnitLabel(u.units, r.unitInfo)}
                                   {u.expiryDate ? ` · exp ${u.expiryDate.slice(0, 7)}` : ""}
                                 </li>
                               ))}
@@ -1357,8 +1366,8 @@ export function OtcCounterSale({
                                   }`}
                                 >
                                   {u === "pack"
-                                    ? `Full ${getUnitLabel(1, r.unitInfo)} (${r.stripSize})`
-                                    : "Loose units"}
+                                    ? `Full ${getUnitLabel(1, r.unitInfo)} (${r.stripSize} ${looseUnitLabel})`
+                                    : `Loose ${looseUnitLabel}`}
                                 </button>
                               ))}
                             </div>
@@ -1392,8 +1401,9 @@ export function OtcCounterSale({
                               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/30"
                             />
                             <p className="mt-1 text-[11px] text-slate-400">
-                              Max {mode === "free" ? r.freeMax : r.maxQty} on{" "}
-                              {mode === "free" ? "this batch" : "hand"}
+                              {r.canSellLoose && r.line.saleUnit === "pack"
+                                ? `${r.pricedAvailable} ${getLooseUnitLabel(r.pricedAvailable, r.unitInfo)} in stock = ${r.maxQty} complete ${getUnitLabel(r.maxQty, r.unitInfo)}`
+                                : `Max ${mode === "free" ? r.freeMax : r.maxQty} on ${mode === "free" ? "this batch" : "hand"}`}
                             </p>
                           </div>
 
@@ -1771,10 +1781,35 @@ export function OtcCounterSale({
               )}
 
               {quote.short > 0 && (
-                <p className="text-xs font-semibold text-red-600">
-                  Not enough stock — {quote.short} more unit
-                  {quote.short === 1 ? "" : "s"} needed than the branch holds.
-                </p>
+                <div className="space-y-1 text-xs font-semibold text-red-600">
+                  {rows.map((r) => {
+                    const shortage = quote.lines[r.idx]?.short ?? 0;
+                    if (shortage <= 0) return null;
+
+                    const stockCount = r.baseUnits - shortage;
+                    const requestedLabel = r.canSellLoose
+                      ? getLooseUnitLabel(r.baseUnits, r.unitInfo)
+                      : getUnitLabel(r.baseUnits, r.unitInfo);
+                    const stockLabel = r.canSellLoose
+                      ? getLooseUnitLabel(stockCount, r.unitInfo)
+                      : getUnitLabel(stockCount, r.unitInfo);
+                    const shortageLabel = r.canSellLoose
+                      ? getLooseUnitLabel(shortage, r.unitInfo)
+                      : getUnitLabel(shortage, r.unitInfo);
+
+                    return (
+                      <p key={r.line.medicine.id}>
+                        Not enough stock for {r.line.medicine.name}: need {r.baseUnits}{" "}
+                        {requestedLabel}
+                        {r.canSellLoose && r.line.saleUnit === "pack"
+                          ? ` (${r.line.quantity} ${getUnitLabel(r.line.quantity, r.unitInfo)})`
+                          : ""}
+                        , but only {stockCount} {stockLabel} available. Short by {shortage}{" "}
+                        {shortageLabel}.
+                      </p>
+                    );
+                  })}
+                </div>
               )}
             </>
           )}

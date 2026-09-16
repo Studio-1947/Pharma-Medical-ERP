@@ -106,3 +106,20 @@ export function canSellLooseUnits(m: {
   // one packaging unit we can safely recognise as individually dispensable.
   return (m.unit || "").trim().toLowerCase() === "strip";
 }
+
+/** The smallest countable dose stored in inventory for a divisible pack. */
+export function getLooseUnitLabel(
+  count: number,
+  m: { dosageForm?: string | null }
+): string {
+  const form = (m.dosageForm || "").trim().toLowerCase();
+  let singular = "unit";
+
+  if (form.includes("capsule")) singular = "capsule";
+  else if (form.includes("caplet")) singular = "caplet";
+  else if (form.includes("lozenge")) singular = "lozenge";
+  else if (form.includes("pill")) singular = "pill";
+  else if (form.includes("tablet")) singular = "tablet";
+
+  return count === 1 ? singular : `${singular}s`;
+}
