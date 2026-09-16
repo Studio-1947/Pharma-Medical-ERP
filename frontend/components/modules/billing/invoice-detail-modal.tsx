@@ -29,6 +29,12 @@ function fmtDate(value?: string | null) {
   return Number.isNaN(d.getTime()) ? "--" : format(d, "MMM d, yyyy · h:mm a");
 }
 
+function fmtBatchDate(value?: string | null) {
+  if (!value) return "--";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "--" : format(d, "MMM yyyy");
+}
+
 function escapeHtml(value: unknown) {
   return String(value ?? "").replace(/[&<>\"']/g, (char) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
@@ -58,7 +64,7 @@ export function InvoiceDetailModal({
     if (!popup) return;
     const rows = items.map((item, index) => `
       <tr>
-        <td><div class="medicine-name">${index + 1}. ${escapeHtml(item.itemName ?? item.medicine?.name ?? item.medicineName ?? "--")}</div><div class="batch-label">Batch: ${escapeHtml(item.batch?.batchNo ?? item.batchNo ?? "--")}</div></td>
+        <td><div class="medicine-name">${index + 1}. ${escapeHtml(item.itemName ?? item.medicine?.name ?? item.medicineName ?? "--")}</div><div class="batch-label">Batch: ${escapeHtml(item.batch?.batchNo ?? item.batchNo ?? "--")} &nbsp;|&nbsp; MFG: ${escapeHtml(fmtBatchDate(item.batch?.manufactureDate))} &nbsp;|&nbsp; EXP: ${escapeHtml(fmtBatchDate(item.batch?.expiryDate))} &nbsp;|&nbsp; Schedule: ${escapeHtml(item.medicine?.scheduleClass ?? (item.medicine?.requiresPrescription ? "Rx" : "OTC"))}</div></td>
         <td class="center">${escapeHtml(item.quantity ?? 0)}</td>
         <td class="right">${inr(item.unitPrice)}</td>
         <td class="right">${Number(item.discountPct ?? 0) > 0 ? `${escapeHtml(item.discountPct)}%` : "--"}</td>
@@ -66,7 +72,7 @@ export function InvoiceDetailModal({
         <td class="right amount">${inr(item.lineTotal)}</td>
       </tr>`).join("");
     const paymentRows = payments.map((payment) =>
-      `<tr><td>${escapeHtml(payment.mode ?? "--")}</td><td class="right">${inr(payment.amount)}</td></tr>`,
+      `<tr><td><span class="badge">${escapeHtml(payment.mode ?? "--")}</span>${payment.referenceNo ? ` &nbsp; Ref: ${escapeHtml(payment.referenceNo)}` : ""}</td><td class="right">${inr(payment.amount)}</td></tr>`,
     ).join("");
     popup.document.write(`<!doctype html><html><head><title>Invoice ${escapeHtml(inv.invoiceNo)}</title>
       <style>
@@ -154,6 +160,10 @@ export function InvoiceDetailModal({
               <p className="text-[11px] text-muted-foreground">Due</p>
               <p className="font-medium tabular-nums">{inr(inv.amountDue)}</p>
             </div>
+            <div>
+              <p className="text-[11px] text-muted-foreground">Payment mode</p>
+              <p className="font-medium capitalize">{inv.paymentMode === "mixed" ? "Mixed / Split" : inv.paymentMode ?? "--"}</p>
+            </div>
             {/* Counter sales carry no prescription, so this is the only place
                 the doctor behind one is recorded. */}
             {inv.referredByDoctor && (
@@ -192,9 +202,12 @@ export function InvoiceDetailModal({
                         </td>
                         <td className="px-3 py-2 text-muted-foreground text-xs">
                           {it.batch?.batchNo ?? (it.itemType === "consultation" ? "Service" : "--")}
-                          {it.batch?.expiryDate && (
+                          {it.itemType !== "consultation" && (
                             <span className="block text-[10px]">
-                              exp {fmtDate(it.batch.expiryDate).split(" · ")[0]}
+                              MFG {fmtBatchDate(it.batch?.manufactureDate)} · EXP {fmtBatchDate(it.batch?.expiryDate)}
+                              <span className="block">
+                                Schedule {it.medicine?.scheduleClass ?? (it.medicine?.requiresPrescription ? "Rx" : "OTC")}
+                              </span>
                             </span>
                           )}
                         </td>
@@ -218,7 +231,10 @@ export function InvoiceDetailModal({
                     key={p.id ?? i}
                     className="flex items-center justify-between border rounded-lg px-3 py-2 text-sm"
                   >
-                    <span className="capitalize font-medium">{p.mode ?? "--"}</span>
+                    <span className="capitalize font-medium">
+                      {p.mode ?? "--"}
+                      {p.referenceNo ? <span className="ml-2 text-xs font-normal text-muted-foreground">Ref: {p.referenceNo}</span> : null}
+                    </span>
                     <span className="tabular-nums">{inr(p.amount)}</span>
                   </div>
                 ))}

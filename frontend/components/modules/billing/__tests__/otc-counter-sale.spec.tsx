@@ -322,6 +322,82 @@ describe("OTC counter sale", () => {
     expect(payload.payments[0]).toMatchObject({ mode: "upi", referenceNo: "UPI-77" });
   });
 
+  it("splits an OTC bill between cash and UPI and records both tenders", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByRole("button", { name: /Pay & checkout/i });
+
+    await user.click(screen.getByRole("button", { name: /Mixed \/ Split/i }));
+    await user.click(screen.getByRole("button", { name: /Pay & checkout/i }));
+    expect(await screen.findByText("Split Breakdown")).toBeInTheDocument();
+    expect(screen.getByText("Balanced")).toBeInTheDocument();
+    await confirmCheckout(user);
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [, payload] = post.mock.calls[0] as [string, any];
+    expect(payload.payments).toEqual([
+      { mode: "cash", amount: "47.88" },
+      { mode: "upi", amount: "47.88" },
+    ]);
+  });
+
+  it("records three edited tenders and keeps their payment references", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByRole("button", { name: /Pay & checkout/i });
+
+    await user.click(screen.getByRole("button", { name: /Mixed \/ Split/i }));
+    await user.click(screen.getByRole("button", { name: /Pay & checkout/i }));
+    const paymentPanel = (await screen.findByText("Collect Payment")).parentElement
+      ?.parentElement as HTMLElement;
+
+    await user.click(within(paymentPanel).getByRole("button", { name: /Add split/i }));
+    const amounts = within(paymentPanel).getAllByRole("spinbutton");
+    for (const [input, value] of amounts.map((input, index) => [input, ["20", "30", "45.76"][index]!] as const)) {
+      await user.clear(input);
+      await user.type(input, value);
+    }
+
+    const modes = within(paymentPanel).getAllByRole("combobox");
+    await user.selectOptions(modes[2]!, "card");
+    const refs = within(paymentPanel).getAllByPlaceholderText("Ref (opt)");
+    await user.type(refs[1]!, "UPI-THREE-1");
+    await user.type(refs[2]!, "CARD-THREE-2");
+
+    expect(within(paymentPanel).getByText("Balanced")).toBeInTheDocument();
+    await confirmCheckout(user);
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [, payload] = post.mock.calls[0] as [string, any];
+    expect(payload.payments).toEqual([
+      { mode: "cash", amount: "20.00" },
+      { mode: "upi", amount: "30.00", referenceNo: "UPI-THREE-1" },
+      { mode: "card", amount: "45.76", referenceNo: "CARD-THREE-2" },
+    ]);
+  });
+
+  it("refuses an underpaid mixed walk-in bill instead of silently creating a due", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByRole("button", { name: /Pay & checkout/i });
+
+    await user.click(screen.getByRole("button", { name: /Mixed \/ Split/i }));
+    await user.click(screen.getByRole("button", { name: /Pay & checkout/i }));
+    const paymentPanel = (await screen.findByText("Collect Payment")).parentElement
+      ?.parentElement as HTMLElement;
+    const amounts = within(paymentPanel).getAllByRole("spinbutton");
+    await user.clear(amounts[0]!);
+    await user.type(amounts[0]!, "40");
+    await user.clear(amounts[1]!);
+    await user.type(amounts[1]!, "40");
+
+    expect(within(paymentPanel).getByText(/15\.76 remaining.*walk-in cannot owe/i)).toBeInTheDocument();
+    await confirmCheckout(user);
+
+    expect(await within(paymentPanel).findByText(/Walk-in sales must be paid in full/i)).toBeInTheDocument();
+    expect(post).not.toHaveBeenCalled();
+  });
+
   it("keeps a free hand-out off the billing route entirely", async () => {
     const user = userEvent.setup();
     renderModal();

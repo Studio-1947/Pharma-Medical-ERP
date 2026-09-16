@@ -29,7 +29,7 @@ interface Props {
   prescriptionId?: string | null;
   onOpenRxPicker?: () => void;
   /** Preselect the tender chosen on the calling screen. */
-  initialMode?: "cash" | "upi" | "card";
+  initialMode?: "cash" | "upi" | "card" | "mixed";
 }
 
 export function PaymentModal({ open, total, hasPatient, onConfirm, onClose, loading, needsRx, prescriptionId, onOpenRxPicker, initialMode = "cash" }: Props) {
@@ -43,7 +43,14 @@ export function PaymentModal({ open, total, hasPatient, onConfirm, onClose, load
   useEffect(() => {
     if (open) {
       setMode(initialMode);
-      setSplits([{ mode: initialMode, amount: String(total.toFixed(2)), ref: "" }]);
+      setSplits(
+        initialMode === "mixed"
+          ? [
+              { mode: "cash", amount: String((total / 2).toFixed(2)), ref: "" },
+              { mode: "upi", amount: String((total - Number((total / 2).toFixed(2))).toFixed(2)), ref: "" },
+            ]
+          : [{ mode: initialMode, amount: String(total.toFixed(2)), ref: "" }],
+      );
       setCashTendered(String(total.toFixed(2)));
       setError("");
     }
@@ -114,8 +121,8 @@ export function PaymentModal({ open, total, hasPatient, onConfirm, onClose, load
   // not an invoice with a negative balance.
   const splitOver = splitGap < -0.01;
   const splitDue = splitGap > 0.01;
-  const allowWalkInBalance = true;
-  const acceptedAsDue = isMulti && splitDue;
+  const allowWalkInBalance = false;
+  const acceptedAsDue = isMulti && splitDue && (hasPatient || allowWalkInBalance);
 
   const handleConfirm = () => {
     setError("");

@@ -17,6 +17,8 @@ export interface CartItem {
   name: string;
   sku: string;
   batchNo: string;
+  manufactureDate?: string | null;
+  expiryDate?: string | null;
   unitPrice: number; // The MRP of the pack/strip
   stripSize: number; // Number of loose pills per pack/strip
   saleUnit: "pack" | "loose";
@@ -43,7 +45,7 @@ interface CartState {
   loyaltyPointsToRedeem: number;
   addItem: (item: Omit<CartItem, "lineTotal" | "saleUnit" | "stripSize"> & { stripSize?: number; saleUnit?: "pack" | "loose" }) => void;
   updateQty: (medicineId: string, batchId: string, qty: number) => void;
-  replaceBatch: (medicineId: string, oldBatchId: string, batch: Pick<CartItem, "batchId" | "batchNo" | "unitPrice" | "batchStock">) => void;
+  replaceBatch: (medicineId: string, oldBatchId: string, batch: Pick<CartItem, "batchId" | "batchNo" | "unitPrice" | "batchStock" | "manufactureDate" | "expiryDate">) => void;
   updateDiscountPct: (medicineId: string, batchId: string, discPct: number) => void;
   toggleUnit: (medicineId: string, batchId: string) => void;
   removeItem: (medicineId: string, batchId: string) => void;

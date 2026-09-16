@@ -76,6 +76,8 @@ function CartBatchPicker({ item, branchId }: { item: CartItem; branchId?: string
           replaceBatch(item.medicineId, item.batchId, {
             batchId: b.id,
             batchNo: b.batchNo,
+            manufactureDate: b.manufactureDate,
+            expiryDate: b.expiryDate,
             unitPrice: Number(b.mrpAtEntry),
             batchStock: Math.max(0, Number(b.quantity ?? 0) - Number(b.reservedQty ?? 0)),
           });
@@ -575,6 +577,8 @@ export function PatientFirstBilling({
             name: label,
             sku: med?.sku ?? item.medicineName ?? "",
             batchNo: first.batchNo,
+            manufactureDate: first.manufactureDate,
+            expiryDate: first.expiryDate,
             unitPrice: parseFloat(med?.priceMrp ?? "0") || 0,
             stripSize: med?.stripSize ? Number(med.stripSize) : 1,
             taxPct: parseFloat(med?.taxPercent ?? "0") || 0,
@@ -785,6 +789,8 @@ export function PatientFirstBilling({
         name: m.name,
         sku: m.sku,
         batchNo: first.batchNo,
+        manufactureDate: first.manufactureDate,
+        expiryDate: first.expiryDate,
         unitPrice: parseFloat(m.priceMrp),
         stripSize: m.stripSize ? parseInt(m.stripSize) : 1,
         taxPct: parseFloat(m.taxPercent ?? "0"),

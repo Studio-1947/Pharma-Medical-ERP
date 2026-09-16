@@ -321,7 +321,7 @@ export function PosTerminal({
         <tr>
           <td>
             <div class="medicine-name">${i + 1}. ${item.name}</div>
-            <div class="batch-label">Batch: ${item.batchNo}</div>
+            <div class="batch-label">Batch: ${item.batchNo} &nbsp;|&nbsp; MFG: ${item.manufactureDate ? String(item.manufactureDate).slice(0, 7) : "--"} &nbsp;|&nbsp; EXP: ${item.expiryDate ? String(item.expiryDate).slice(0, 7) : "--"} &nbsp;|&nbsp; Schedule: ${item.scheduleClass ?? (item.requiresPrescription ? "Rx" : "OTC")}</div>
           </td>
           <td class="text-center">${displayQty}</td>
           <td class="text-right">₹${displayPrice.toFixed(2)}</td>
@@ -534,6 +534,8 @@ export function PosTerminal({
                 name: medicine.name,
                 sku: medicine.sku,
                 batchNo: firstBatch.batchNo,
+                manufactureDate: firstBatch.manufactureDate,
+                expiryDate: firstBatch.expiryDate,
                 unitPrice: parseFloat(medicine.priceMrp),
                 stripSize: medicine.stripSize ? parseInt(medicine.stripSize) : 1,
                 taxPct: parseFloat(medicine.taxPercent ?? "0"),
@@ -555,6 +557,8 @@ export function PosTerminal({
             name: medicine.name,
             sku: medicine.sku,
             batchNo: firstBatch.batchNo,
+            manufactureDate: firstBatch.manufactureDate,
+            expiryDate: firstBatch.expiryDate,
             unitPrice: parseFloat(medicine.priceMrp),
             stripSize: medicine.stripSize ? parseInt(medicine.stripSize) : 1,
             taxPct: parseFloat(medicine.taxPercent ?? "0"),
@@ -771,7 +775,7 @@ export function PosTerminal({
         if (!existing) {
           addItem({
             medicineId: m.id, batchId: first.id, name: m.name, sku: m.sku,
-            batchNo: first.batchNo, unitPrice: parseFloat(m.priceMrp),
+            batchNo: first.batchNo, manufactureDate: first.manufactureDate, expiryDate: first.expiryDate, unitPrice: parseFloat(m.priceMrp),
             stripSize: m.stripSize ? parseInt(m.stripSize) : 1,
             taxPct: parseFloat(m.taxPercent ?? "0"), discountPct: 0, quantity: availableQty,
             scheduleClass: m.scheduleClass, requiresPrescription: m.requiresPrescription,
@@ -788,6 +792,8 @@ export function PosTerminal({
         // Using it here made an "Exact" walk-in tender reach the server as an
         // apparent partial payment.
         batchNo: first.batchNo,
+        manufactureDate: first.manufactureDate,
+        expiryDate: first.expiryDate,
         unitPrice: parseFloat(first.mrpAtEntry ?? m.priceMrp),
         stripSize: m.stripSize ? parseInt(m.stripSize) : 1,
         taxPct: parseFloat(m.taxPercent ?? "0"), discountPct: 0, quantity: 1,
@@ -920,6 +926,8 @@ export function PosTerminal({
             name: label,
             sku: med?.sku ?? item.medicineName ?? "",
             batchNo: first.batchNo,
+            manufactureDate: first.manufactureDate,
+            expiryDate: first.expiryDate,
             unitPrice: parseFloat(med?.priceMrp ?? "0") || 0,
             stripSize: med?.stripSize ? Number(med.stripSize) : 1,
             taxPct: parseFloat(med?.taxPercent ?? "0") || 0,
@@ -2440,6 +2448,12 @@ export function PosTerminal({
                         <div className="col-span-5">
                           <p className="font-semibold text-gray-900 leading-tight">{item.name}</p>
                           <p className="text-[10px] text-gray-400 font-mono">{item.batchNo}</p>
+                          <p className="text-[9px] text-gray-400">
+                            MFG {item.manufactureDate ? String(item.manufactureDate).slice(0, 7) : "--"} · EXP {item.expiryDate ? String(item.expiryDate).slice(0, 7) : "--"}
+                          </p>
+                          <p className="text-[9px] text-gray-400">
+                            Schedule {item.scheduleClass ?? (item.requiresPrescription ? "Rx" : "OTC")}
+                          </p>
                         </div>
                         <span className="col-span-1 text-center font-medium text-gray-700">{displayQty}</span>
                         <span className="col-span-2 text-right text-gray-700">₹{displayPrice.toFixed(2)}</span>

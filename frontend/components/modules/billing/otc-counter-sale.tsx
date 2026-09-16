@@ -146,7 +146,7 @@ export function OtcCounterSale({
   // "credit" is the counter's due sale: the medicines go out now and the money
   // is collected later. It is the only mode that needs a name and a number,
   // because a debt with nobody's name on it cannot be chased.
-  const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "card" | "credit">("cash");
+  const [paymentMode, setPaymentMode] = useState<"cash" | "upi" | "card" | "credit" | "mixed">("cash");
   const [referenceNo, setReferenceNo] = useState("");
   // Who owes it. Kept out of the walk-in path entirely — these are only read
   // when the sale is on credit, and only then are they required.
@@ -413,7 +413,9 @@ export function OtcCounterSale({
   const leavesDebt = onCredit && dueAmount > 0;
   // The reference box belongs to whichever tender is actually being taken.
   const refMode = onCredit ? duePaidMode : paymentMode;
-  const showReference = onCredit ? paidNow > 0 && duePaidMode !== "cash" : paymentMode !== "cash";
+  const showReference = onCredit
+    ? paidNow > 0 && duePaidMode !== "cash"
+    : paymentMode !== "cash" && paymentMode !== "mixed";
 
   // One rate on the bill reads better as "GST @ 12%"; a mixed bill cannot claim
   // a single rate, so it just says GST.
@@ -1473,11 +1475,11 @@ export function OtcCounterSale({
                   Payment received by
                 </p>
                 <div
-                  className="grid grid-cols-2 sm:grid-cols-4 gap-2"
+                  className="grid grid-cols-2 sm:grid-cols-5 gap-2"
                   role="group"
                   aria-labelledby="otc-payment-label"
                 >
-                  {(["cash", "upi", "card", "credit"] as const).map((m) => (
+                  {(["cash", "upi", "card", "mixed", "credit"] as const).map((m) => (
                     <button
                       key={m}
                       type="button"
@@ -1490,7 +1492,7 @@ export function OtcCounterSale({
                           : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"
                       }`}
                     >
-                      {m === "credit" ? "Due / Credit" : m}
+                      {m === "credit" ? "Due / Credit" : m === "mixed" ? "Mixed / Split" : m}
                     </button>
                   ))}
                 </div>

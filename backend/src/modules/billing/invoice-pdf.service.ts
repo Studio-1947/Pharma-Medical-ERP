@@ -167,7 +167,7 @@ export class InvoicePdfService {
       }
 
       const colWidths = [PW * 0.33, PW * 0.14, PW * 0.1, PW * 0.1, PW * 0.1, PW * 0.1, PW * 0.13];
-      const headers = ["Medicine", "Batch / Expiry", "Qty", "MRP", "GST%", "Tax", "Total"];
+      const headers = ["Medicine", "Batch details", "Qty", "MRP", "GST%", "Tax", "Total"];
 
       const drawTableHeader = (tableY: number) => {
         doc.rect(ML, tableY, PW, 18).fill(LIGHT);
@@ -185,7 +185,7 @@ export class InvoicePdfService {
       const items: any[] = invoice.items ?? [];
 
       items.forEach((item: any, idx: number) => {
-        const rowH = 22;
+        const rowH = 38;
         if (rowY + rowH > PAGE_BOTTOM) {
           doc.addPage();
           rowY = drawTableHeader(30);
@@ -196,11 +196,17 @@ export class InvoicePdfService {
         const taxAmt = Number(item.cgstAmt ?? 0) + Number(item.sgstAmt ?? 0) + Number(item.igstAmt ?? 0);
         const batchLabel = item.batch?.batchNo ?? item.batchId?.slice(0, 8) ?? "--";
         const expiryLabel = item.batch?.expiryDate ? `Exp: ${dateStr(item.batch.expiryDate)}` : "";
+        const manufactureLabel = item.batch?.manufactureDate
+          ? `Mfg: ${dateStr(item.batch.manufactureDate)}`
+          : "Mfg: --";
+        const scheduleLabel = item.medicine
+          ? `Schedule: ${item.medicine.scheduleClass ?? (item.medicine.requiresPrescription ? "Rx" : "OTC")}`
+          : "";
         const rowCols = [
           // Service lines (consultation fee) carry no medicine row — fall back
           // to the description stored on the line itself.
           { text: item.itemName ?? item.medicine?.name ?? item.medicineId, align: "left" },
-          { text: `${batchLabel}\n${expiryLabel}`, align: "left" },
+          { text: [batchLabel, manufactureLabel, expiryLabel, scheduleLabel].filter(Boolean).join("\n"), align: "left" },
           { text: String(item.quantity), align: "right" },
           { text: rupee(item.unitPrice), align: "right" },
           { text: `${item.taxPct ?? 0}%`, align: "right" },
