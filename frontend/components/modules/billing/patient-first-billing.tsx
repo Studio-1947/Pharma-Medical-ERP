@@ -41,7 +41,6 @@ import { DoctorMedicinesPanel } from "@/components/modules/billing/doctor-medici
 import { DoctorsOverview } from "@/components/modules/billing/doctors-overview";
 import { DoctorMedicineManager } from "@/components/modules/clinic/doctor-medicine-manager";
 import { OtcCounterSale } from "@/components/modules/billing/otc-counter-sale";
-import { MedicineBatchPickerModal } from "@/components/modules/billing/medicine-batch-picker-modal";
 import { RxPickerModal } from "@/components/modules/billing/rx-picker-modal";
 import { InvoiceDetailModal } from "@/components/modules/billing/invoice-detail-modal";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
@@ -398,9 +397,6 @@ export function PatientFirstBilling({
   // Whole medicine row, not just id+name: the OTC modal prices the sale from
   // its MRP, tax rate and strip size.
   const [otcSupplyTarget, setOtcSupplyTarget] = useState<any | null>(null);
-  // Clicking the medicine name is still a quick physical-batch inspection;
-  // the explicit OTC sale action opens the complete OTC billing workspace.
-  const [batchPickerTarget, setBatchPickerTarget] = useState<any | null>(null);
   const [openInvoiceId, setOpenInvoiceId] = useState<string | null>(null);
   // Restock target for the counter desk's inline "Add stock" action.
   const [stockTarget, setStockTarget] = useState<any | null>(null);
@@ -811,8 +807,21 @@ export function PatientFirstBilling({
    * the cart line all stay identical, so a doctor's list is a shortcut to the
    * medicine and never a second way of selling it.
    */
-  const addDoctorMedicineToCart = (row: { medicineId: string } & Record<string, any>) =>
-    addMedicineToCart({ ...row, id: row.medicineId });
+  const openDoctorMedicineSale = (
+    row: { medicineId: string } & Record<string, any>,
+    doctor?: any,
+    prescriptionId?: string | null,
+    patient?: any,
+  ) => {
+    setOtcSupplyTarget({
+      ...row,
+      id: row.medicineId,
+      _initialDoctorId: doctor?.id ?? null,
+      _initialPrescriptionId: prescriptionId ?? null,
+      _initialPatientId: patient?.id ?? cart.patientId ?? null,
+      _initialPatientName: patient?.name ?? selectedPatient?.name ?? null,
+    });
+  };
 
   /**
    * Chip click from the overview strip. The strip renders before a patient is
@@ -839,7 +848,7 @@ export function PatientFirstBilling({
         "Doctor";
       cart.setReferredByDoctor({ id: doctor.id, name: doctorName });
     }
-    return addDoctorMedicineToCart(row);
+    openDoctorMedicineSale(row, doctor);
   };
 
   const selectPatientForDoctorMedicine = async (patient: any) => {
@@ -855,7 +864,7 @@ export function PatientFirstBilling({
     setShowResults(false);
     setPendingDoctorMedicine(null);
     setDoctorPatientSearch("");
-    await addDoctorMedicineToCart(row);
+    openDoctorMedicineSale(row, doctor, null, patient);
   };
 
   /**
@@ -873,7 +882,7 @@ export function PatientFirstBilling({
     cart.setReferredByDoctor({ id: doctor.id, name: doctorName });
     setPendingDoctorMedicine(null);
     setDoctorPatientSearch("");
-    await addDoctorMedicineToCart(row);
+    openDoctorMedicineSale(row, doctor);
   };
 
   const continueDoctorMedicineWithPrescription = async (rxId: string) => {
@@ -888,7 +897,7 @@ export function PatientFirstBilling({
     setDoctorPrescriptionOpen(false);
     setPendingDoctorMedicine(null);
     setDoctorPatientSearch("");
-    await addDoctorMedicineToCart(row);
+    openDoctorMedicineSale(row, doctor, rxId);
   };
 
   const totals = cart.totals();
@@ -1128,6 +1137,10 @@ export function PatientFirstBilling({
           <div className="p-5">
             <OtcCounterSale
               medicine={otcSupplyTarget}
+              initialReferredByDoctorId={otcSupplyTarget._initialDoctorId}
+              initialPrescriptionId={otcSupplyTarget._initialPrescriptionId}
+              initialPatientId={otcSupplyTarget._initialPatientId}
+              initialPatientName={otcSupplyTarget._initialPatientName}
               onClose={() => setOtcSupplyTarget(null)}
             />
           </div>
@@ -1426,12 +1439,12 @@ export function PatientFirstBilling({
                               type="button"
                               onClick={() => {
                                 if (m.isActive !== false && Number(m.totalStock || 0) > 0 && canOtc) {
-                                  setBatchPickerTarget(m);
+                                  setOtcSupplyTarget(m);
                                 }
                               }}
                               disabled={m.isActive === false || Number(m.totalStock || 0) <= 0 || !canOtc}
                               className="min-w-0 flex-1 text-left rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 disabled:cursor-default"
-                              title={Number(m.totalStock || 0) > 0 ? `View physical batches for ${m.name}` : undefined}
+                              title={Number(m.totalStock || 0) > 0 ? `Open OTC sale for ${m.name}` : undefined}
                             >
                               <p className="text-sm font-bold text-slate-800 truncate">
                                 {m.name}
@@ -1722,7 +1735,7 @@ export function PatientFirstBilling({
               <DoctorMedicinesPanel
                 doctor={medsForDoctor}
                 branchId={activeBranchId}
-                onAdd={addDoctorMedicineToCart}
+                onAdd={(row) => openDoctorMedicineSale(row, medsForDoctor)}
                 addingId={medLoadingId}
                 onBack={() => setMedsForDoctor(null)}
               />
@@ -2075,37 +2088,6 @@ export function PatientFirstBilling({
         medicineId={stockTarget?.id ?? null}
         medicineName={stockTarget?.name}
         autoOpenAddStock
-      />
-
-      {/* Clicking the medicine row opens this quick physical-batch view. The
-          explicit OTC sale button uses the full OTC workspace above. */}
-      <MedicineBatchPickerModal
-        medicine={batchPickerTarget}
-        onClose={() => setBatchPickerTarget(null)}
-        onAdd={(batch, quantity) => {
-          const m = batchPickerTarget;
-          if (!m) return;
-          const sellable = Math.max(0, Number(batch.quantity ?? 0) - Number(batch.reservedQty ?? 0));
-          cart.addItem({
-            medicineId: m.id,
-            batchId: batch.id,
-            name: m.name,
-            sku: m.sku,
-            batchNo: batch.batchNo,
-            unitPrice: Number(batch.mrpAtEntry ?? m.priceMrp ?? 0),
-            stripSize: Math.max(1, Number(m.stripSize ?? 1) || 1),
-            taxPct: Number(m.taxPercent ?? 0),
-            discountPct: 0,
-            quantity,
-            scheduleClass: m.scheduleClass,
-            requiresPrescription: m.requiresPrescription,
-            unit: m.unit,
-            batchStock: sellable,
-            totalStock: Number(m.totalStock ?? sellable),
-          });
-          toastSuccess(`${m.name} added`, `Batch ${batch.batchNo} · ${quantity} added to the bill.`);
-          setBatchPickerTarget(null);
-        }}
       />
 
       {/* Register a medicine the catalogue has never seen. Defaults to

@@ -105,8 +105,14 @@ vi.mock("@/components/modules/billing/doctors-overview", () => ({
   ),
 }));
 vi.mock("@/components/modules/billing/otc-counter-sale", () => ({
-  OtcCounterSale: ({ medicine }: any) => (
-    <div data-testid="otc-counter-sale" data-medicine-id={medicine?.id}>
+  OtcCounterSale: ({ medicine, initialReferredByDoctorId, initialPrescriptionId, initialPatientId }: any) => (
+    <div
+      data-testid="otc-counter-sale"
+      data-medicine-id={medicine?.id}
+      data-doctor-id={initialReferredByDoctorId ?? ""}
+      data-prescription-id={initialPrescriptionId ?? ""}
+      data-patient-id={initialPatientId ?? ""}
+    >
       OTC billing workspace
     </div>
   ),
@@ -302,7 +308,7 @@ describe("counter desk — closing stock gaps from the search results", () => {
     expect(await screen.findByTestId("stock-modal")).toHaveAttribute("data-medicine-id", "med-2");
   });
 
-  it("opens the physical batch sale modal when the medicine row is clicked", async () => {
+  it("opens the complete OTC billing workspace when the medicine row is clicked", async () => {
     stubApi({ medicines: [IN_STOCK] });
     renderDesk();
     await search("aceclo");
@@ -312,12 +318,11 @@ describe("counter desk — closing stock gaps from the search results", () => {
     });
     await userEvent.click(medicine);
 
-    expect(await screen.findByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByText(/Select physical batch/i)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /Add selected batch to bill/i }));
-    expect(await screen.findByText("Bill summary")).toBeInTheDocument();
-    expect(screen.getByText(/BATCH-2/)).toBeInTheDocument();
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("otc-counter-sale")).toHaveAttribute(
+      "data-medicine-id",
+      IN_STOCK.id,
+    );
+    expect(screen.queryByText(/Select physical batch/i)).not.toBeInTheDocument();
   });
 
   it("opens the complete OTC billing workspace from the OTC sale action", async () => {
@@ -358,7 +363,9 @@ describe("counter desk — closing stock gaps from the search results", () => {
     expect(await screen.findByText("Select patient for doctor's medicine")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Continue without patient/i }));
 
-    await waitFor(() => expect(screen.getByText("Doctor List Medicine")).toBeInTheDocument());
+    const sale = await screen.findByTestId("otc-counter-sale");
+    expect(sale).toHaveAttribute("data-medicine-id", "doctor-med-1");
+    expect(sale).toHaveAttribute("data-doctor-id", "doctor-1");
     expect(useCartStore.getState().patientId).toBeNull();
     expect(useCartStore.getState().referredByDoctorId).toBe("doctor-1");
     expect(useCartStore.getState().referredByDoctorName).toBe("Sourav Sardar");
@@ -386,9 +393,9 @@ describe("counter desk — closing stock gaps from the search results", () => {
     expect(screen.getByTestId("doctor-rx-picker")).toHaveAttribute("data-initial-tab", "upload");
     await userEvent.click(screen.getByRole("button", { name: /Save scanned prescription/i }));
 
-    await waitFor(() => expect(screen.getByText("Doctor List Medicine")).toBeInTheDocument());
-    expect(useCartStore.getState().prescriptionId).toBe("rx-scanned-1");
-    expect(useCartStore.getState().referredByDoctorId).toBe("doctor-1");
+    const sale = await screen.findByTestId("otc-counter-sale");
+    expect(sale).toHaveAttribute("data-prescription-id", "rx-scanned-1");
+    expect(sale).toHaveAttribute("data-doctor-id", "doctor-1");
   });
 
   it("registers a medicine the catalogue has never seen, name prefilled", async () => {

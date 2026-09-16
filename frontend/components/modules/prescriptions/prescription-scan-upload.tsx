@@ -339,9 +339,9 @@ export function PrescriptionScanUpload({
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res: any = await apiClient.post("/prescriptions/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      // Axios/browser must add the multipart boundary. Setting Content-Type
+      // manually can leave Fastify with a multipart request containing no file.
+      const res: any = await apiClient.post("/prescriptions/upload", formData);
       const key = res?.key ?? res?.data?.key;
       const url = res?.url ?? res?.data?.url;
       if (!key) throw new Error("Upload succeeded but no file key was returned.");

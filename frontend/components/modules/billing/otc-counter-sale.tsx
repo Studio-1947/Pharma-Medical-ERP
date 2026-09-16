@@ -117,11 +117,19 @@ export function OtcCounterSale({
   medicine,
   onClose,
   variant = "inline",
+  initialReferredByDoctorId = null,
+  initialPrescriptionId = null,
+  initialPatientId = null,
+  initialPatientName = null,
 }: {
   medicine: OtcMedicine | null;
   onClose: () => void;
   /** "inline" draws its own header; inside a dialog the Modal supplies one. */
   variant?: "inline" | "modal";
+  initialReferredByDoctorId?: string | null;
+  initialPrescriptionId?: string | null;
+  initialPatientId?: string | null;
+  initialPatientName?: string | null;
 }) {
   const qc = useQueryClient();
   const { branchId: activeBranchId } = useActiveBranchId();
@@ -222,19 +230,19 @@ export function OtcCounterSale({
     setDuePhone("");
     // Cleared with the rest: a pin left behind would put the next sale's due
     // on the previous customer's account.
-    setDuePatientId(null);
-    setDuePatientLabel(null);
+    setDuePatientId(initialPatientId);
+    setDuePatientLabel(initialPatientName);
     setDuePaidNow("");
     setDuePaidMode("cash");
-    setReferredByDoctorId("");
+    setReferredByDoctorId(initialReferredByDoctorId ?? "");
     setNotes("");
     setSearch("");
     setBilledInvoiceId(null);
-    setPrescriptionId(null);
+    setPrescriptionId(initialPrescriptionId);
     setRxLabel(null);
     setAttested(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [medicine?.id]);
+  }, [medicine?.id, initialPatientId, initialPatientName, initialPrescriptionId, initialReferredByDoctorId]);
 
   // One batch query per line — the price, the FEFO preview and the ceiling on
   // the quantity all come from the branch's own shelves.
@@ -542,7 +550,7 @@ export function OtcCounterSale({
       // A due has to belong to someone: the server refuses to leave a balance
       // owing on an anonymous walk-in, so the account is settled before the
       // invoice is written.
-      const patientId = onCredit ? await resolveDuePatientId() : null;
+      const patientId = onCredit ? await resolveDuePatientId() : initialPatientId;
       return apiClient.post("/billing/invoices", {
         ...(patientId ? { patientId } : {}),
         branchId: activeBranchId,
