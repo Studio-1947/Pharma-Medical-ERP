@@ -1216,4 +1216,9 @@ building anything that assumes partial-batch transfers work.
 | 7 | Planned | Insurance claim management, Tally/Zoho integration |
 
 
-)RKX.jR.B1@W''-k - ADMIN root pass 
+
+
+
+cd /opt/pharmerp
+chmod +x scripts/*.sh
+bash scripts/deploy.sh
