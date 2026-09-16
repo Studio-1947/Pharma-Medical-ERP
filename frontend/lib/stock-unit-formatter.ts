@@ -7,6 +7,13 @@ export function formatStockUnit(
 ): string {
   if (count <= 0) return "Out of stock";
 
+  // Batch quantities for divisible medicines are stored as the smallest
+  // sellable dose, not as packs. Calling 8 tablets "8 strips" is dangerous:
+  // a strip of 10 cannot be sold from that stock.
+  if (canSellLooseUnits(m) && (m.stripSize ?? 1) > 1) {
+    return `${count} ${getLooseUnitLabel(count, m)} in stock`;
+  }
+
   let u = (m.unit || "").trim();
   if (!u) {
     const form = (m.dosageForm || "").toLowerCase();

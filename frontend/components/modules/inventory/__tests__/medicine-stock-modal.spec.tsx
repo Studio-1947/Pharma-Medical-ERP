@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -50,6 +50,9 @@ const MEDICINE = {
   // The column is purchase_rate — a batch received here is costed from it.
   purchaseRate: "40.00",
   reorderLevel: 10,
+  stripSize: 10,
+  unit: "Strip",
+  dosageForm: "Tablet",
 };
 
 /**
@@ -115,6 +118,28 @@ describe("medicine stock modal — direct receive", () => {
     renderModal({ autoOpenAddStock: true });
     expect(await screen.findByPlaceholderText("e.g. BATCH-992")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Confirm Receive Stock/i })).toBeInTheDocument();
+  });
+
+  it("receives tablets either loose or by strip and stores the converted tablet count", async () => {
+    renderModal({ autoOpenAddStock: true });
+
+    expect(await screen.findByRole("option", { name: "tablets (loose)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Strips (10 tablets each)" })).toBeInTheDocument();
+
+    await userEvent.selectOptions(screen.getByLabelText("Received quantity unit"), "strips");
+    fireEvent.change(screen.getByLabelText("Received Quantity *"), { target: { value: "8" } });
+
+    expect(screen.getByText("8 Strips × 10 tablets = 80 tablets added to stock")).toBeInTheDocument();
+
+    await userEvent.type(await screen.findByPlaceholderText("e.g. BATCH-992"), "strip-8");
+    await pickMonth("Expiry Date", "2027", "Oct");
+    await userEvent.click(screen.getByRole("button", { name: /Confirm Receive Stock/i }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post).toHaveBeenCalledWith(
+      "/inventory/batches",
+      expect.objectContaining({ quantity: 80 }),
+    );
   });
 
   it("opens Edit / Restock with the existing batch details", async () => {

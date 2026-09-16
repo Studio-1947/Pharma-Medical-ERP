@@ -12,6 +12,7 @@ import { useBarcodeScanner } from "@/hooks/use-barcode-scanner";
 import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
 import { Modal } from "@/components/ui/modal";
 import { BarcodeLabelModal } from "./barcode-label-modal";
+import { canSellLooseUnits, getLooseUnitLabel, getUnitLabel } from "@/lib/stock-unit-formatter";
 
 interface Batch {
   id: string;
@@ -30,6 +31,9 @@ interface Medicine {
   sku: string;
   priceMrp: string;
   isActive?: boolean;
+  unit?: string | null;
+  dosageForm?: string | null;
+  stripSize?: number | string | null;
 }
 
 function expiryLabel(dateStr: string) {
@@ -74,6 +78,14 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
     mrpAtEntry: lockedMedicine ? parseFloat(lockedMedicine.priceMrp).toFixed(2) : "",
   });
   const [error, setError] = useState("");
+  const [qtyMode, setQtyMode] = useState<"loose" | "pack">("loose");
+  const unitInfo = {
+    unit: selectedMedicine?.unit ?? null,
+    dosageForm: selectedMedicine?.dosageForm ?? null,
+    stripSize: Math.max(1, Number(selectedMedicine?.stripSize ?? 1) || 1),
+  };
+  const divisible = !!selectedMedicine && canSellLooseUnits(unitInfo) && unitInfo.stripSize > 1;
+  const multiplier = qtyMode === "pack" && divisible ? unitInfo.stripSize : 1;
 
   const handleBarcodeScan = async (scanCode: string) => {
     if (!scanCode) return;
@@ -86,6 +98,7 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
       const medicine = res?.data?.data?.[0] ?? res?.data?.[0];
       if (medicine) {
         setSelectedMedicine(medicine);
+        setQtyMode("loose");
         setForm((f) => ({
           ...f,
           mrpAtEntry: parseFloat(medicine.priceMrp).toFixed(2),
@@ -194,8 +207,8 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
       batchNo: form.batchNo.trim().toUpperCase(),
       ...(form.manufactureDate ? { manufactureDate: monthToStoredDate(form.manufactureDate) } : {}),
       expiryDate: monthToStoredDate(form.expiryDate),
-      quantity: qty,
-      ...(freeQty > 0 ? { freeQuantity: freeQty } : {}),
+      quantity: qty * multiplier,
+      ...(freeQty > 0 ? { freeQuantity: freeQty * multiplier } : {}),
       ...(costEntered ? { costPrice: cost.toFixed(2) } : {}),
       mrpAtEntry: mrp.toFixed(2),
     });
@@ -219,7 +232,7 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
                 <span className="text-sm font-medium text-slate-900">{selectedMedicine.name}</span>
                 <span className="text-xs text-emerald-600 ml-2">{selectedMedicine.sku}</span>
               </div>
-              <button type="button" onClick={() => { setSelectedMedicine(null); setMedicineSearch(""); form.mrpAtEntry = ""; }}
+              <button type="button" onClick={() => { setSelectedMedicine(null); setQtyMode("loose"); setMedicineSearch(""); form.mrpAtEntry = ""; }}
                 className="text-emerald-400 hover:text-emerald-700">
                 <X size={14} />
               </button>
@@ -241,6 +254,7 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
                       <button key={m.id} type="button"
                         onClick={() => {
                           setSelectedMedicine(m);
+                          setQtyMode("loose");
                           setForm((f) => ({ ...f, mrpAtEntry: parseFloat(m.priceMrp).toFixed(2) }));
                           setMedicineSearch("");
                         }}
@@ -309,15 +323,41 @@ function AddStockForm({ onClose, onSuccess, existingBatchNosForMedicine = [], lo
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-700">Quantity *</label>
-            <input
-              type="number"
-              min={1}
-              placeholder="100"
-              value={form.quantity}
-              onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
-              className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
+            <label htmlFor="add-stock-quantity" className="text-sm font-medium text-gray-700">Received Quantity *</label>
+            <div className="flex">
+              <input
+                id="add-stock-quantity"
+                type="number"
+                min={1}
+                placeholder="100"
+                value={form.quantity}
+                onChange={(e) => setForm((f) => ({ ...f, quantity: e.target.value }))}
+                className="min-w-0 w-full border rounded-l-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              />
+              <select
+                aria-label="Received quantity unit"
+                value={qtyMode}
+                onChange={(e) => setQtyMode(e.target.value as "loose" | "pack")}
+                className="border border-l-0 rounded-r-lg px-2 text-xs bg-white"
+              >
+                <option value="loose">
+                  {divisible ? `${getLooseUnitLabel(2, unitInfo)} (loose)` : getUnitLabel(2, unitInfo)}
+                </option>
+                {divisible && (
+                  <option value="pack">
+                    {getUnitLabel(2, unitInfo)} ({unitInfo.stripSize} {getLooseUnitLabel(2, unitInfo)} each)
+                  </option>
+                )}
+              </select>
+            </div>
+            {form.quantity && (
+              <p className="text-[11px] text-muted-foreground">
+                Adds {Number(form.quantity) * multiplier}{" "}
+                {divisible
+                  ? getLooseUnitLabel(Number(form.quantity) * multiplier, unitInfo)
+                  : getUnitLabel(Number(form.quantity), unitInfo)} to stock.
+              </p>
+            )}
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium text-gray-700">Free Quantity</label>

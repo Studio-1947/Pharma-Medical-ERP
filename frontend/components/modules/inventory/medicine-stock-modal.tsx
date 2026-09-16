@@ -25,6 +25,7 @@ import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { invalidateMedicineViews } from "@/lib/query-invalidation";
+import { canSellLooseUnits, getLooseUnitLabel, getUnitLabel } from "@/lib/stock-unit-formatter";
 import { useActiveBranchId } from "@/hooks/use-branch";
 import { BarcodeLabelModal } from "./barcode-label-modal";
 
@@ -196,6 +197,15 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
         : [];
 
   const totalStock = batches.reduce((sum, b) => sum + (b.quantity ?? 0), 0);
+  const unitInfo = {
+    unit: medicine?.unit ?? null,
+    dosageForm: medicine?.dosageForm ?? null,
+    stripSize: Math.max(1, Number(medicine?.stripSize ?? 1) || 1),
+  };
+  const acceptsLooseUnits = canSellLooseUnits(unitInfo) && unitInfo.stripSize > 1;
+  const loosePlural = getLooseUnitLabel(2, unitInfo);
+  const packSingular = getUnitLabel(1, unitInfo);
+  const packPlural = getUnitLabel(2, unitInfo);
 
   // Add batch mutation
   const addBatchMutation = useMutation({
@@ -219,6 +229,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
       setNewManufactureDate("");
       setNewQty(50);
       setNewFreeQty(0);
+      setQtyMode("units");
       setNewPurchasePrice("");
       setNewMrp("");
     },
@@ -282,7 +293,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
       toastError("Invalid dates", "Manufacturing month must be before the expiry month.");
       return;
     }
-    const unitMultiplier = qtyMode === "strips" ? Math.max(1, Number(medicine?.stripSize ?? 1)) : 1;
+    const unitMultiplier = qtyMode === "strips" ? unitInfo.stripSize : 1;
     if (newFreeQty < 0 || newFreeQty > newQty) {
       toastError("Invalid free quantity", "Free count cannot exceed total received count.");
       return;
@@ -336,7 +347,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
               <div className="flex items-center gap-1.5">
                 <Package size={16} className="text-emerald-600" />
                 <span className={`text-base font-extrabold ${totalStock <= (medicine?.reorderLevel ?? 10) ? "text-amber-600" : "text-slate-900"}`}>
-                  {totalStock} units
+                  {totalStock} {acceptsLooseUnits ? getLooseUnitLabel(totalStock, unitInfo) : getUnitLabel(totalStock, unitInfo)}
                 </span>
               </div>
             </div>
@@ -457,9 +468,10 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                   />
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Received Count *</label>
+                  <label htmlFor="receive-stock-quantity" className="block text-[11px] font-bold text-slate-700 mb-1">Received Quantity *</label>
                   <div className="flex">
                   <input
+                    id="receive-stock-quantity"
                     required
                     type="number"
                     min={1}
@@ -467,23 +479,38 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                     onChange={(e) => setNewQty(parseInt(e.target.value) || 1)}
                     className="min-w-0 w-full text-xs font-bold bg-white border border-slate-200 rounded-l-lg px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                   />
-                  <select value={qtyMode} onChange={(e) => setQtyMode(e.target.value as "units" | "strips")}
+                  <select aria-label="Received quantity unit" value={qtyMode} onChange={(e) => setQtyMode(e.target.value as "units" | "strips")}
                     className="text-xs border border-l-0 border-slate-200 rounded-r-lg bg-white px-1.5">
-                    <option value="units">Units</option>
-                    <option value="strips">Strips</option>
+                    <option value="units">
+                      {acceptsLooseUnits ? `${loosePlural} (loose)` : packPlural}
+                    </option>
+                    {acceptsLooseUnits && (
+                      <option value="strips">
+                        {packPlural} ({unitInfo.stripSize} {loosePlural} each)
+                      </option>
+                    )}
                   </select>
                   </div>
-                  {qtyMode === "strips" && <p className="mt-1 text-[10px] text-slate-500">{newQty} strips × {medicine?.stripSize ?? 1} = {newQty * Number(medicine?.stripSize ?? 1)} units</p>}
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    {qtyMode === "strips"
+                      ? `${newQty} ${newQty === 1 ? packSingular : packPlural} × ${unitInfo.stripSize} ${loosePlural} = ${newQty * unitInfo.stripSize} ${getLooseUnitLabel(newQty * unitInfo.stripSize, unitInfo)} added to stock`
+                      : `Adds ${newQty} ${acceptsLooseUnits ? getLooseUnitLabel(newQty, unitInfo) : getUnitLabel(newQty, unitInfo)} to stock`}
+                  </p>
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">Free Count</label>
                   <input type="number" min={0} max={newQty} inputMode="numeric" value={newFreeQty}
                     onChange={(e) => setNewFreeQty(Math.max(0, Number(e.target.value) || 0))}
                     className="w-full text-xs font-bold bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
-                  <p className="mt-1 text-[10px] text-slate-500">Billed {Math.max(0, newQty - newFreeQty)} + free {newFreeQty} = {newQty} {qtyMode}</p>
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    Billed {Math.max(0, newQty - newFreeQty)} + free {newFreeQty} = {newQty}{" "}
+                    {qtyMode === "strips"
+                      ? (newQty === 1 ? packSingular : packPlural)
+                      : (acceptsLooseUnits ? getLooseUnitLabel(newQty, unitInfo) : getUnitLabel(newQty, unitInfo))}
+                  </p>
                 </div>
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Cost Price / strip (₹)</label>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Cost Price / {packSingular.toLowerCase()} (₹)</label>
                   <input type="number" min="0" step="0.01" inputMode="decimal" value={newPurchasePrice}
                     onChange={(e) => setNewPurchasePrice(e.target.value)} placeholder="0.00"
                     className="w-full text-xs font-bold bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
@@ -588,7 +615,7 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                             </div>
                           </td>
                           <td className="px-4 py-3 text-right font-extrabold text-slate-900">
-                            {b.quantity}
+                             {b.quantity} {acceptsLooseUnits ? getLooseUnitLabel(b.quantity, unitInfo) : getUnitLabel(b.quantity, unitInfo)}
                           </td>
                           <td className="px-4 py-3 text-right font-bold text-emerald-600">
                             ₹{parseFloat(b.mrpAtEntry ?? b.mrp ?? medicine?.priceMrp ?? "0").toFixed(2)}

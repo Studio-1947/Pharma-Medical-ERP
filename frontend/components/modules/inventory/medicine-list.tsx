@@ -16,6 +16,7 @@ import { MedicineStockModal } from "./medicine-stock-modal";
 import { Layers } from "lucide-react";
 import type { CreateMedicineDto } from "@pharmerp/types";
 import { useDebounce } from "@/hooks/use-debounce";
+import { formatStockUnit } from "@/lib/stock-unit-formatter";
 
 interface Medicine {
   id: string;
@@ -24,6 +25,8 @@ interface Medicine {
   sku: string;
   priceMrp: string;
   unit: string;
+  dosageForm?: string | null;
+  stripSize?: number | string | null;
   requiresPrescription: boolean;
   isControlled: boolean;
   scheduleClass?: string;
@@ -397,7 +400,11 @@ export function MedicineList() {
                         }`}
                         title="Click to view batches & receive stock"
                       >
-                        {(m as any).totalStock ?? 0} units
+                        {formatStockUnit(Number((m as any).totalStock ?? 0), {
+                          unit: m.unit,
+                          dosageForm: m.dosageForm,
+                          stripSize: Number(m.stripSize ?? 1),
+                        })}
                       </button>
                     </td>
                     <td className="px-4 py-3 text-center">

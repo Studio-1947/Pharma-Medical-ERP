@@ -212,6 +212,41 @@ describe("BatchList — Add Stock", () => {
     expect(post.mock.calls[0]![1]).toMatchObject({ costPrice: "300.00" });
   });
 
+  it("offers strip receiving for tablets and converts strips to tablet stock", async () => {
+    const tablet = {
+      ...MEDICINE,
+      name: "Paracetamol 500 mg Tablet",
+      dosageForm: "Tablet",
+      unit: "Strip",
+      stripSize: 10,
+    };
+    get.mockImplementation((url: string) =>
+      url === "/inventory/medicines"
+        ? Promise.resolve({ data: [tablet] })
+        : Promise.resolve({ data: [BATCH], meta: { page: 1, limit: 20, total: 1, totalPages: 1 } }),
+    );
+
+    const user = userEvent.setup();
+    renderList();
+    await screen.findByText("DA32636");
+    await user.click(screen.getByRole("button", { name: /Add Stock/i }));
+    await user.type(screen.getByPlaceholderText(/Type name, SKU/i), "para");
+    await user.click(await screen.findByRole("button", { name: /Paracetamol/i }));
+
+    expect(screen.getByRole("option", { name: "tablets (loose)" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Strips (10 tablets each)" })).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText("Received quantity unit"), "pack");
+    await user.type(screen.getByLabelText("Received Quantity *"), "3");
+    expect(screen.getByText("Adds 30 tablets to stock.")).toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("e.g. B2024001"), "TAB-3");
+    fireEvent.change(document.querySelector('input[type="month"]')!, { target: { value: "2027-12" } });
+    await user.click(submit());
+
+    await waitFor(() => expect(post).toHaveBeenCalled());
+    expect(post.mock.calls[0]![1]).toMatchObject({ quantity: 30 });
+  });
+
   it("allows a repeat batch number and posts the quantity as a restock", async () => {
     const user = userEvent.setup();
     renderList();
