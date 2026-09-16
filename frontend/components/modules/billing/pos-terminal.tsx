@@ -690,6 +690,7 @@ export function PosTerminal({
     const payload = {
       patientId: patientId || undefined,
       prescriptionId: prescriptionId?.trim() || undefined,
+      referredByDoctorId: useCartStore.getState().referredByDoctorId || undefined,
       // Vouched-for Schedule H sale: the manager's name rides on the existing
       // override fields, and rxPending keeps the missing paper visible until
       // someone attaches it to this bill.

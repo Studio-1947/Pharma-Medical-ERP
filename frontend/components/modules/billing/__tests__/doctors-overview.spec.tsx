@@ -17,9 +17,9 @@ vi.mock("@/queries/clinic.queries", () => ({
       data:
         doctorId === "doc-1"
           ? [
-              { id: "dm-1", medicineId: "m1", name: "Dolo 650", strength: "650mg" },
-              { id: "dm-2", medicineId: "m2", name: "Cetirizine", strength: "10mg" },
-              { id: "dm-3", medicineId: "m3", name: "Pantop", strength: "40mg" },
+              { id: "dm-1", medicineId: "m1", name: "Dolo 650", strength: "650mg", totalStock: 10 },
+              { id: "dm-2", medicineId: "m2", name: "Cetirizine", strength: "10mg", totalStock: 10 },
+              { id: "dm-3", medicineId: "m3", name: "Pantop", strength: "40mg", totalStock: 10 },
             ]
           : [],
     },
@@ -53,7 +53,7 @@ function qc() {
 
 function renderOverview(
   doctors = DOCTORS,
-  opts: { onManageMedicines?: (d: any) => void; onOpenDoctor?: (d: any) => void } = {},
+  opts: { onManageMedicines?: (d: any) => void; onOpenDoctor?: (d: any) => void; onAddMedicine?: (m: any, d: any) => void } = {},
 ) {
   return render(
     <QueryClientProvider client={qc()}>
@@ -62,6 +62,7 @@ function renderOverview(
         branchId="branch-1"
         onManageMedicines={opts.onManageMedicines}
         onOpenDoctor={opts.onOpenDoctor}
+        onAddMedicine={opts.onAddMedicine}
       />
     </QueryClientProvider>,
   );
@@ -131,5 +132,18 @@ describe("DoctorsOverview", () => {
     expect(await screen.findByText(/Dolo 650/)).toBeInTheDocument();
     expect(screen.getByText(/Cetirizine/)).toBeInTheDocument();
     expect(screen.getByText(/Pantop/)).toBeInTheDocument();
+  });
+
+  it("passes the prescribing doctor when a medicine chip is clicked", async () => {
+    const onAdd = vi.fn();
+    renderOverview(DOCTORS, { onAddMedicine: onAdd });
+
+    const chip = await screen.findByRole("button", { name: /Dolo 650/i });
+    chip.click();
+
+    expect(onAdd).toHaveBeenCalledWith(
+      expect.objectContaining({ medicineId: "m1" }),
+      expect.objectContaining({ id: "doc-1" }),
+    );
   });
 });

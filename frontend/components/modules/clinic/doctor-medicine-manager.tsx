@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Plus,
   Trash2,
@@ -24,6 +25,8 @@ import {
   type MedicineOption,
 } from "@/components/modules/prescriptions/medicine-autocomplete";
 import { useToast } from "@/components/ui/toast";
+import { apiClient } from "@/lib/api-client";
+import { invalidateMedicineViews } from "@/lib/query-invalidation";
 import {
   isControlledRow,
   normalizeSchedule,
@@ -66,12 +69,17 @@ export function DoctorMedicineManager({
   canEdit = true,
 }: Props) {
   const { success: toastSuccess, error: toastError, info: toastInfo } = useToast();
+  const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState<MedicineOption | null>(null);
   const [dosage, setDosage] = useState("");
   const [frequency, setFrequency] = useState("");
   const [duration, setDuration] = useState("");
+  const [inactiveTarget, setInactiveTarget] = useState<MedicineOption | null>(null);
+  const [inactiveMrp, setInactiveMrp] = useState("");
+  const [inactiveError, setInactiveError] = useState<string | null>(null);
+  const [activating, setActivating] = useState(false);
 
   const { data: raw, isLoading } = useDoctorMedicines(
     open ? doctorId : null,
@@ -118,6 +126,44 @@ export function DoctorMedicineManager({
         "Could not add the medicine",
         e?.response?.data?.message ?? "Try again.",
       );
+    }
+  };
+
+  const activateAndAdd = async () => {
+    if (!inactiveTarget) return;
+    const mrp = Number(inactiveMrp);
+    if (!Number.isFinite(mrp) || mrp <= 0) {
+      setInactiveError("Enter a valid MRP greater than zero.");
+      return;
+    }
+    setActivating(true);
+    setInactiveError(null);
+    try {
+      await apiClient.patch(`/inventory/medicines/${inactiveTarget.id}`, {
+        priceMrp: mrp.toFixed(2),
+        isActive: true,
+      });
+      await invalidateMedicineViews(queryClient);
+      await queryClient.invalidateQueries({ queryKey: ["medicine-autocomplete"] });
+      await addMutation.mutateAsync({
+        medicineId: inactiveTarget.id,
+        defaultDosage: dosage.trim() || null,
+        defaultFrequency: frequency.trim() || null,
+        defaultDuration: duration.trim() || null,
+      });
+      toastSuccess(
+        `${inactiveTarget.name} activated and added`,
+        `MRP ₹${mrp.toFixed(2)}. It is now on ${doctorName}'s medicine list.`,
+      );
+      setInactiveTarget(null);
+      setInactiveMrp("");
+      resetForm();
+    } catch (e: any) {
+      setInactiveError(
+        e?.response?.data?.message ?? "Could not activate and add this medicine. Try again.",
+      );
+    } finally {
+      setActivating(false);
     }
   };
 
@@ -177,11 +223,12 @@ export function DoctorMedicineManager({
   };
 
   return (
+    <>
     <Modal
       title={`Medicine list — ${doctorName}`}
       subtitle={`${rows.length} listed. The counter desk sees this when it opens this doctor.`}
       icon={<Pill size={18} className="text-emerald-600" />}
-      open={open}
+      open={open && !inactiveTarget}
       onClose={onClose}
       size="lg"
     >
@@ -215,8 +262,17 @@ export function DoctorMedicineManager({
                 if (picked) setPicked(null);
               }}
               onSelect={(m) => {
-                setPicked(m);
                 setSearch(m.name);
+                if (m.isActive === false) {
+                  setPicked(null);
+                  setInactiveTarget(m);
+                  setInactiveMrp(
+                    Number(m.priceMrp) > 0 ? Number(m.priceMrp).toFixed(2) : "",
+                  );
+                  setInactiveError(null);
+                  return;
+                }
+                setPicked(m);
               }}
               linked={!!picked}
               branchId={branchId}
@@ -365,6 +421,81 @@ export function DoctorMedicineManager({
         </div>
       </div>
     </Modal>
+    <Modal
+      title="Set MRP & Activate"
+      subtitle={inactiveTarget ? `"${inactiveTarget.name}" is inactive. Activate it before adding it to this doctor's list.` : undefined}
+      open={!!inactiveTarget}
+      onClose={() => {
+        if (activating) return;
+        setInactiveTarget(null);
+        setInactiveMrp("");
+        setInactiveError(null);
+        setSearch("");
+      }}
+      size="sm"
+      icon={<Pill size={18} />}
+    >
+      <div className="space-y-4">
+        <p className="text-sm text-slate-600">
+          Enter the selling MRP. The medicine will be activated and added directly to {doctorName}&apos;s list.
+        </p>
+        <div className="space-y-1.5">
+          <label htmlFor="doctor-list-inactive-mrp" className="text-sm font-semibold text-slate-800">
+            MRP (INR) <span className="text-red-500">*</span>
+          </label>
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-500">₹</span>
+            <input
+              id="doctor-list-inactive-mrp"
+              type="number"
+              min="0.01"
+              step="0.01"
+              autoFocus
+              value={inactiveMrp}
+              onChange={(e) => {
+                setInactiveMrp(e.target.value);
+                setInactiveError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !activating) void activateAndAdd();
+              }}
+              placeholder="e.g. 85.50"
+              className="w-full rounded-xl border border-slate-200 py-2.5 pl-7 pr-3 text-sm outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+            />
+          </div>
+        </div>
+        {inactiveError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {inactiveError}
+          </div>
+        )}
+        <div className="flex justify-end gap-2 pt-1">
+          <button
+            type="button"
+            disabled={activating}
+            onClick={() => {
+              setInactiveTarget(null);
+              setInactiveMrp("");
+              setInactiveError(null);
+              setSearch("");
+            }}
+            className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={!inactiveMrp || activating}
+            onClick={() => void activateAndAdd()}
+            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            {activating && <Loader2 size={14} className="animate-spin" />}
+            {activating ? "Activating…" : "Activate & Add to List"}
+          </button>
+        </div>
+      </div>
+    </Modal>
+    </>
   );
 }
 

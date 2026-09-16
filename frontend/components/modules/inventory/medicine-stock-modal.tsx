@@ -18,6 +18,8 @@ import {
   X,
   PlusCircle,
   Pencil,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { useToast } from "@/components/ui/toast";
@@ -27,6 +29,117 @@ import { useActiveBranchId } from "@/hooks/use-branch";
 import { BarcodeLabelModal } from "./barcode-label-modal";
 
 const monthToStoredDate = (month: string) => month ? `${month}-01` : "";
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Browser-native month inputs are not consistently supported across devices. */
+function MonthPicker({
+  value,
+  onChange,
+  max,
+  ariaLabel,
+  required,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  max?: string;
+  ariaLabel: string;
+  required?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [year, setYear] = useState(() => Number(value.slice(0, 4)) || new Date().getFullYear());
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (value) setYear(Number(value.slice(0, 4)) || new Date().getFullYear());
+  }, [value]);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+
+  const selectedMonth = value ? Number(value.slice(5, 7)) : null;
+  const display = value
+    ? new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric" }).format(
+        new Date(Number(value.slice(0, 4)), Number(value.slice(5, 7)) - 1, 1),
+      )
+    : "Select month";
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+        className={`flex w-full items-center justify-between rounded-lg border bg-white px-2.5 py-1.5 text-left text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+          value ? "border-slate-200 text-slate-800" : "border-slate-200 text-slate-400"
+        }`}
+      >
+        <span>{display}{required && !value ? " *" : ""}</span>
+        <Calendar size={15} className="shrink-0 text-slate-500" />
+      </button>
+      {open && (
+        <div role="dialog" aria-label={`${ariaLabel} calendar`} className="absolute left-0 top-full z-50 mt-1 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-xl">
+          <div className="mb-3 flex items-center justify-between">
+            <button type="button" aria-label={`Previous year for ${ariaLabel}`} onClick={() => setYear((y) => y - 1)} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100">
+              <ChevronLeft size={16} />
+            </button>
+            <select
+              aria-label={`Year for ${ariaLabel}`}
+              value={year}
+              onChange={(e) => setYear(Number(e.target.value))}
+              className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-extrabold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-500"
+            >
+              {Array.from({ length: 61 }, (_, index) => new Date().getFullYear() - 30 + index).map((optionYear) => (
+                <option key={optionYear} value={optionYear}>{optionYear}</option>
+              ))}
+            </select>
+            <button type="button" aria-label={`Next year for ${ariaLabel}`} onClick={() => setYear((y) => y + 1)} className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-100">
+              <ChevronRight size={16} />
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {MONTHS.map((month, index) => {
+              const monthValue = `${year}-${String(index + 1).padStart(2, "0")}`;
+              const disabled = !!max && monthValue > max;
+              const selected = year === Number(value.slice(0, 4)) && selectedMonth === index + 1;
+              return (
+                <button
+                  key={month}
+                  type="button"
+                  disabled={disabled}
+                  onClick={() => {
+                    onChange(monthValue);
+                    setOpen(false);
+                  }}
+                  className={`rounded-lg px-2 py-2 text-xs font-bold transition-colors ${
+                    selected
+                      ? "bg-emerald-600 text-white"
+                      : "text-slate-700 hover:bg-emerald-50 hover:text-emerald-700"
+                  } disabled:cursor-not-allowed disabled:opacity-30`}
+                >
+                  {month}
+                </button>
+              );
+            })}
+          </div>
+          {value && (
+            <button type="button" onClick={() => { onChange(""); setOpen(false); }} className="mt-3 w-full border-t border-slate-100 pt-2 text-xs font-semibold text-slate-500 hover:text-red-600">
+              Clear date
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface Props {
   open: boolean;
@@ -327,19 +440,21 @@ export function MedicineStockModal({ open, onClose, medicineId, medicineName, au
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">Expiry Date *</label>
-                  <input
+                  <MonthPicker
                     required
-                    type="month"
+                    ariaLabel="Expiry Date"
                     value={newExpiry}
-                    onChange={(e) => setNewExpiry(e.target.value)}
-                    className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+                    onChange={setNewExpiry}
                   />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">Mfg Date</label>
-                  <input type="month" max={newExpiry || undefined} value={newManufactureDate}
-                    onChange={(e) => setNewManufactureDate(e.target.value)}
-                    className="w-full text-xs font-semibold bg-white border border-slate-200 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-emerald-500 focus:outline-none" />
+                  <MonthPicker
+                    ariaLabel="Mfg Date"
+                    max={newExpiry || undefined}
+                    value={newManufactureDate}
+                    onChange={setNewManufactureDate}
+                  />
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-700 mb-1">Received Count *</label>

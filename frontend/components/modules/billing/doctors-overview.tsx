@@ -24,7 +24,7 @@ interface Props {
   doctors: Doctor[];
   branchId?: string;
   /** Adds the medicine to the counter bill. When absent the chips are read-only. */
-  onAddMedicine?: (row: DoctorMedicineRow) => void | Promise<void>;
+  onAddMedicine?: (row: DoctorMedicineRow, doctor: Doctor) => void | Promise<void>;
   /** Medicine currently being added — its chip shows a spinner. */
   addingId?: string | null;
   /** Open the full per-doctor panel (existing DoctorMedicinesPanel flow). */
@@ -86,7 +86,7 @@ export function DoctorsOverview({
 interface CardProps {
   doctor: Doctor;
   branchId?: string;
-  onAddMedicine?: (row: DoctorMedicineRow) => void | Promise<void>;
+  onAddMedicine?: (row: DoctorMedicineRow, doctor: Doctor) => void | Promise<void>;
   addingId?: string | null;
   onOpenDoctor?: (doctor: Doctor) => void;
   onManageMedicines?: (doctor: Doctor) => void;
@@ -191,6 +191,7 @@ function DoctorOverviewCard({
               <MedicineChip
                 key={m.id}
                 med={m}
+                doctor={doctor}
                 busy={addingId === m.medicineId}
                 onAdd={onAddMedicine}
               />
@@ -223,12 +224,14 @@ function DoctorOverviewCard({
 
 function MedicineChip({
   med,
+  doctor,
   busy,
   onAdd,
 }: {
   med: DoctorMedicineRow;
+  doctor: Doctor;
   busy: boolean;
-  onAdd?: (row: DoctorMedicineRow) => void | Promise<void>;
+  onAdd?: (row: DoctorMedicineRow, doctor: Doctor) => void | Promise<void>;
 }) {
   const stock = Number(med.totalStock ?? 0);
   const outOfStock = stock <= 0;
@@ -251,7 +254,7 @@ function MedicineChip({
     <button
       type="button"
       disabled={disabled}
-      onClick={() => onAdd?.(med)}
+      onClick={() => onAdd?.(med, doctor)}
       title={tooltip}
       className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-bold rounded-lg border transition-colors ${
         outOfStock

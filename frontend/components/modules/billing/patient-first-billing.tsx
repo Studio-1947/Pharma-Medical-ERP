@@ -630,6 +630,30 @@ export function PatientFirstBilling({
   const [browsingDoctor, setBrowsingDoctor] = useState<any | null>(null);
   // Which doctor's medicine list the operator is curating from the overview strip.
   const [managingMedicinesFor, setManagingMedicinesFor] = useState<any | null>(null);
+  // A doctor-list medicine can be clicked before the counter has identified
+  // the patient. Keep that intent and finish it from a focused patient picker
+  // instead of discarding the click behind a warning toast.
+  const [pendingDoctorMedicine, setPendingDoctorMedicine] = useState<{
+    row: { medicineId: string; name?: string } & Record<string, any>;
+    doctor: any;
+  } | null>(null);
+  const [doctorPatientSearch, setDoctorPatientSearch] = useState("");
+  const debouncedDoctorPatientSearch = useDebounce(doctorPatientSearch, 250);
+  const { data: doctorPatientRaw, isFetching: doctorPatientsFetching } = useQuery({
+    queryKey: ["doctor-medicine-patient-search", debouncedDoctorPatientSearch],
+    queryFn: () =>
+      apiClient.get("/patients", {
+        params: { search: debouncedDoctorPatientSearch.trim(), limit: 10 },
+      }) as any,
+    enabled:
+      !!pendingDoctorMedicine && debouncedDoctorPatientSearch.trim().length >= 2,
+  });
+  const doctorPatientResults: any[] = (() => {
+    const raw = doctorPatientRaw as any;
+    if (Array.isArray(raw?.data?.data)) return raw.data.data;
+    if (Array.isArray(raw?.data)) return raw.data;
+    return Array.isArray(raw) ? raw : [];
+  })();
   const canManageDoctorLists = user?.role !== "doctor";
 
   const bookDoctor = async (doc: any) => {
@@ -795,15 +819,41 @@ export function PatientFirstBilling({
    */
   const addDoctorMedicineFromOverview = (
     row: { medicineId: string } & Record<string, any>,
+    doctor?: any,
   ) => {
     if (!cart.patientId) {
-      toastWarning(
-        "Select a patient first",
-        "Pick or register the patient, then add the doctor's medicine.",
-      );
+      if (doctor) {
+        setPendingDoctorMedicine({ row, doctor });
+        setDoctorPatientSearch("");
+      } else {
+        toastWarning("Select a patient first", "Pick or register the patient, then add the doctor's medicine.");
+      }
       return;
     }
+    if (doctor) {
+      const doctorName =
+        [doctor.firstName, doctor.lastName].filter(Boolean).join(" ") ||
+        doctor.email ||
+        "Doctor";
+      cart.setReferredByDoctor({ id: doctor.id, name: doctorName });
+    }
     return addDoctorMedicineToCart(row);
+  };
+
+  const selectPatientForDoctorMedicine = async (patient: any) => {
+    if (!pendingDoctorMedicine) return;
+    const { row, doctor } = pendingDoctorMedicine;
+    const doctorName =
+      [doctor.firstName, doctor.lastName].filter(Boolean).join(" ") ||
+      doctor.email ||
+      "Doctor";
+    cart.setPatient(patient.id);
+    cart.setReferredByDoctor({ id: doctor.id, name: doctorName });
+    setQuery(patient.name ?? "");
+    setShowResults(false);
+    setPendingDoctorMedicine(null);
+    setDoctorPatientSearch("");
+    await addDoctorMedicineToCart(row);
   };
 
   const totals = cart.totals();
@@ -1472,6 +1522,11 @@ export function PatientFirstBilling({
                 <div className="min-w-0">
                   <p className="font-bold text-slate-900 text-sm truncate">{selectedPatient?.name ?? "Patient"}</p>
                   <p className="text-xs text-slate-500 font-mono truncate">{selectedPatient?.phone ?? ""}</p>
+                  {cart.referredByDoctorName && (
+                    <p className="mt-0.5 truncate text-[11px] font-semibold text-purple-700">
+                      Prescribed by {cart.referredByDoctorName}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -2080,6 +2135,89 @@ export function PatientFirstBilling({
         />
       )}
 
+      <Modal
+        title="Select patient for doctor's medicine"
+        subtitle={
+          pendingDoctorMedicine
+            ? `${pendingDoctorMedicine.row.name ?? "Medicine"} · prescribed by ${
+                [pendingDoctorMedicine.doctor.firstName, pendingDoctorMedicine.doctor.lastName]
+                  .filter(Boolean)
+                  .join(" ") || pendingDoctorMedicine.doctor.email || "Doctor"
+              }`
+            : undefined
+        }
+        open={!!pendingDoctorMedicine}
+        onClose={() => {
+          setPendingDoctorMedicine(null);
+          setDoctorPatientSearch("");
+        }}
+        size="md"
+        icon={<Stethoscope size={18} />}
+      >
+        <div className="space-y-4">
+          <div>
+            <label htmlFor="doctor-medicine-patient" className="text-sm font-bold text-slate-800">
+              Patient name or mobile number
+            </label>
+            <div className="relative mt-2">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                id="doctor-medicine-patient"
+                autoFocus
+                value={doctorPatientSearch}
+                onChange={(e) => setDoctorPatientSearch(e.target.value)}
+                placeholder="Start typing any patient name…"
+                className="w-full rounded-xl border border-slate-200 py-3 pl-10 pr-10 text-sm outline-none focus:border-purple-400 focus:ring-2 focus:ring-purple-100"
+              />
+              {doctorPatientsFetching && (
+                <span className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin rounded-full border-2 border-purple-200 border-t-purple-600" />
+              )}
+            </div>
+          </div>
+
+          {doctorPatientSearch.trim().length < 2 ? (
+            <p className="rounded-xl bg-purple-50 px-4 py-3 text-xs text-purple-700">
+              Select the patient here and the medicine will be added directly to their bill with the doctor recorded as the referrer.
+            </p>
+          ) : !doctorPatientsFetching && doctorPatientResults.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center">
+              <p className="text-sm font-semibold text-slate-700">No matching patient found</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setPendingDoctorMedicine(null);
+                  setQuery(doctorPatientSearch);
+                  setRegistering(true);
+                }}
+                className="mt-2 text-sm font-bold text-orange-600 hover:text-orange-700"
+              >
+                Register this patient
+              </button>
+            </div>
+          ) : (
+            <div className="max-h-72 space-y-2 overflow-y-auto">
+              {doctorPatientResults.map((patient) => (
+                <button
+                  key={patient.id}
+                  type="button"
+                  onClick={() => void selectPatientForDoctorMedicine(patient)}
+                  className="flex w-full items-center gap-3 rounded-xl border border-slate-200 p-3 text-left hover:border-purple-300 hover:bg-purple-50"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-purple-100 text-sm font-black text-purple-700">
+                    {(patient.name ?? "P").slice(0, 1).toUpperCase()}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-bold text-slate-800">{patient.name}</span>
+                    <span className="block truncate text-xs text-slate-500">{patient.phone ?? "No mobile number"}</span>
+                  </span>
+                  <Plus size={16} className="ml-auto shrink-0 text-purple-600" />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </Modal>
+
       {/* Browse a doctor's full list from the top-of-page overview. Deliberately
           patient-free: an operator can eyeball the list before deciding whether
           to register the patient. addDoctorMedicineFromOverview still guards
@@ -2091,7 +2229,7 @@ export function PatientFirstBilling({
               <DoctorMedicinesPanel
                 doctor={browsingDoctor}
                 branchId={activeBranchId}
-                onAdd={addDoctorMedicineFromOverview}
+                onAdd={(row) => addDoctorMedicineFromOverview(row, browsingDoctor)}
                 addingId={medLoadingId}
                 onBack={() => setBrowsingDoctor(null)}
               />

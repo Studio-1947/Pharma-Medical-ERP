@@ -65,11 +65,29 @@ describe("cart patient switching", () => {
     expect(useCartStore.getState().prescriptionId).toBeNull();
   });
 
+  it("clears doctor attribution when the patient changes", () => {
+    const s = useCartStore.getState();
+    s.setPatient("patient-a");
+    s.setReferredByDoctor({ id: "doctor-a", name: "Dr A" });
+
+    expect(useCartStore.getState()).toMatchObject({
+      referredByDoctorId: "doctor-a",
+      referredByDoctorName: "Dr A",
+    });
+
+    useCartStore.getState().setPatient("patient-b");
+    expect(useCartStore.getState()).toMatchObject({
+      referredByDoctorId: null,
+      referredByDoctorName: null,
+    });
+  });
+
   it("clear() empties every patient-scoped field", () => {
     const s = useCartStore.getState();
     s.addItem(ITEM as any);
     s.setPatient("patient-a");
     s.setPrescriptionId("rx-1");
+    s.setReferredByDoctor({ id: "doctor-a", name: "Dr A" });
     s.setConsultationFee({ doctorName: "Dr Rao", amount: 400 } as any);
     s.setLoyaltyPointsToRedeem(100);
 
@@ -79,6 +97,7 @@ describe("cart patient switching", () => {
     expect(after.items).toHaveLength(0);
     expect(after.patientId).toBeNull();
     expect(after.prescriptionId).toBeNull();
+    expect(after.referredByDoctorId).toBeNull();
     expect(after.consultationFee).toBeNull();
     expect(after.loyaltyPointsToRedeem).toBe(0);
   });

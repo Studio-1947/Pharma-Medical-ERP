@@ -36,6 +36,9 @@ interface CartState {
   patientId: string | null;
   branchId: string;
   prescriptionId: string | null;
+  /** Doctor whose usual-medicine list supplied this bill (attribution only). */
+  referredByDoctorId: string | null;
+  referredByDoctorName: string | null;
   consultationFee: ConsultationFee | null;
   loyaltyPointsToRedeem: number;
   addItem: (item: Omit<CartItem, "lineTotal" | "saleUnit" | "stripSize"> & { stripSize?: number; saleUnit?: "pack" | "loose" }) => void;
@@ -47,6 +50,7 @@ interface CartState {
   setPatient: (id: string | null) => void;
   setBranchId: (id: string) => void;
   setPrescriptionId: (id: string | null) => void;
+  setReferredByDoctor: (doctor: { id: string; name: string } | null) => void;
   setConsultationFee: (fee: ConsultationFee | null) => void;
   setLoyaltyPointsToRedeem: (points: number) => void;
   clear: () => void;
@@ -69,6 +73,8 @@ export const useCartStore = create<CartState>()(
       patientId: null,
       branchId: "",
       prescriptionId: null,
+      referredByDoctorId: null,
+      referredByDoctorName: null,
       consultationFee: null,
       loyaltyPointsToRedeem: 0,
       addItem: (item) => {
@@ -166,15 +172,22 @@ export const useCartStore = create<CartState>()(
             : {
                 patientId: id,
                 prescriptionId: null,
+                referredByDoctorId: null,
+                referredByDoctorName: null,
                 consultationFee: null,
                 loyaltyPointsToRedeem: 0,
               },
         ),
       setBranchId: (id) => set({ branchId: id }),
       setPrescriptionId: (id) => set({ prescriptionId: id }),
+      setReferredByDoctor: (doctor) =>
+        set({
+          referredByDoctorId: doctor?.id ?? null,
+          referredByDoctorName: doctor?.name ?? null,
+        }),
       setConsultationFee: (fee) => set({ consultationFee: fee }),
       setLoyaltyPointsToRedeem: (points) => set({ loyaltyPointsToRedeem: points }),
-      clear: () => set({ items: [], patientId: null, prescriptionId: null, consultationFee: null, loyaltyPointsToRedeem: 0 }),
+      clear: () => set({ items: [], patientId: null, prescriptionId: null, referredByDoctorId: null, referredByDoctorName: null, consultationFee: null, loyaltyPointsToRedeem: 0 }),
       totals: () => {
         const items = get().items;
         let subtotal = 0;
@@ -202,7 +215,7 @@ export const useCartStore = create<CartState>()(
     {
       name: "pharmerp-cart",
       skipHydration: true,
-      partialize: (s) => ({ items: s.items, patientId: s.patientId, prescriptionId: s.prescriptionId, consultationFee: s.consultationFee, branchId: s.branchId }),
+      partialize: (s) => ({ items: s.items, patientId: s.patientId, prescriptionId: s.prescriptionId, referredByDoctorId: s.referredByDoctorId, referredByDoctorName: s.referredByDoctorName, consultationFee: s.consultationFee, branchId: s.branchId }),
     },
   ),
 );

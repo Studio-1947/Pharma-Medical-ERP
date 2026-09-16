@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
@@ -89,6 +89,12 @@ function renderModal(props: Partial<React.ComponentProps<typeof MedicineStockMod
   );
 }
 
+async function pickMonth(field: "Expiry Date" | "Mfg Date", year: string, month: string) {
+  await userEvent.click(screen.getByRole("button", { name: field }));
+  await userEvent.selectOptions(screen.getByLabelText(`Year for ${field}`), year);
+  await userEvent.click(screen.getByRole("button", { name: month }));
+}
+
 describe("medicine stock modal — direct receive", () => {
   beforeEach(() => {
     get.mockReset();
@@ -127,9 +133,8 @@ describe("medicine stock modal — direct receive", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Edit \/ Restock/i }));
 
     expect(screen.getByPlaceholderText("e.g. BATCH-992")).toHaveValue("SPT251457F");
-    const monthInputs = document.querySelectorAll('input[type="month"]');
-    expect(monthInputs[0]).toHaveValue("2027-08");
-    expect(monthInputs[1]).toHaveValue("2025-09");
+    expect(screen.getByRole("button", { name: "Expiry Date" })).toHaveTextContent("August 2027");
+    expect(screen.getByRole("button", { name: "Mfg Date" })).toHaveTextContent("September 2025");
     expect(screen.getByLabelText(/^MRP/i)).toHaveValue(120);
   });
 
@@ -139,8 +144,7 @@ describe("medicine stock modal — direct receive", () => {
     const batchNo = await screen.findByPlaceholderText("e.g. BATCH-992");
     await userEvent.type(batchNo, "bat-77");
 
-    const expiry = document.querySelector('input[type="month"]') as HTMLInputElement;
-    fireEvent.change(expiry, { target: { value: "2027-10" } });
+    await pickMonth("Expiry Date", "2027", "Oct");
 
     await userEvent.click(screen.getByRole("button", { name: /Confirm Receive Stock/i }));
 
@@ -199,8 +203,7 @@ describe("medicine stock modal — direct receive", () => {
 
     const batchNo = await screen.findByPlaceholderText("e.g. BATCH-992");
     await userEvent.type(batchNo, "bat-88");
-    const expiry = document.querySelector('input[type="month"]') as HTMLInputElement;
-    fireEvent.change(expiry, { target: { value: "2027-10" } });
+    await pickMonth("Expiry Date", "2027", "Oct");
     await userEvent.type(screen.getByLabelText(/MRP/i), "0");
 
     const mrp = screen.getByLabelText(/MRP/i) as HTMLInputElement;
@@ -221,8 +224,7 @@ describe("medicine stock modal — direct receive", () => {
 
     const batchNo = await screen.findByPlaceholderText("e.g. BATCH-992");
     await userEvent.type(batchNo, "bat-88");
-    const expiry = document.querySelector('input[type="month"]') as HTMLInputElement;
-    fireEvent.change(expiry, { target: { value: "2027-10" } });
+    await pickMonth("Expiry Date", "2027", "Oct");
     await userEvent.type(screen.getByLabelText(/MRP/i), "0");
 
     // Submitting the form directly is what a browser that skips constraint
@@ -242,8 +244,7 @@ describe("medicine stock modal — direct receive", () => {
 
     const batchNo = await screen.findByPlaceholderText("e.g. BATCH-992");
     await userEvent.type(batchNo, "bat-88");
-    const expiry = document.querySelector('input[type="month"]') as HTMLInputElement;
-    fireEvent.change(expiry, { target: { value: "2027-10" } });
+    await pickMonth("Expiry Date", "2027", "Oct");
     await userEvent.type(screen.getByLabelText(/MRP/i), "142.75");
 
     await userEvent.click(screen.getByRole("button", { name: /Confirm Receive Stock/i }));
