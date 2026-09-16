@@ -42,6 +42,7 @@ import { DoctorsOverview } from "@/components/modules/billing/doctors-overview";
 import { DoctorMedicineManager } from "@/components/modules/clinic/doctor-medicine-manager";
 import { OtcCounterSale } from "@/components/modules/billing/otc-counter-sale";
 import { MedicineBatchPickerModal } from "@/components/modules/billing/medicine-batch-picker-modal";
+import { RxPickerModal } from "@/components/modules/billing/rx-picker-modal";
 import { InvoiceDetailModal } from "@/components/modules/billing/invoice-detail-modal";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
 import { useToast } from "@/components/ui/toast";
@@ -638,6 +639,7 @@ export function PatientFirstBilling({
     doctor: any;
   } | null>(null);
   const [doctorPatientSearch, setDoctorPatientSearch] = useState("");
+  const [doctorPrescriptionOpen, setDoctorPrescriptionOpen] = useState(false);
   const debouncedDoctorPatientSearch = useDebounce(doctorPatientSearch, 250);
   const { data: doctorPatientRaw, isFetching: doctorPatientsFetching } = useQuery({
     queryKey: ["doctor-medicine-patient-search", debouncedDoctorPatientSearch],
@@ -851,6 +853,39 @@ export function PatientFirstBilling({
     cart.setReferredByDoctor({ id: doctor.id, name: doctorName });
     setQuery(patient.name ?? "");
     setShowResults(false);
+    setPendingDoctorMedicine(null);
+    setDoctorPatientSearch("");
+    await addDoctorMedicineToCart(row);
+  };
+
+  /**
+   * Doctor attribution does not require a patient account. A walk-in can buy
+   * a medicine recommended by an in-store doctor; keep the patient empty but
+   * retain the doctor on the invoice for dispensing history and reporting.
+   */
+  const continueDoctorMedicineWithoutPatient = async () => {
+    if (!pendingDoctorMedicine) return;
+    const { row, doctor } = pendingDoctorMedicine;
+    const doctorName =
+      [doctor.firstName, doctor.lastName].filter(Boolean).join(" ") ||
+      doctor.email ||
+      "Doctor";
+    cart.setReferredByDoctor({ id: doctor.id, name: doctorName });
+    setPendingDoctorMedicine(null);
+    setDoctorPatientSearch("");
+    await addDoctorMedicineToCart(row);
+  };
+
+  const continueDoctorMedicineWithPrescription = async (rxId: string) => {
+    if (!pendingDoctorMedicine) return;
+    const { row, doctor } = pendingDoctorMedicine;
+    const doctorName =
+      [doctor.firstName, doctor.lastName].filter(Boolean).join(" ") ||
+      doctor.email ||
+      "Doctor";
+    cart.setReferredByDoctor({ id: doctor.id, name: doctorName });
+    cart.setPrescriptionId(rxId);
+    setDoctorPrescriptionOpen(false);
     setPendingDoctorMedicine(null);
     setDoctorPatientSearch("");
     await addDoctorMedicineToCart(row);
@@ -2148,6 +2183,7 @@ export function PatientFirstBilling({
         }
         open={!!pendingDoctorMedicine}
         onClose={() => {
+          setDoctorPrescriptionOpen(false);
           setPendingDoctorMedicine(null);
           setDoctorPatientSearch("");
         }}
@@ -2155,6 +2191,42 @@ export function PatientFirstBilling({
         icon={<Stethoscope size={18} />}
       >
         <div className="space-y-4">
+          <div className="flex flex-col gap-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-sm font-bold text-emerald-900">No patient account needed?</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-emerald-700">
+                Add this as a walk-in sale. The doctor will still be recorded as the referrer.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void continueDoctorMedicineWithoutPatient()}
+              className="shrink-0 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-700"
+            >
+              Continue without patient
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setDoctorPrescriptionOpen(true)}
+            className="flex w-full items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50/70 p-4 text-left transition-colors hover:border-blue-300 hover:bg-blue-50"
+          >
+            <span>
+              <span className="block text-sm font-bold text-blue-900">Scan and save prescription</span>
+              <span className="mt-0.5 block text-xs leading-relaxed text-blue-700">
+                Photograph or upload the paper prescription, save it, and link it directly to this bill.
+              </span>
+            </span>
+            <FileText size={20} className="shrink-0 text-blue-600" />
+          </button>
+
+          <div className="flex items-center gap-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+            <span className="h-px flex-1 bg-slate-200" />
+            Or link a patient
+            <span className="h-px flex-1 bg-slate-200" />
+          </div>
+
           <div>
             <label htmlFor="doctor-medicine-patient" className="text-sm font-bold text-slate-800">
               Patient name or mobile number
@@ -2217,6 +2289,16 @@ export function PatientFirstBilling({
           )}
         </div>
       </Modal>
+
+      <RxPickerModal
+        open={doctorPrescriptionOpen && !!pendingDoctorMedicine}
+        onClose={() => setDoctorPrescriptionOpen(false)}
+        onSelectRx={(rxId) => void continueDoctorMedicineWithPrescription(rxId)}
+        patientId={cart.patientId}
+        patientName={selectedPatient?.name ?? null}
+        context="optional"
+        initialTab="upload"
+      />
 
       {/* Browse a doctor's full list from the top-of-page overview. Deliberately
           patient-free: an operator can eyeball the list before deciding whether

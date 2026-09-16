@@ -81,7 +81,28 @@ vi.mock("@/components/modules/billing/doctor-medicines-panel", () => ({
   DoctorMedicinesPanel: () => null,
 }));
 vi.mock("@/components/modules/billing/doctors-overview", () => ({
-  DoctorsOverview: () => null,
+  DoctorsOverview: ({ onAddMedicine }: any) => (
+    <button
+      type="button"
+      data-testid="doctor-overview-medicine"
+      onClick={() =>
+        onAddMedicine?.(
+          {
+            medicineId: "doctor-med-1",
+            name: "Doctor List Medicine",
+            sku: "DOC-001",
+            priceMrp: "50.00",
+            taxPercent: "0",
+            stripSize: 1,
+            unit: "strip",
+          },
+          { id: "doctor-1", firstName: "Sourav", lastName: "Sardar" },
+        )
+      }
+    >
+      Doctor list medicine
+    </button>
+  ),
 }));
 vi.mock("@/components/modules/billing/otc-counter-sale", () => ({
   OtcCounterSale: ({ medicine }: any) => (
@@ -100,6 +121,16 @@ vi.mock("@/components/modules/billing/medicine-batch-picker-modal", () => ({
           onClick={() => onAdd({ id: "batch-2", batchNo: "BATCH-2", quantity: 50, reservedQty: 0, mrpAtEntry: "75.00" }, 2)}
         >
           Add selected batch to bill
+        </button>
+      </div>
+    ) : null,
+}));
+vi.mock("@/components/modules/billing/rx-picker-modal", () => ({
+  RxPickerModal: ({ open, onSelectRx, initialTab }: any) =>
+    open ? (
+      <div role="dialog" data-testid="doctor-rx-picker" data-initial-tab={initialTab}>
+        <button type="button" onClick={() => onSelectRx("rx-scanned-1")}>
+          Save scanned prescription
         </button>
       </div>
     ) : null,
@@ -301,6 +332,63 @@ describe("counter desk — closing stock gaps from the search results", () => {
       IN_STOCK.id,
     );
     expect(screen.queryByText(/Select physical batch/i)).not.toBeInTheDocument();
+  });
+
+  it("adds a doctor-list medicine as a walk-in without selecting a patient", async () => {
+    stubApi();
+    get.mockImplementation((url: string) => {
+      if (url === "/clinic/doctors") {
+        return Promise.resolve({
+          data: [{ id: "doctor-1", firstName: "Sourav", lastName: "Sardar" }],
+        });
+      }
+      if (url === "/inventory/medicines/doctor-med-1/batches") {
+        return Promise.resolve({
+          data: [{ id: "doctor-batch-1", batchNo: "DOC-BATCH", quantity: 10 }],
+        });
+      }
+      if (url === "/billing/reports/end-of-day") {
+        return Promise.resolve({ data: { totalSales: 0, totalInvoices: 0 } });
+      }
+      return Promise.resolve({ data: [] });
+    });
+    renderDesk();
+
+    await userEvent.click(await screen.findByTestId("doctor-overview-medicine"));
+    expect(await screen.findByText("Select patient for doctor's medicine")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Continue without patient/i }));
+
+    await waitFor(() => expect(screen.getByText("Doctor List Medicine")).toBeInTheDocument());
+    expect(useCartStore.getState().patientId).toBeNull();
+    expect(useCartStore.getState().referredByDoctorId).toBe("doctor-1");
+    expect(useCartStore.getState().referredByDoctorName).toBe("Sourav Sardar");
+  });
+
+  it("scans and saves a prescription directly from the doctor-medicine prompt", async () => {
+    stubApi();
+    get.mockImplementation((url: string) => {
+      if (url === "/clinic/doctors") {
+        return Promise.resolve({
+          data: [{ id: "doctor-1", firstName: "Sourav", lastName: "Sardar" }],
+        });
+      }
+      if (url === "/inventory/medicines/doctor-med-1/batches") {
+        return Promise.resolve({
+          data: [{ id: "doctor-batch-1", batchNo: "DOC-BATCH", quantity: 10 }],
+        });
+      }
+      return Promise.resolve({ data: [] });
+    });
+    renderDesk();
+
+    await userEvent.click(await screen.findByTestId("doctor-overview-medicine"));
+    await userEvent.click(screen.getByRole("button", { name: /Scan and save prescription/i }));
+    expect(screen.getByTestId("doctor-rx-picker")).toHaveAttribute("data-initial-tab", "upload");
+    await userEvent.click(screen.getByRole("button", { name: /Save scanned prescription/i }));
+
+    await waitFor(() => expect(screen.getByText("Doctor List Medicine")).toBeInTheDocument());
+    expect(useCartStore.getState().prescriptionId).toBe("rx-scanned-1");
+    expect(useCartStore.getState().referredByDoctorId).toBe("doctor-1");
   });
 
   it("registers a medicine the catalogue has never seen, name prefilled", async () => {

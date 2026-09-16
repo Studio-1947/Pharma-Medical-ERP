@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { Modal } from "@/components/ui/modal";
@@ -40,6 +40,8 @@ interface Props {
    * be to abandon the record entirely.
    */
   context?: "schedule-h" | "optional";
+  /** Open directly on the relevant task instead of making the cashier switch tabs. */
+  initialTab?: "search" | "upload";
 }
 
 export function RxPickerModal({
@@ -49,6 +51,7 @@ export function RxPickerModal({
   patientId,
   patientName,
   context = "schedule-h",
+  initialTab = "search",
 }: Props) {
   const optionalContext = context === "optional";
   const [tab, setTab] = useState<"search" | "upload">("search");
@@ -70,6 +73,10 @@ export function RxPickerModal({
   // could never run.
   const [walkInName, setWalkInName] = useState("");
   const [walkInPhone, setWalkInPhone] = useState("");
+
+  useEffect(() => {
+    if (open) setTab(initialTab);
+  }, [initialTab, open]);
 
   const { data: rxResponse, isLoading } = useQuery({
     queryKey: ["rx-picker-search", patientId, debouncedSearch],
