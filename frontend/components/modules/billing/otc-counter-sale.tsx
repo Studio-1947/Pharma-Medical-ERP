@@ -82,6 +82,8 @@ type OtcLine = {
   saleUnit: "pack" | "loose";
   quantity: number;
   discountPct: number;
+  /** GST for this bill line; seeded from the catalogue and editable at checkout. */
+  taxPct: number;
   /** Empty means automatic FEFO; otherwise checkout is pinned to this batch. */
   batchId: string;
 };
@@ -91,7 +93,14 @@ function inr(n: number) {
 }
 
 function newLine(medicine: OtcMedicine): OtcLine {
-  return { medicine, saleUnit: "pack", quantity: 1, discountPct: 0, batchId: "" };
+  return {
+    medicine,
+    saleUnit: "pack",
+    quantity: 1,
+    discountPct: 0,
+    taxPct: Number(medicine.taxPercent ?? 0) || 0,
+    batchId: "",
+  };
 }
 
 /** Phone numbers are typed with spaces, hyphens and a country code as often as not. */
@@ -267,7 +276,7 @@ export function OtcCounterSale({
     const q = batchQueries[idx];
     const batches = asArray(q?.data);
     const stripSize = Math.max(1, Number(line.medicine.stripSize ?? 1) || 1);
-    const taxPct = Number(line.medicine.taxPercent ?? 0) || 0;
+    const taxPct = line.taxPct;
     // Shape the unit formatters expect — stripSize arrives as a numeric string
     // from the API and would otherwise be compared as text.
     const unitInfo = {
@@ -562,6 +571,7 @@ export function OtcCounterSale({
           ...(r.line.batchId ? { batchId: r.line.batchId } : {}),
           quantity: r.baseUnits,
           discountPct: r.line.discountPct.toFixed(2),
+          taxPct: r.line.taxPct.toFixed(2),
         })),
         // A credit sale still declares how it was settled. When nothing is paid
         // at the counter that is a single zero-value `credit` entry — the whole
@@ -1374,8 +1384,8 @@ export function OtcCounterSale({
                           </div>
                         )}
 
-                        {/* Quantity + discount */}
-                        <div className={mode === "bill" ? "grid grid-cols-2 gap-3" : ""}>
+                        {/* Quantity + discount + bill-time GST correction */}
+                        <div className={mode === "bill" ? "grid grid-cols-1 sm:grid-cols-3 gap-3" : ""}>
                           <div>
                             <label
                               htmlFor={`otc-quantity-${r.line.medicine.id}`}
@@ -1434,6 +1444,38 @@ export function OtcCounterSale({
                               />
                               <p className="mt-1 text-[11px] text-slate-400">
                                 Comes off before GST is worked out
+                              </p>
+                            </div>
+                          )}
+
+                          {mode === "bill" && (
+                            <div>
+                              <label
+                                htmlFor={`otc-gst-${r.line.medicine.id}`}
+                                className="block text-xs font-bold text-slate-700 mb-1.5"
+                              >
+                                GST %
+                              </label>
+                              <input
+                                id={`otc-gst-${r.line.medicine.id}`}
+                                aria-label={`GST % for ${r.line.medicine.name}`}
+                                type="number"
+                                min={0}
+                                max={100}
+                                step="0.01"
+                                value={r.line.taxPct}
+                                onChange={(e) =>
+                                  updateLine(r.idx, {
+                                    taxPct: Math.min(
+                                      100,
+                                      Math.max(0, Number(e.target.value) || 0),
+                                    ),
+                                  })
+                                }
+                                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                              />
+                              <p className="mt-1 text-[11px] text-slate-400">
+                                Default {Number(r.line.medicine.taxPercent ?? 0) || 0}% · this bill only
                               </p>
                             </div>
                           )}

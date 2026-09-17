@@ -24,6 +24,22 @@ describe("createInvoiceSchema (checkout payload)", () => {
     expect(parsed.items).toHaveLength(1);
   });
 
+  it("accepts a per-line GST override and rejects rates above 100%", () => {
+    const overridden = invoiceItemSchema.parse({
+      medicineId: "11111111-1111-4111-8111-111111111111",
+      quantity: 2,
+      taxPct: "5.00",
+    });
+    expect(overridden.taxPct).toBe("5.00");
+    expect(() =>
+      invoiceItemSchema.parse({
+        medicineId: "11111111-1111-4111-8111-111111111111",
+        quantity: 2,
+        taxPct: "101",
+      }),
+    ).toThrow(/between 0 and 100/);
+  });
+
   it("accepts an empty items array when a consultation fee is present", () => {
     const parsed = createInvoiceSchema.parse({
       items: [],
