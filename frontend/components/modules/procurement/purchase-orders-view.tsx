@@ -5,12 +5,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/lib/api-client";
 import { useAuthStore } from "@/stores/auth.store";
 import { useToast } from "@/components/ui/toast";
-import { Plus, Search, FileText, CheckCircle, XCircle, Send, PlusCircle, PackageCheck, Trash2, Loader2, Edit2 } from "lucide-react";
+import { Plus, Search, FileText, CheckCircle, XCircle, Send, PlusCircle, PackageCheck, Trash2, Loader2, Edit2, ScanLine } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { BranchSelect } from "@/components/shared/branch-select";
 import { useActiveBranchId } from "@/hooks/use-branch";
 import { MedicineCombobox } from "@/components/shared/medicine-combobox";
 import { Pagination, readPageMeta } from "@/components/shared/pagination";
+import { SupplierInvoiceReceiveModal } from "@/components/modules/inventory/supplier-invoice-receive-modal";
+import { invalidateMedicineViews } from "@/lib/query-invalidation";
 
 interface POItem {
   id: string;
@@ -302,6 +304,7 @@ export function PurchaseOrdersView() {
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [selectedPO, setSelectedPO] = useState<PO | null>(null);
   const [grnPO, setGrnPO] = useState<{ id: string; poNumber: string } | null>(null);
+  const [invoiceScanOpen, setInvoiceScanOpen] = useState(false);
 
   // For Create PO Modal
   interface POFormItem {
@@ -564,6 +567,14 @@ export function PurchaseOrdersView() {
         <h3 className="text-base font-semibold">Track & Create Purchase Orders</h3>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => setInvoiceScanOpen(true)}
+            className="inline-flex items-center gap-1.5 border border-emerald-300 bg-emerald-50 text-emerald-800 px-3.5 py-2 rounded-lg text-sm font-semibold shadow-sm transition-all hover:bg-emerald-100"
+            title="Photograph or upload a printed supplier bill; OCR drafts the line items for review"
+          >
+            <ScanLine className="w-4 h-4" />
+            Scan Supplier Bill
+          </button>
+          <button
             onClick={() => autoGeneratePOMutation.mutate()}
             disabled={autoGeneratePOMutation.isPending}
             className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-2 rounded-lg text-sm font-semibold shadow-sm transition-all disabled:opacity-60"
@@ -717,6 +728,17 @@ export function PurchaseOrdersView() {
           <Pagination meta={poMeta} onPageChange={setPoPage} noun="purchase orders" />
         </div>
       )}
+
+      <SupplierInvoiceReceiveModal
+        open={invoiceScanOpen}
+        onClose={() => setInvoiceScanOpen(false)}
+        onComplete={() => {
+          void invalidateMedicineViews(queryClient);
+          queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+          queryClient.invalidateQueries({ queryKey: ["batches"] });
+          queryClient.invalidateQueries({ queryKey: ["low-stock"] });
+        }}
+      />
 
       {/* GRN Modal */}
       {grnPO && (

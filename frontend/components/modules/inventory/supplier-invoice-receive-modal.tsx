@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, CheckCircle2, FileImage, Loader2, Plus, Search, Trash2, Upload } from "lucide-react";
+import { Camera, CheckCircle2, FileImage, Info, Loader2, Plus, Search, Trash2, Upload } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { apiClient } from "@/lib/api-client";
 import { useActiveBranchId } from "@/hooks/use-branch";
@@ -52,6 +52,12 @@ export function SupplierInvoiceReceiveModal({ open, onClose, onComplete }: {
   const [newSupplier, setNewSupplier] = useState({ name: "", code: "", phone: "", gstNo: "", address: "" });
   const [supplierError, setSupplierError] = useState("");
   const [savingSupplier, setSavingSupplier] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<{ name: string; size: number; url: string } | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+
+  useEffect(() => () => {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+  }, []);
 
   const { data: supplierResponse } = useQuery({
     queryKey: ["supplier-invoice-suppliers"],
@@ -72,6 +78,14 @@ export function SupplierInvoiceReceiveModal({ open, onClose, onComplete }: {
         return { ...row, id: `${Date.now()}-${index}`, matches: [], medicine: null };
       }
     }));
+  }
+
+  function selectFile(file: File) {
+    if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    const url = URL.createObjectURL(file);
+    previewUrlRef.current = url;
+    setSelectedImage({ name: file.name, size: file.size, url });
+    void extract(file);
   }
 
   async function extract(file: File) {
@@ -289,13 +303,24 @@ export function SupplierInvoiceReceiveModal({ open, onClose, onComplete }: {
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50 p-4 text-sm font-bold text-emerald-800 hover:bg-emerald-100">
             <Camera size={18} /> Photograph printed bill
-            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => e.target.files?.[0] && void extract(e.target.files[0])} />
+            <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => e.target.files?.[0] && selectFile(e.target.files[0])} />
           </label>
           <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-300 p-4 text-sm font-bold text-slate-700 hover:bg-slate-50">
             <Upload size={18} /> Upload bill image
-            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && void extract(e.target.files[0])} />
+            <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && selectFile(e.target.files[0])} />
           </label>
         </div>
+
+        {selectedImage && (
+          <div className="flex items-center gap-3 rounded-xl border border-slate-200 bg-white p-2">
+            <img src={selectedImage.url} alt="Scanned supplier bill" className="h-20 w-20 shrink-0 rounded-lg border object-cover" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-bold text-slate-700">{selectedImage.name}</p>
+              <p className="text-[11px] text-slate-500">{(selectedImage.size / 1024).toFixed(0)} KB</p>
+              <p className="mt-1 flex items-start gap-1 text-[11px] text-slate-500"><Info size={12} className="mt-0.5 shrink-0" /> Keep this open to compare against the extracted rows below before receiving.</p>
+            </div>
+          </div>
+        )}
 
         {busy && <div className="rounded-lg bg-blue-50 p-3 text-sm font-semibold text-blue-700"><Loader2 className="mr-2 inline animate-spin" size={16} />Processing {progress ? `${progress}%` : "..."}</div>}
         {message && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">{message}</p>}
