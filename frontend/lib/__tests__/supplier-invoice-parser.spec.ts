@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseSupplierInvoiceText } from "../supplier-invoice-parser";
+import { parseSupplierInvoiceMetadata, parseSupplierInvoiceText } from "../supplier-invoice-parser";
 
 describe("supplier invoice OCR parser", () => {
   it("extracts billed and free quantities, batch, expiry and prices", () => {
@@ -16,8 +16,20 @@ describe("supplier invoice OCR parser", () => {
         mrp: 125,
         rate: 95.25,
         discountPct: 4,
+        taxPct: 5,
       }),
     ]);
+  });
+
+  it("extracts editable supplier invoice header fields", () => {
+    expect(parseSupplierInvoiceMetadata(
+      "M/s MEDICUS DISTRIBUTORS\nGSTIN: 19ABOFM5738A1Z0\nInvoice No: A000198 Date: 16-09-2026",
+    )).toEqual({
+      supplierName: "MEDICUS DISTRIBUTORS",
+      gstNo: "19ABOFM5738A1Z0",
+      invoiceNo: "A000198",
+      invoiceDate: "2026-09-16",
+    });
   });
 
   it("ignores headers, totals and incomplete OCR lines", () => {

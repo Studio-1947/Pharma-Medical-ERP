@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { Camera, CheckCircle2, FileImage, Loader2, Trash2, Upload } from "lucide-react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Camera, CheckCircle2, FileImage, Loader2, Plus, Search, Trash2, Upload } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { apiClient } from "@/lib/api-client";
 import { useActiveBranchId } from "@/hooks/use-branch";
 import { canSellLooseUnits, getLooseUnitLabel, getUnitLabel } from "@/lib/stock-unit-formatter";
-import { parseSupplierInvoiceText, SupplierInvoiceRow } from "@/lib/supplier-invoice-parser";
+import { parseSupplierInvoiceMetadata, parseSupplierInvoiceText, SupplierInvoiceRow } from "@/lib/supplier-invoice-parser";
 import { invalidateMedicineViews } from "@/lib/query-invalidation";
 
 type MedicineMatch = {
@@ -26,7 +26,9 @@ type DraftRow = SupplierInvoiceRow & {
   error?: string;
 };
 
-function listFrom(response: any): MedicineMatch[] {
+type SupplierMatch = { id: string; name: string; gstNo?: string | null };
+
+function listFrom<T = MedicineMatch>(response: any): T[] {
   const value = response?.data?.data ?? response?.data ?? response;
   return Array.isArray(value) ? value : [];
 }
@@ -43,6 +45,16 @@ export function SupplierInvoiceReceiveModal({ open, onClose, onComplete }: {
   const [progress, setProgress] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
+  const [supplierId, setSupplierId] = useState("");
+  const [invoiceNo, setInvoiceNo] = useState("");
+  const [invoiceDate, setInvoiceDate] = useState("");
+
+  const { data: supplierResponse } = useQuery({
+    queryKey: ["supplier-invoice-suppliers"],
+    queryFn: () => apiClient.get("/procurement/suppliers", { params: { limit: 1000 } }),
+    enabled: open,
+  });
+  const suppliers = listFrom<SupplierMatch>(supplierResponse);
 
   async function matchRows(parsed: SupplierInvoiceRow[]) {
     return Promise.all(parsed.map(async (row, index) => {
@@ -70,6 +82,14 @@ export function SupplierInvoiceReceiveModal({ open, onClose, onComplete }: {
         },
       });
       setRawText(result.data.text);
+      const metadata = parseSupplierInvoiceMetadata(result.data.text);
+      setInvoiceNo(metadata.invoiceNo);
+      setInvoiceDate(metadata.invoiceDate);
+      const supplier = suppliers.find((candidate) =>
+        (metadata.gstNo && candidate.gstNo?.toUpperCase() === metadata.gstNo) ||
+        (metadata.supplierName && candidate.name.toLowerCase().includes(metadata.supplierName.toLowerCase())),
+      );
+      if (supplier) setSupplierId(supplier.id);
       const parsed = parseSupplierInvoiceText(result.data.text);
       setRows(await matchRows(parsed));
       setMessage(parsed.length
@@ -85,9 +105,43 @@ export function SupplierInvoiceReceiveModal({ open, onClose, onComplete }: {
   async function reparse() {
     setBusy(true);
     const parsed = parseSupplierInvoiceText(rawText);
+    const metadata = parseSupplierInvoiceMetadata(rawText);
+    if (metadata.invoiceNo) setInvoiceNo(metadata.invoiceNo);
+    if (metadata.invoiceDate) setInvoiceDate(metadata.invoiceDate);
     setRows(await matchRows(parsed));
     setMessage(`${parsed.length} row${parsed.length === 1 ? "" : "s"} found in the corrected text.`);
     setBusy(false);
+  }
+
+  function addBlankRow() {
+    setRows((current) => [...current, {
+      id: `${Date.now()}-${current.length}`,
+      sourceLine: "",
+      productName: "",
+      billedQty: 1,
+      freeQty: 0,
+      pack: "",
+      manufacturer: "",
+      batchNo: "",
+      expiryDate: "",
+      hsn: "",
+      mrp: 0,
+      rate: 0,
+      discountPct: 0,
+      taxPct: 0,
+      amount: 0,
+      matches: [],
+      medicine: null,
+    }]);
+  }
+
+  async function rematchRow(row: DraftRow) {
+    if (!row.productName.trim()) return;
+    const response = await apiClient.get("/inventory/medicines", {
+      params: { search: row.productName.trim(), limit: 10, isActive: "all" },
+    });
+    const matches = listFrom(response);
+    patchRow(row.id, { matches, medicine: matches[0] ?? null });
   }
 
   function patchRow(id: string, patch: Partial<DraftRow>) {
@@ -107,36 +161,53 @@ export function SupplierInvoiceReceiveModal({ open, onClose, onComplete }: {
       return;
     }
     const pending = rows.filter((row) => row.status !== "saved");
-    if (!pending.length || pending.some((row) => !row.medicine || !row.batchNo || !row.expiryDate || row.billedQty < 0 || row.freeQty < 0)) {
+    if (!supplierId || !invoiceNo.trim()) {
+      setMessage("Select the supplier and enter the supplier invoice number.");
+      return;
+    }
+    if (!pending.length || pending.some((row) => !row.medicine || !row.batchNo || !row.expiryDate || row.billedQty <= 0 || row.freeQty < 0 || row.rate < 0 || row.mrp <= 0)) {
       setMessage("Every pending row needs a matched medicine, batch, expiry, and valid quantities.");
       return;
     }
     setBusy(true);
-    for (const row of pending) {
-      try {
-        await apiClient.post("/inventory/batches", {
-          medicineId: row.medicine!.id,
-          branchId,
-          batchNo: row.batchNo.trim().toUpperCase(),
-          expiryDate: row.expiryDate,
-          quantity: stockQuantity(row),
-          ...(row.freeQty > 0 ? {
-            freeQuantity: canSellLooseUnits(row.medicine!)
-              ? row.freeQty * Math.max(1, Number(row.medicine!.stripSize ?? 1))
-              : row.freeQty,
-          } : {}),
-          costPrice: row.rate.toFixed(2),
-          mrpAtEntry: row.mrp.toFixed(2),
-        });
-        patchRow(row.id, { status: "saved" });
-      } catch (error: any) {
-        patchRow(row.id, { status: "error", error: error?.response?.data?.message ?? "Could not receive this row" });
-      }
+    try {
+      await apiClient.post("/procurement/supplier-invoices/receive", {
+        supplierId,
+        branchId,
+        supplierInvoiceNo: invoiceNo.trim(),
+        ...(invoiceDate ? { invoiceDate } : {}),
+        items: pending.map((row) => {
+          const unitsPerPack = row.medicine && canSellLooseUnits(row.medicine)
+            ? Math.max(1, Number(row.medicine.stripSize ?? 1))
+            : 1;
+          return {
+            medicineId: row.medicine!.id,
+            billedQty: row.billedQty,
+            freeQty: row.freeQty,
+            unitsPerPack,
+            unitCost: row.rate.toFixed(2),
+            taxPct: ([0, 5, 12, 18].includes(row.taxPct) ? row.taxPct : 0).toString(),
+            discountPct: row.discountPct.toFixed(2),
+            mrpAtEntry: row.mrp.toFixed(2),
+            batchNo: row.batchNo.trim().toUpperCase(),
+            expiryDate: row.expiryDate,
+          };
+        }),
+      });
+      setRows((current) => current.map((row) => ({ ...row, status: "saved" })));
+      setMessage("Supplier bill saved. Stock, GRN, purchase record and supplier payable were posted together.");
+      await Promise.all([
+        invalidateMedicineViews(queryClient),
+        queryClient.invalidateQueries({ queryKey: ["purchase-orders"] }),
+        queryClient.invalidateQueries({ queryKey: ["supplier-ledger"] }),
+        queryClient.invalidateQueries({ queryKey: ["payables-aging"] }),
+      ]);
+      onComplete();
+    } catch (error: any) {
+      setMessage(error?.response?.data?.message ?? "Nothing was posted. Correct the bill and try again.");
+    } finally {
+      setBusy(false);
     }
-    setBusy(false);
-    setMessage("Receiving finished. Saved rows are locked; correct and retry any failed rows.");
-    await invalidateMedicineViews(queryClient);
-    onComplete();
   }
 
   return (
@@ -156,12 +227,39 @@ export function SupplierInvoiceReceiveModal({ open, onClose, onComplete }: {
         {busy && <div className="rounded-lg bg-blue-50 p-3 text-sm font-semibold text-blue-700"><Loader2 className="mr-2 inline animate-spin" size={16} />Processing {progress ? `${progress}%` : "..."}</div>}
         {message && <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs font-semibold text-amber-800">{message}</p>}
 
+        {(rawText || rows.length > 0) && (
+          <div className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:grid-cols-3">
+            <label className="text-[11px] font-bold text-slate-700">
+              Supplier
+              <select aria-label="Supplier" value={supplierId} onChange={(e) => setSupplierId(e.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-xs">
+                <option value="">Select supplier</option>
+                {suppliers.map((supplier) => <option key={supplier.id} value={supplier.id}>{supplier.name}{supplier.gstNo ? ` · ${supplier.gstNo}` : ""}</option>)}
+              </select>
+            </label>
+            <label className="text-[11px] font-bold text-slate-700">
+              Supplier invoice number
+              <input aria-label="Supplier invoice number" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-xs" />
+            </label>
+            <label className="text-[11px] font-bold text-slate-700">
+              Invoice date
+              <input aria-label="Invoice date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-xs" />
+            </label>
+          </div>
+        )}
+
         {rawText && (
           <details className="rounded-lg border p-3">
             <summary className="cursor-pointer text-xs font-bold text-slate-600">OCR text (edit if a row was missed)</summary>
             <textarea aria-label="Invoice OCR text" value={rawText} onChange={(e) => setRawText(e.target.value)} rows={7} className="mt-2 w-full rounded-lg border p-2 font-mono text-xs" />
             <button type="button" onClick={() => void reparse()} disabled={busy} className="mt-2 rounded-lg border px-3 py-1.5 text-xs font-bold">Parse corrected text</button>
           </details>
+        )}
+
+        {(rawText || rows.length > 0) && (
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs text-slate-500">Unmatched medicines must be searched and selected before anything is posted.</p>
+            <button type="button" onClick={addBlankRow} className="inline-flex shrink-0 items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold"><Plus size={14} /> Add bill row</button>
+          </div>
         )}
 
         {rows.length > 0 && <div className="max-h-[48vh] space-y-3 overflow-y-auto pr-1">
@@ -177,7 +275,8 @@ export function SupplierInvoiceReceiveModal({ open, onClose, onComplete }: {
               ? getLooseUnitLabel(qty, displayInfo)
               : getUnitLabel(qty, displayInfo);
             return <div key={row.id} className={`rounded-xl border p-3 ${row.status === "saved" ? "border-emerald-300 bg-emerald-50" : row.status === "error" ? "border-red-300 bg-red-50" : "border-slate-200"}`}>
-              <div className="mb-2 flex items-center justify-between"><strong className="text-sm">Row {index + 1}: {row.productName}</strong>{row.status === "saved" ? <CheckCircle2 className="text-emerald-600" size={18} /> : <button aria-label={`Remove row ${index + 1}`} onClick={() => setRows((all) => all.filter((item) => item.id !== row.id))}><Trash2 size={16} /></button>}</div>
+              <div className="mb-2 flex items-center justify-between"><strong className="text-sm">Row {index + 1}: {row.productName || "Unmatched bill item"}</strong>{row.status === "saved" ? <CheckCircle2 className="text-emerald-600" size={18} /> : <button aria-label={`Remove row ${index + 1}`} onClick={() => setRows((all) => all.filter((item) => item.id !== row.id))}><Trash2 size={16} /></button>}</div>
+              {row.status !== "saved" && <div className="mb-2 flex gap-2"><input aria-label={`Product name row ${index + 1}`} value={row.productName} onChange={(e) => patchRow(row.id, { productName: e.target.value, medicine: null, matches: [] })} placeholder="Medicine name from printed bill" className="min-w-0 flex-1 rounded border p-2 text-xs" /><button type="button" onClick={() => void rematchRow(row)} className="inline-flex items-center gap-1 rounded border px-3 text-xs font-bold"><Search size={13} /> Match database</button></div>}
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
                 <label className="text-[11px] font-bold">Matched medicine<select disabled={row.status === "saved"} value={row.medicine?.id ?? ""} onChange={(e) => patchRow(row.id, { medicine: row.matches.find((m) => m.id === e.target.value) ?? null })} className="mt-1 w-full rounded border p-2 text-xs"><option value="">Select medicine</option>{row.matches.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}</select></label>
                 <label className="text-[11px] font-bold">Batch<input disabled={row.status === "saved"} value={row.batchNo} onChange={(e) => patchRow(row.id, { batchNo: e.target.value })} className="mt-1 w-full rounded border p-2 text-xs" /></label>
@@ -187,6 +286,8 @@ export function SupplierInvoiceReceiveModal({ open, onClose, onComplete }: {
                 <label className="text-[11px] font-bold">Free packs<input disabled={row.status === "saved"} type="number" min={0} value={row.freeQty} onChange={(e) => patchRow(row.id, { freeQty: Number(e.target.value) })} className="mt-1 w-full rounded border p-2 text-xs" /></label>
                 <label className="text-[11px] font-bold">MRP / pack<input disabled={row.status === "saved"} type="number" min={0} step="0.01" value={row.mrp} onChange={(e) => patchRow(row.id, { mrp: Number(e.target.value) })} className="mt-1 w-full rounded border p-2 text-xs" /></label>
                 <label className="text-[11px] font-bold">Purchase rate / pack<input disabled={row.status === "saved"} type="number" min={0} step="0.01" value={row.rate} onChange={(e) => patchRow(row.id, { rate: Number(e.target.value) })} className="mt-1 w-full rounded border p-2 text-xs" /></label>
+                <label className="text-[11px] font-bold">GST %<select disabled={row.status === "saved"} value={row.taxPct} onChange={(e) => patchRow(row.id, { taxPct: Number(e.target.value) })} className="mt-1 w-full rounded border p-2 text-xs">{[0, 5, 12, 18].map((rate) => <option key={rate} value={rate}>{rate}%</option>)}</select></label>
+                <label className="text-[11px] font-bold">Discount %<input disabled={row.status === "saved"} type="number" min={0} max={100} step="0.01" value={row.discountPct} onChange={(e) => patchRow(row.id, { discountPct: Number(e.target.value) })} className="mt-1 w-full rounded border p-2 text-xs" /></label>
               </div>
               <p className="mt-2 text-xs font-bold text-emerald-700">Will add {qty} {qtyLabel} to stock{row.freeQty ? ` (${row.freeQty} free pack${row.freeQty === 1 ? "" : "s"} included)` : ""}.</p>
               {row.error && <p className="mt-1 text-xs font-semibold text-red-700">{String(row.error)}</p>}

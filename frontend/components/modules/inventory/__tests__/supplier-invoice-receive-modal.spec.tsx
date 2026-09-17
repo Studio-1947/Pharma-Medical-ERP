@@ -19,7 +19,9 @@ import { SupplierInvoiceReceiveModal } from "../supplier-invoice-receive-modal";
 
 describe("supplier invoice bulk receiving", () => {
   it("keeps OCR rows as a draft and converts confirmed strips to tablet stock", async () => {
-    get.mockResolvedValue({ data: [{ id: "med-1", name: "Myscom-LC Tablet", dosageForm: "Tablet", unit: "Strip", stripSize: 10 }] });
+    get.mockImplementation((url: string) => url === "/procurement/suppliers"
+      ? Promise.resolve({ data: [{ id: "sup-1", name: "Medicus Distributors" }] })
+      : Promise.resolve({ data: [{ id: "med-1", name: "Myscom-LC Tablet", dosageForm: "Tablet", unit: "Strip", stripSize: 10 }] }));
     post.mockResolvedValue({ data: { id: "batch-1" } });
     const onComplete = vi.fn();
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -31,17 +33,26 @@ describe("supplier invoice bulk receiving", () => {
     expect(await screen.findByText(/Will add 110 tablets to stock/)).toBeInTheDocument();
     expect(post).not.toHaveBeenCalled();
 
+    await userEvent.selectOptions(screen.getByLabelText("Supplier"), "sup-1");
+    await userEvent.type(screen.getByLabelText("Supplier invoice number"), "A000198");
+
     await userEvent.click(screen.getByRole("button", { name: /review complete.*receive stock/i }));
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
-    expect(post).toHaveBeenCalledWith("/inventory/batches", expect.objectContaining({
-      medicineId: "med-1",
+    expect(post).toHaveBeenCalledWith("/procurement/supplier-invoices/receive", expect.objectContaining({
+      supplierId: "sup-1",
       branchId: "branch-1",
-      batchNo: "RD-6604",
-      expiryDate: "2027-11-01",
-      quantity: 110,
-      freeQuantity: 10,
-      costPrice: "83.06",
-      mrpAtEntry: "109.00",
+      supplierInvoiceNo: "A000198",
+      items: [expect.objectContaining({
+        medicineId: "med-1",
+        billedQty: 10,
+        freeQty: 1,
+        unitsPerPack: 10,
+        unitCost: "83.06",
+        taxPct: "5",
+        batchNo: "RD-6604",
+        expiryDate: "2027-11-01",
+        mrpAtEntry: "109.00",
+      })],
     }));
     expect(onComplete).toHaveBeenCalled();
   });

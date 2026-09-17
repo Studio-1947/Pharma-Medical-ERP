@@ -23,6 +23,7 @@ import {
   createSupplierReturnSchema,
   resolveReturnReplacementSchema,
   resolveReturnCreditNoteSchema,
+  receiveSupplierInvoiceSchema,
 } from "@pharmerp/types";
 
 @ApiTags("procurement")
@@ -286,5 +287,17 @@ export class ProcurementController {
     @CurrentUser() user: JwtPayload,
   ) {
     return this.service.createGRN(id, createGrnSchema.parse(body), user.sub);
+  }
+
+  @Post("supplier-invoices/receive")
+  @Roles("admin", "shop_manager")
+  @ApiOperation({ summary: "Atomically post a reviewed supplier invoice to procurement, stock and payables" })
+  receiveSupplierInvoice(
+    @Body() body: unknown,
+    @CurrentUser() user: JwtPayload,
+  ) {
+    const dto = receiveSupplierInvoiceSchema.parse(body);
+    const branchId = requireBranchScope(user, dto.branchId);
+    return this.service.receiveSupplierInvoice(dto, user.sub, branchId);
   }
 }

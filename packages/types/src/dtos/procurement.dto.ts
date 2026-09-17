@@ -76,6 +76,13 @@ const createGrnItemSchema = z.object({
   freeQty: z.number().int().min(0).optional().default(0),
   batchNo: z.string().min(1).max(100),
   expiryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  // Printed MRP of the sale pack. Older GRN callers may omit it; scanned
+  // supplier invoices provide it so the received batch is immediately priced.
+  mrpAtEntry: z.string().regex(/^\d+(\.\d{1,2})?$/).optional(),
+  // Supplier-invoice receipts may account in packs while stocking tablets.
+  // When present this is the paid pack count used for the payable and PO
+  // receiving status; receivedQty remains the physical stock-unit count.
+  billableQty: z.number().int().min(1).optional(),
 }).refine((item) => item.freeQty <= item.receivedQty, {
   message: "Free quantity cannot exceed total received quantity",
   path: ["freeQty"],
@@ -87,6 +94,31 @@ export const createGrnSchema = z.object({
   qcPassed: z.boolean(),
   qcNotes: z.string().optional(),
   items: z.array(createGrnItemSchema).min(1),
+});
+
+/**
+ * A reviewed supplier bill posted in one operation. Quantities and unitCost
+ * remain in supplier packs, with unitsPerPack converting them to physical
+ * stock. This preserves exact pack-rate accounting without rounding per pill.
+ */
+export const receiveSupplierInvoiceSchema = z.object({
+  supplierId: z.string().uuid(),
+  branchId: z.string().uuid().optional(),
+  supplierInvoiceNo: z.string().min(1).max(100),
+  invoiceDate: z.string().regex(DATE_RE, "Use YYYY-MM-DD").optional(),
+  notes: z.string().max(1000).optional(),
+  items: z.array(z.object({
+    medicineId: z.string().uuid(),
+    billedQty: z.number().int().min(1),
+    freeQty: z.number().int().min(0).default(0),
+    unitsPerPack: z.number().int().min(1).default(1),
+    unitCost: z.string().regex(/^\d+(\.\d{1,2})?$/),
+    taxPct: z.enum(["0", "5", "12", "18"]).default("0"),
+    discountPct: z.string().regex(/^\d+(\.\d{1,2})?$/).default("0"),
+    mrpAtEntry: z.string().regex(/^\d+(\.\d{1,2})?$/),
+    batchNo: z.string().min(1).max(100),
+    expiryDate: z.string().regex(DATE_RE, "Use YYYY-MM-DD"),
+  })).min(1),
 });
 
 export const queryPurchaseOrderSchema = z.object({
@@ -158,6 +190,7 @@ export type QuerySupplierDto = z.infer<typeof querySupplierSchema>;
 export type CreatePurchaseOrderDto = z.infer<typeof createPurchaseOrderSchema>;
 export type ApprovePurchaseOrderDto = z.infer<typeof approvePurchaseOrderSchema>;
 export type CreateGrnDto = z.infer<typeof createGrnSchema>;
+export type ReceiveSupplierInvoiceDto = z.infer<typeof receiveSupplierInvoiceSchema>;
 export type QueryPurchaseOrderDto = z.infer<typeof queryPurchaseOrderSchema>;
 export type CreateSupplierPaymentDto = z.infer<typeof createSupplierPaymentSchema>;
 export type QuerySupplierBillsDto = z.infer<typeof querySupplierBillsSchema>;

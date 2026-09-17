@@ -11,7 +11,15 @@ export interface SupplierInvoiceRow {
   mrp: number;
   rate: number;
   discountPct: number;
+  taxPct: number;
   amount: number;
+}
+
+export interface SupplierInvoiceMetadata {
+  supplierName: string;
+  gstNo: string;
+  invoiceNo: string;
+  invoiceDate: string;
 }
 
 function expiryToDate(value: string): string {
@@ -43,8 +51,8 @@ export function parseSupplierInvoiceText(text: string): SupplierInvoiceRow[] {
     const pack = tokens.shift() ?? "";
 
     const amount = Number(tokens.pop());
-    tokens.pop(); // CGST
-    tokens.pop(); // SGST
+    const cgstPct = Number(tokens.pop());
+    const sgstPct = Number(tokens.pop());
     const discountPct = Number(tokens.pop());
     const rate = Number(tokens.pop());
     const mrp = Number(tokens.pop());
@@ -68,8 +76,32 @@ export function parseSupplierInvoiceText(text: string): SupplierInvoiceRow[] {
       mrp,
       rate,
       discountPct: Number.isFinite(discountPct) ? discountPct : 0,
+      taxPct:
+        Number.isFinite(cgstPct) && Number.isFinite(sgstPct)
+          ? cgstPct + sgstPct
+          : 0,
       amount: Number.isFinite(amount) ? amount : 0,
     });
   }
   return rows;
+}
+
+function invoiceDate(value: string): string {
+  const match = value.match(/(\d{1,2})[-/.](\d{1,2})[-/.](\d{2,4})/);
+  if (!match) return "";
+  const year = Number(match[3]) < 100 ? 2000 + Number(match[3]) : Number(match[3]);
+  return `${year}-${String(Number(match[2])).padStart(2, "0")}-${String(Number(match[1])).padStart(2, "0")}`;
+}
+
+/** Best-effort header extraction; every value remains editable before posting. */
+export function parseSupplierInvoiceMetadata(text: string): SupplierInvoiceMetadata {
+  const compact = text.replace(/\s+/g, " ");
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const invoiceNo = compact.match(/(?:invoice|inv(?:oice)?)\s*(?:no\.?|#|:)\s*[:.-]?\s*([A-Z0-9/-]+)/i)?.[1] ?? "";
+  const dateRaw = compact.match(/(?:invoice\s*)?date\s*[:.-]?\s*(\d{1,2}[-/.]\d{1,2}[-/.]\d{2,4})/i)?.[1] ?? "";
+  const gstNo = compact.match(/(?:GSTIN|GST\s*No\.?)\s*[:.-]?\s*([0-9A-Z]{15})/i)?.[1] ?? "";
+  const supplierName =
+    lines.find((line) => /(?:distributor|pharma|medical|agency|enterprise|supplier)/i.test(line))
+      ?.replace(/^(?:m\/s\.?\s*)/i, "") ?? "";
+  return { supplierName, gstNo: gstNo.toUpperCase(), invoiceNo, invoiceDate: invoiceDate(dateRaw) };
 }
