@@ -50,7 +50,11 @@ interface OtcQuoteInternal extends OtcQuote {
 
 /** Half-up to 2dp — matches Decimal.ROUND_HALF_UP on the server. */
 export function r2(n: number) {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
+  // A fixed, tiny decimal tolerance is intentional here. Number.EPSILON is
+  // too small once a currency value has been multiplied by 100: for example
+  // 89.775 can be represented just below the half-paisa boundary and round to
+  // 89.77, while the server's Decimal.ROUND_HALF_UP correctly returns 89.78.
+  return Math.round((n + 1e-9) * 100) / 100;
 }
 
 export function quoteOtcSale({

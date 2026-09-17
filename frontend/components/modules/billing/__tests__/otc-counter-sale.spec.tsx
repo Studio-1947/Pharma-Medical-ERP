@@ -17,11 +17,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const post = vi.fn();
 const get = vi.fn();
+const patch = vi.fn();
 
 vi.mock("@/lib/api-client", () => ({
   apiClient: {
     get: (...a: unknown[]) => get(...a),
     post: (...a: unknown[]) => post(...a),
+    patch: (...a: unknown[]) => patch(...a),
   },
   queryKeys: {
     invoices: { all: () => ["invoices"] },
@@ -164,6 +166,7 @@ beforeEach(() => {
     return Promise.resolve({ data: BATCHES });
   });
   post.mockResolvedValue({ data: { invoice: { id: "inv-9", invoiceNo: "BRN01-1" } } });
+  patch.mockResolvedValue({ data: {} });
 });
 
 const DOCTORS = [
@@ -199,6 +202,25 @@ async function confirmCheckout(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("OTC counter sale", () => {
+  it("can save a missing strip size from the bill and reveal loose units", async () => {
+    const user = userEvent.setup();
+    renderModal({ ...MEDICINE, stripSize: "1" });
+
+    const unitsPerStrip = await screen.findByLabelText(
+      "Units per strip for Paracetamol 500 mg",
+    );
+    expect(screen.queryByRole("button", { name: /Loose tablets/i })).not.toBeInTheDocument();
+
+    await user.type(unitsPerStrip, "10");
+    await user.click(screen.getByRole("button", { name: /Save & choose/i }));
+
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith("/inventory/medicines/med-1", { stripSize: 10 }),
+    );
+    expect(await screen.findByRole("button", { name: "Full Strip (10 tablets)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Loose tablets" })).toBeInTheDocument();
+  });
+
   it("labels divisible stock as tablets and explains a full-strip shortage", async () => {
     get.mockImplementation((url: string) => {
       if (url.includes("med-1")) {
@@ -239,7 +261,7 @@ describe("OTC counter sale", () => {
     expect(payload.branchId).toBe("branch-1");
     // Quantity reaches the API in loose units — one strip of ten.
     expect(payload.items).toEqual([
-      { medicineId: "med-1", quantity: 10, discountPct: "0.00" },
+      { medicineId: "med-1", quantity: 10, discountPct: "0.00", taxPct: "12.00" },
     ]);
     expect(payload.payments).toEqual([{ mode: "cash", amount: "95.76" }]);
     expect(payload.notes).toContain("OTC counter sale");
@@ -280,6 +302,7 @@ describe("OTC counter sale", () => {
         batchId: "batch-fresh",
         quantity: 10,
         discountPct: "0.00",
+        taxPct: "12.00",
       },
     ]);
     expect(payload.payments).toEqual([{ mode: "cash", amount: "106.40" }]);
@@ -321,6 +344,29 @@ describe("OTC counter sale", () => {
     const [, payload] = post.mock.calls[0] as [string, any];
     expect(payload.items[0].discountPct).toBe("10.00");
     expect(payload.payments[0].amount).toBe("86.18");
+  });
+
+  it("lets staff override GST for this bill and sends the matching total", async () => {
+    const user = userEvent.setup();
+    renderModal();
+    await screen.findByRole("button", { name: /Pay & checkout/i });
+
+    const gst = screen.getByLabelText("GST % for Paracetamol 500 mg");
+    expect(gst).toHaveValue(12);
+    await user.clear(gst);
+    await user.type(gst, "5");
+
+    // 85.50 taxable + 5% GST (4.28) = 89.78.
+    const button = screen.getByRole("button", { name: /Pay & checkout/ });
+    expect(button).toHaveTextContent("89.78");
+    expect(screen.getByText("GST @ 5%" )).toBeInTheDocument();
+    await user.click(button);
+    await confirmCheckout(user);
+
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    const [, payload] = post.mock.calls[0] as [string, any];
+    expect(payload.items[0].taxPct).toBe("5.00");
+    expect(payload.payments[0].amount).toBe("89.78");
   });
 
   it("records a UPI reference against the payment", async () => {
@@ -599,8 +645,8 @@ describe("OTC counter sale", () => {
     const [url, payload] = post.mock.calls[0] as [string, any];
     expect(url).toBe("/billing/invoices");
     expect(payload.items).toEqual([
-      { medicineId: "med-1", quantity: 10, discountPct: "0.00" },
-      { medicineId: "med-2", quantity: 10, discountPct: "0.00" },
+      { medicineId: "med-1", quantity: 10, discountPct: "0.00", taxPct: "12.00" },
+      { medicineId: "med-2", quantity: 10, discountPct: "0.00", taxPct: "12.00" },
     ]);
     // One invoice, one payment — not one bill per medicine.
     expect(payload.payments).toEqual([{ mode: "cash", amount: "140.56" }]);
@@ -629,8 +675,8 @@ describe("OTC counter sale", () => {
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     const [, payload] = post.mock.calls[0] as [string, any];
     expect(payload.items).toEqual([
-      { medicineId: "med-1", quantity: 10, discountPct: "0.00" },
-      { medicineId: "med-2", quantity: 20, discountPct: "10.00" },
+      { medicineId: "med-1", quantity: 10, discountPct: "0.00", taxPct: "12.00" },
+      { medicineId: "med-2", quantity: 20, discountPct: "10.00", taxPct: "12.00" },
     ]);
     expect(payload.payments[0].amount).toBe("176.40");
   });
@@ -712,7 +758,7 @@ describe("OTC counter sale", () => {
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     const [, payload] = post.mock.calls[0] as [string, any];
     expect(payload.items).toEqual([
-      { medicineId: "med-1", quantity: 10, discountPct: "0.00" },
+      { medicineId: "med-1", quantity: 10, discountPct: "0.00", taxPct: "12.00" },
     ]);
     expect(payload.rxPending).toBeUndefined();
     expect(payload.overriddenBy).toBeUndefined();

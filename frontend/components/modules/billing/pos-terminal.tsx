@@ -28,6 +28,7 @@ import { useActiveBranchId } from "@/hooks/use-branch";
 import { sendViaWhatsApp } from "@/lib/patient-messaging";
 import { isValidPhoneNumber } from "@/lib/phone-validation";
 import { invalidateMedicineViews } from "@/lib/query-invalidation";
+import { INVOICE_DOCTOR_LABEL, invoiceDoctorName } from "@/lib/invoice-doctor-label";
 
 
 
@@ -89,6 +90,7 @@ export function PosTerminal({
   const [lastReceiptPatient, setLastReceiptPatient] = useState<any>(null);
   const [lastReceiptPayments, setLastReceiptPayments] = useState<any[]>([]);
   const [lastReceiptFee, setLastReceiptFee] = useState<{ doctorName: string; amount: number } | null>(null);
+  const [lastReceiptDoctorName, setLastReceiptDoctorName] = useState<string | null>(null);
   const [clearConfirm, setClearConfirm] = useState(false);
   const [patientSearch, setPatientSearch] = useState("");
   const searchRef = useRef<HTMLInputElement>(null);
@@ -418,6 +420,11 @@ export function PosTerminal({
       <div class="label">Patient</div>
       <div class="val" style="color:#aaa;font-style:italic">Walk-in Customer</div>
     </div>`}
+    ${invoiceDoctorName(lastInvoice, lastReceiptDoctorName) ? `
+    <div style="grid-column:span 2">
+      <div class="label">${INVOICE_DOCTOR_LABEL}</div>
+      <div class="val">${invoiceDoctorName(lastInvoice, lastReceiptDoctorName)}</div>
+    </div>` : ""}
   </div>
 
   <hr class="divider"/>
@@ -664,6 +671,7 @@ export function PosTerminal({
       setLastReceiptItems([...items]);
       setLastReceiptPatient(selectedPatient ?? null);
       setLastReceiptFee(useCartStore.getState().consultationFee);
+      setLastReceiptDoctorName(useCartStore.getState().referredByDoctorName);
       clear();
       setPayOpen(false);
       setPrintOpen(true);
@@ -2423,6 +2431,12 @@ export function PosTerminal({
                   <div className="col-span-2">
                     <span className="text-gray-500">Patient</span>
                     <p className="font-semibold text-gray-400 italic">Walk-in Customer</p>
+                  </div>
+                )}
+                {invoiceDoctorName(lastInvoice, lastReceiptDoctorName) && (
+                  <div className="col-span-2 mt-1 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wide text-emerald-700">{INVOICE_DOCTOR_LABEL}</span>
+                    <p className="font-bold text-gray-900">{invoiceDoctorName(lastInvoice, lastReceiptDoctorName)}</p>
                   </div>
                 )}
               </div>

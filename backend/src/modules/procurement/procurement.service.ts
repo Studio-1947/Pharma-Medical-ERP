@@ -29,6 +29,7 @@ import type {
   CreateSupplierReturnDto,
   ResolveReturnReplacementDto,
   ResolveReturnCreditNoteDto,
+  ReceiveSupplierInvoiceDto,
 } from "@pharmerp/types";
 
 @Injectable()
@@ -395,6 +396,67 @@ export class ProcurementService {
     });
 
     return { data: result, message: "Goods received note created" };
+  }
+
+  /**
+   * Posts a reviewed physical supplier invoice as its PO + GRN + stock and
+   * payable in one database transaction. This is deliberately not a sequence
+   * of public API calls: a failure must not leave stock without a supplier bill
+   * or a payable without stock.
+   */
+  async receiveSupplierInvoice(
+    dto: ReceiveSupplierInvoiceDto,
+    userId: string,
+    branchId: string,
+  ) {
+    const duplicate = await this.repo.findSupplierInvoice(dto.supplierId, dto.supplierInvoiceNo);
+    if (duplicate) {
+      throw new ConflictException(
+        `Supplier invoice ${dto.supplierInvoiceNo} was already received as ${duplicate.grnNumber}`,
+      );
+    }
+
+    const result = await this.drizzle.db.transaction(async (tx) => {
+      const po = await this.repo.createPO({
+        supplierId: dto.supplierId,
+        branchId,
+        notes: [
+          "Created from scanned supplier invoice",
+          dto.invoiceDate ? `Invoice date ${dto.invoiceDate}` : "",
+          dto.notes ?? "",
+        ].filter(Boolean).join(" · "),
+        items: dto.items.map((item) => ({
+          medicineId: item.medicineId,
+          orderedQty: item.billedQty,
+          unitCost: item.unitCost,
+          taxPct: item.taxPct,
+          schemeFreeQty: item.freeQty,
+          discountPct: item.discountPct,
+          isConsignment: false,
+        })),
+      }, userId, tx);
+
+      const grnResult = await this.repo.createGRN({
+        poId: po.id,
+        supplierInvoiceNo: dto.supplierInvoiceNo,
+        qcPassed: true,
+        qcNotes: "Reviewed and confirmed from supplier invoice scan",
+        items: dto.items.map((item, index) => ({
+          poItemId: po.items[index]!.id,
+          receivedQty: (item.billedQty + item.freeQty) * item.unitsPerPack,
+          rejectedQty: 0,
+          freeQty: item.freeQty * item.unitsPerPack,
+          billableQty: item.billedQty,
+          batchNo: item.batchNo,
+          expiryDate: item.expiryDate,
+          mrpAtEntry: item.mrpAtEntry,
+        })),
+      }, userId, tx);
+      await this.repo.updatePOStatus(po.id, "received", tx);
+      return { po, ...grnResult };
+    });
+
+    return { data: result, message: "Supplier invoice received and posted to stock and ledger" };
   }
 
   // ─── Supplier bills & ledger ────────────────────────────────────────────────

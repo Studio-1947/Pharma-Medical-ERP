@@ -374,7 +374,7 @@ export class BillingService {
           unitMrp,
           allocation.allocate,
           parseFloat(item.discountPct ?? "0"),
-          parseFloat(med.taxPercent),
+          parseFloat(item.taxPct ?? med.taxPercent),
           interState,
         );
         return {
@@ -426,7 +426,7 @@ export class BillingService {
         const adjusted = this.taxService.apportionDiscountAcrossLines(
           lines.map((l) => ({
             taxableAmount: l.taxableAmount,
-            taxPct: parseFloat(l.med.taxPercent),
+            taxPct: parseFloat(l.item.taxPct ?? l.med.taxPercent),
           })),
           manualDiscount.toNumber(),
           interState,
@@ -627,7 +627,7 @@ export class BillingService {
         quantity: line.allocate,
         unitPrice: String(parseFloat(line.mrpAtEntry) / unitsPerSalePack(line.med)),
         discountPct: line.item.discountPct ?? "0",
-        taxPct: String(parseFloat(line.med.taxPercent)),
+        taxPct: String(parseFloat(line.item.taxPct ?? line.med.taxPercent)),
         lineTotal: line.lineTotal.toFixed(2),
         cgstAmt: line.breakdown.cgst.toFixed(2),
         sgstAmt: line.breakdown.sgst.toFixed(2),

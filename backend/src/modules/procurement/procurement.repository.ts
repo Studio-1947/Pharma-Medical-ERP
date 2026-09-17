@@ -187,8 +187,9 @@ export class ProcurementRepository {
   async createPO(
     data: CreatePurchaseOrderDto & { branchId: string },
     raisedBy: string,
+    outerTx?: any,
   ) {
-    return this.db.transaction(async (tx) => {
+    const create = async (tx: any) => {
       const poNumber = `PO-${Date.now()}`;
 
       let subtotal = new Decimal(0);
@@ -224,7 +225,7 @@ export class ProcurementRepository {
         })
         .returning();
 
-      await tx.insert(schema.purchaseOrderItems).values(
+      const createdItems = await tx.insert(schema.purchaseOrderItems).values(
         lines.map(({ item, lineTotal }) => ({
           poId: po!.id,
           medicineId: item.medicineId,
@@ -236,10 +237,12 @@ export class ProcurementRepository {
           isConsignment: item.isConsignment ?? false,
           lineTotal: lineTotal.toFixed(2),
         })),
-      );
+      ).returning();
 
-      return po!;
-    });
+      return { ...po!, items: createdItems };
+    };
+
+    return outerTx ? create(outerTx) : this.db.transaction(create);
   }
 
   /**
@@ -395,7 +398,7 @@ export class ProcurementRepository {
 
       const freeQty = item.freeQty ?? 0;
       const normalizedBatchNo = item.batchNo.trim().toUpperCase();
-      const billedQty = Math.max(0, item.receivedQty - freeQty);
+      const billedQty = item.billableQty ?? Math.max(0, item.receivedQty - freeQty);
       const { lineTotal } = calculateLine({
         unitCost: poItem.unitCost,
         taxPct: poItem.taxPct,
@@ -439,6 +442,7 @@ export class ProcurementRepository {
           .set({
             quantity: sql`${schema.inventoryBatches.quantity} + ${item.receivedQty}`,
             costPrice: sql`ROUND(((${schema.inventoryBatches.costPrice} * ${schema.inventoryBatches.quantity}) + (${effectiveUnitCost}::numeric * ${item.receivedQty}::integer)) / NULLIF(${schema.inventoryBatches.quantity} + ${item.receivedQty}::integer, 0), 2)`,
+            ...(item.mrpAtEntry ? { mrpAtEntry: item.mrpAtEntry } : {}),
             status: sql`CASE WHEN ${schema.inventoryBatches.status} = 'depleted' THEN 'active'::batch_status ELSE ${schema.inventoryBatches.status} END`,
             updatedAt: new Date(),
           })
@@ -454,7 +458,7 @@ export class ProcurementRepository {
           expiryDate: item.expiryDate,
           quantity: item.receivedQty,
           costPrice: effectiveUnitCost,
-          mrpAtEntry: poItem.unitCost, // MRP default to cost if not provided, can be updated later
+          mrpAtEntry: item.mrpAtEntry ?? poItem.unitCost,
           status: "active",
           poId: dto.poId,
           grnId: grn!.id,
@@ -468,6 +472,7 @@ export class ProcurementRepository {
           set: {
             quantity: sql`${schema.inventoryBatches.quantity} + ${item.receivedQty}`,
             costPrice: sql`ROUND(((${schema.inventoryBatches.costPrice} * ${schema.inventoryBatches.quantity}) + (${effectiveUnitCost}::numeric * ${item.receivedQty}::integer)) / NULLIF(${schema.inventoryBatches.quantity} + ${item.receivedQty}::integer, 0), 2)`,
+            ...(item.mrpAtEntry ? { mrpAtEntry: item.mrpAtEntry } : {}),
             status: sql`CASE WHEN ${schema.inventoryBatches.status} = 'depleted' THEN 'active'::batch_status ELSE ${schema.inventoryBatches.status} END`,
             updatedAt: new Date(),
           },
@@ -504,7 +509,7 @@ export class ProcurementRepository {
       await db
         .update(schema.purchaseOrderItems)
         .set({
-          receivedQty: sql`${schema.purchaseOrderItems.receivedQty} + ${item.receivedQty}`,
+          receivedQty: sql`${schema.purchaseOrderItems.receivedQty} + ${item.billableQty ?? item.receivedQty}`,
         })
         .where(eq(schema.purchaseOrderItems.id, item.poItemId));
     }
@@ -519,6 +524,19 @@ export class ProcurementRepository {
       .where(eq(schema.suppliers.id, po.supplierId));
 
     return { grn: grn!, batchIds: createdBatchIds };
+  }
+
+  async findSupplierInvoice(supplierId: string, supplierInvoiceNo: string) {
+    const [row] = await this.db
+      .select({ id: schema.goodsReceivedNotes.id, grnNumber: schema.goodsReceivedNotes.grnNumber })
+      .from(schema.goodsReceivedNotes)
+      .innerJoin(schema.purchaseOrders, eq(schema.goodsReceivedNotes.poId, schema.purchaseOrders.id))
+      .where(and(
+        eq(schema.purchaseOrders.supplierId, supplierId),
+        eq(schema.goodsReceivedNotes.supplierInvoiceNo, supplierInvoiceNo),
+      ))
+      .limit(1);
+    return row ?? null;
   }
 
   async getPOItemsReceivingStatus(poId: string) {

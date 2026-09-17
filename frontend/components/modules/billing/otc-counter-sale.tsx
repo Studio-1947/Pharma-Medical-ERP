@@ -82,6 +82,8 @@ type OtcLine = {
   saleUnit: "pack" | "loose";
   quantity: number;
   discountPct: number;
+  /** GST for this bill line; seeded from the catalogue and editable at checkout. */
+  taxPct: number;
   /** Empty means automatic FEFO; otherwise checkout is pinned to this batch. */
   batchId: string;
 };
@@ -91,7 +93,14 @@ function inr(n: number) {
 }
 
 function newLine(medicine: OtcMedicine): OtcLine {
-  return { medicine, saleUnit: "pack", quantity: 1, discountPct: 0, batchId: "" };
+  return {
+    medicine,
+    saleUnit: "pack",
+    quantity: 1,
+    discountPct: 0,
+    taxPct: Number(medicine.taxPercent ?? 0) || 0,
+    batchId: "",
+  };
 }
 
 /** Phone numbers are typed with spaces, hyphens and a country code as often as not. */
@@ -179,6 +188,9 @@ export function OtcCounterSale({
   const [inactiveMrpValue, setInactiveMrpValue] = useState("");
   const [inactiveMrpLoading, setInactiveMrpLoading] = useState(false);
   const [inactiveMrpError, setInactiveMrpError] = useState<string | null>(null);
+  /** Inline repair for older strip records imported without units-per-strip. */
+  const [stripSizeDrafts, setStripSizeDrafts] = useState<Record<string, string>>({});
+  const [savingStripSizeId, setSavingStripSizeId] = useState<string | null>(null);
 
   const confirmInactiveMrp = async () => {
     if (!inactiveMrpTarget) return;
@@ -209,6 +221,43 @@ export function OtcCounterSale({
       setInactiveMrpLoading(false);
     }
   };
+
+  const enableLooseSale = async (idx: number) => {
+    const line = lines[idx];
+    if (!line) return;
+    const stripSize = Number(stripSizeDrafts[line.medicine.id] ?? "");
+    if (!Number.isInteger(stripSize) || stripSize <= 1) {
+      toastError("Enter tablets per strip", "Use a whole number greater than 1, such as 10 or 15.");
+      return;
+    }
+
+    setSavingStripSizeId(line.medicine.id);
+    try {
+      await apiClient.patch(`/inventory/medicines/${line.medicine.id}`, { stripSize });
+      updateLine(idx, {
+        medicine: { ...line.medicine, stripSize },
+        saleUnit: "pack",
+        quantity: 1,
+      });
+      setStripSizeDrafts((prev) => {
+        const next = { ...prev };
+        delete next[line.medicine.id];
+        return next;
+      });
+      await invalidateMedicineViews(qc);
+      toastSuccess(
+        "Loose sale enabled",
+        `${line.medicine.name} now has ${stripSize} units per strip. Choose a full strip or loose units below.`,
+      );
+    } catch (err: any) {
+      toastError(
+        "Could not save strip size",
+        err?.response?.data?.message ?? "Check the value and try again.",
+      );
+    } finally {
+      setSavingStripSizeId(null);
+    }
+  };
   const [search, setSearch] = useState("");
   // Schedule H at the counter: either a prescription is attached now, or a
   // manager vouches for one and the bill carries the debt until it arrives.
@@ -237,6 +286,8 @@ export function OtcCounterSale({
     setReferredByDoctorId(initialReferredByDoctorId ?? "");
     setNotes("");
     setSearch("");
+    setStripSizeDrafts({});
+    setSavingStripSizeId(null);
     setBilledInvoiceId(null);
     setPrescriptionId(initialPrescriptionId);
     setRxLabel(null);
@@ -267,7 +318,7 @@ export function OtcCounterSale({
     const q = batchQueries[idx];
     const batches = asArray(q?.data);
     const stripSize = Math.max(1, Number(line.medicine.stripSize ?? 1) || 1);
-    const taxPct = Number(line.medicine.taxPercent ?? 0) || 0;
+    const taxPct = line.taxPct;
     // Shape the unit formatters expect — stripSize arrives as a numeric string
     // from the API and would otherwise be compared as text.
     const unitInfo = {
@@ -562,6 +613,7 @@ export function OtcCounterSale({
           ...(r.line.batchId ? { batchId: r.line.batchId } : {}),
           quantity: r.baseUnits,
           discountPct: r.line.discountPct.toFixed(2),
+          taxPct: r.line.taxPct.toFixed(2),
         })),
         // A credit sale still declares how it was settled. When nothing is paid
         // at the counter that is a single zero-value `credit` entry — the whole
@@ -1330,6 +1382,47 @@ export function OtcCounterSale({
                     {!r.loading && !outOfStock && (
                       <>
                         {/* Sale unit — only meaningful when a pack holds more than one */}
+                        {mode === "bill" && r.canSellLoose && r.stripSize <= 1 && (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+                            <label
+                              htmlFor={`otc-strip-size-${r.line.medicine.id}`}
+                              className="block text-xs font-bold text-amber-900 mb-1"
+                            >
+                              Enable loose sale — units per strip
+                            </label>
+                            <p className="text-[11px] text-amber-700 mb-2">
+                              Currently set as one unit per strip. Enter the printed strip size once; it will be saved for future bills.
+                            </p>
+                            <div className="flex gap-2">
+                              <input
+                                id={`otc-strip-size-${r.line.medicine.id}`}
+                                aria-label={`Units per strip for ${r.line.medicine.name}`}
+                                type="number"
+                                min={2}
+                                step={1}
+                                inputMode="numeric"
+                                value={stripSizeDrafts[r.line.medicine.id] ?? ""}
+                                onChange={(e) =>
+                                  setStripSizeDrafts((prev) => ({
+                                    ...prev,
+                                    [r.line.medicine.id]: e.target.value,
+                                  }))
+                                }
+                                placeholder="e.g. 10"
+                                className="min-w-0 flex-1 text-sm border border-amber-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => enableLooseSale(r.idx)}
+                                disabled={savingStripSizeId === r.line.medicine.id}
+                                className="shrink-0 rounded-lg bg-amber-700 px-3 py-2 text-xs font-bold text-white hover:bg-amber-800 disabled:opacity-60"
+                              >
+                                {savingStripSizeId === r.line.medicine.id ? "Saving…" : "Save & choose"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
                         {mode === "bill" && r.canSellLoose && r.stripSize > 1 && (
                           <div>
                             <p
@@ -1374,8 +1467,8 @@ export function OtcCounterSale({
                           </div>
                         )}
 
-                        {/* Quantity + discount */}
-                        <div className={mode === "bill" ? "grid grid-cols-2 gap-3" : ""}>
+                        {/* Quantity + discount + bill-time GST correction */}
+                        <div className={mode === "bill" ? "grid grid-cols-1 sm:grid-cols-3 gap-3" : ""}>
                           <div>
                             <label
                               htmlFor={`otc-quantity-${r.line.medicine.id}`}
@@ -1434,6 +1527,38 @@ export function OtcCounterSale({
                               />
                               <p className="mt-1 text-[11px] text-slate-400">
                                 Comes off before GST is worked out
+                              </p>
+                            </div>
+                          )}
+
+                          {mode === "bill" && (
+                            <div>
+                              <label
+                                htmlFor={`otc-gst-${r.line.medicine.id}`}
+                                className="block text-xs font-bold text-slate-700 mb-1.5"
+                              >
+                                GST %
+                              </label>
+                              <input
+                                id={`otc-gst-${r.line.medicine.id}`}
+                                aria-label={`GST % for ${r.line.medicine.name}`}
+                                type="number"
+                                min={0}
+                                max={100}
+                                step="0.01"
+                                value={r.line.taxPct}
+                                onChange={(e) =>
+                                  updateLine(r.idx, {
+                                    taxPct: Math.min(
+                                      100,
+                                      Math.max(0, Number(e.target.value) || 0),
+                                    ),
+                                  })
+                                }
+                                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                              />
+                              <p className="mt-1 text-[11px] text-slate-400">
+                                Default {Number(r.line.medicine.taxPercent ?? 0) || 0}% · this bill only
                               </p>
                             </div>
                           )}

@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Plus, Search, Barcode, Pill, Trash2, Upload, Camera, ShieldAlert } from "lucide-react";
+import { Plus, Search, Barcode, Pill, Trash2, Upload, Camera, ShieldAlert, FileImage } from "lucide-react";
 import { BarcodeScannerDialog } from "@/components/shared/barcode-scanner-dialog";
 import { apiClient, queryKeys } from "@/lib/api-client";
 import { invalidateMedicineViews } from "@/lib/query-invalidation";
@@ -17,6 +17,7 @@ import { Layers } from "lucide-react";
 import type { CreateMedicineDto } from "@pharmerp/types";
 import { useDebounce } from "@/hooks/use-debounce";
 import { formatStockUnit } from "@/lib/stock-unit-formatter";
+import { SupplierInvoiceReceiveModal } from "./supplier-invoice-receive-modal";
 
 interface Medicine {
   id: string;
@@ -62,6 +63,7 @@ export function MedicineList() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createInitial, setCreateInitial] = useState<Partial<CreateMedicineDto> | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [invoiceScanOpen, setInvoiceScanOpen] = useState(false);
   const [purgeOpen, setPurgeOpen] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<Medicine | null>(null);
@@ -236,6 +238,13 @@ export function MedicineList() {
         >
           <Upload size={16} />
           Import CSV
+        </button>
+        <button
+          onClick={() => setInvoiceScanOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 border border-emerald-200 bg-emerald-50 rounded-lg text-sm font-medium hover:bg-emerald-100 transition-colors text-emerald-800"
+        >
+          <FileImage size={16} />
+          Scan supplier bill
         </button>
         <button
           onClick={() => { setCreateInitial(null); setCreateOpen(true); }}
@@ -615,6 +624,15 @@ export function MedicineList() {
         onClose={() => setViewStockTarget(null)}
         medicineId={viewStockTarget?.id ?? null}
         medicineName={viewStockTarget?.name}
+      />
+      <SupplierInvoiceReceiveModal
+        open={invoiceScanOpen}
+        onClose={() => setInvoiceScanOpen(false)}
+        onComplete={() => {
+          void invalidateMedicineViews(queryClient);
+          queryClient.invalidateQueries({ queryKey: ["batches"] });
+          queryClient.invalidateQueries({ queryKey: ["low-stock"] });
+        }}
       />
     </div>
   );

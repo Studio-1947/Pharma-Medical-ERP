@@ -8,6 +8,7 @@ import { Receipt, AlertTriangle, Loader2, Printer } from "lucide-react";
 import { PHARMACY_PRINT_DETAILS, formatTokenNo } from "@pharmerp/types";
 import { ShareRecordButton } from "@/components/shared/share-record-button";
 import { buildReceiptHeaderHtml, RECEIPT_HEADER_STYLES } from "@/lib/receipt-header";
+import { INVOICE_DOCTOR_LABEL, invoiceDoctorName } from "@/lib/invoice-doctor-label";
 
 /**
  * Read-only view of a past invoice: what was dispensed, from which batch, and
@@ -79,7 +80,7 @@ export function InvoiceDetailModal({
         @page{size:A4;margin:18mm 20mm}*{box-sizing:border-box}body{font:14px 'Segoe UI',Arial,sans-serif;color:#111}.divider{border:0;border-top:1px dashed #bbb;margin:14px 0}.divider-solid{border:0;border-top:2px solid #333;margin:14px 0}.meta{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px}.label{color:#666;font-size:11px;text-transform:uppercase;letter-spacing:.5px}.value{font-size:14px;font-weight:700;margin-top:2px}.right{text-align:right}.center{text-align:center}table{width:100%;border-collapse:collapse}th{font-size:11px;text-transform:uppercase;color:#555;letter-spacing:.5px;padding:7px 6px;border-bottom:2px solid #ddd;text-align:left}td{padding:9px 6px;border-bottom:1px dashed #e5e5e5;vertical-align:top;font-size:13px}.medicine-name{font-size:14px;font-weight:600}.batch-label{color:#777;font-size:11px;margin-top:2px}.amount{font-weight:700}.totals td{padding:5px 6px;border:0}.grand td{font-size:18px;font-weight:900;padding-top:10px;border-top:1px dashed #bbb}.section-label{font-size:11px;font-weight:700;text-transform:uppercase;color:#555;letter-spacing:.7px;margin:12px 0 6px}.badge{display:inline-block;border:1px solid #ddd;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;text-transform:capitalize}.footer{text-align:center;color:#666;font-size:11px;margin-top:20px;padding-top:12px;border-top:1px dashed #ddd;line-height:1.7}${RECEIPT_HEADER_STYLES}
       </style></head><body>
       ${buildReceiptHeaderHtml({ tokenNo: inv.tokenNo, origin: window.location.origin, subtitle: "Tax Invoice / Bill of Supply", branch: inv.branch })}<hr class="divider-solid"/>
-      <div class="meta"><div><div class="label">Invoice No</div><div class="value" style="font-family:monospace">${escapeHtml(inv.invoiceNo ?? "--")}</div></div><div class="right"><div class="label">Date &amp; Time</div><div class="value">${escapeHtml(fmtDate(inv.createdAt))}</div></div><div style="grid-column:span 2"><div class="label">Patient</div><div class="value">${escapeHtml(inv.patient?.name ?? "Walk-in Customer")}</div></div></div>
+      <div class="meta"><div><div class="label">Invoice No</div><div class="value" style="font-family:monospace">${escapeHtml(inv.invoiceNo ?? "--")}</div></div><div class="right"><div class="label">Date &amp; Time</div><div class="value">${escapeHtml(fmtDate(inv.createdAt))}</div></div><div style="grid-column:span 2"><div class="label">Patient</div><div class="value">${escapeHtml(inv.patient?.name ?? "Walk-in Customer")}</div></div>${invoiceDoctorName(inv) ? `<div style="grid-column:span 2"><div class="label">${INVOICE_DOCTOR_LABEL}</div><div class="value">${escapeHtml(invoiceDoctorName(inv))}</div></div>` : ""}</div>
       <hr class="divider"/><table><thead><tr><th style="width:45%">Medicine</th><th class="center">Qty</th><th class="right">MRP/Unit</th><th class="right">Disc</th><th class="right">Tax</th><th class="right">Amount</th></tr></thead><tbody>${rows}</tbody></table>
       <hr class="divider"/><table class="totals"><tbody><tr><td>Subtotal</td><td class="right">${inr(inv.subtotal)}</td></tr><tr><td>Tax (GST)</td><td class="right">${inr(inv.taxAmount)}</td></tr>${Number(inv.discountAmount ?? 0) > 0 ? `<tr><td>Discount</td><td class="right">-${inr(inv.discountAmount)}</td></tr>` : ""}<tr class="grand"><td>TOTAL AMOUNT</td><td class="right">${inr(inv.totalAmount)}</td></tr></tbody></table>
       <hr class="divider"/>${paymentRows ? `<div class="section-label">Payment Details</div><table class="totals"><tbody>${paymentRows}</tbody></table>` : ""}<div class="footer"><b>Thank you for choosing ${escapeHtml(inv.branch?.name?.trim() || PHARMACY_PRINT_DETAILS.legalName)}</b><br/>Goods once sold will not be taken back without a valid reason.<br/>For queries, please contact your shop manager.</div></body></html>`);
@@ -168,11 +169,9 @@ export function InvoiceDetailModal({
                 the doctor behind one is recorded. */}
             {inv.referredByDoctor && (
               <div>
-                <p className="text-[11px] text-muted-foreground">Doctor</p>
+                <p className="text-[11px] text-muted-foreground">{INVOICE_DOCTOR_LABEL}</p>
                 <p className="font-medium truncate">
-                  {[inv.referredByDoctor.firstName, inv.referredByDoctor.lastName]
-                    .filter(Boolean)
-                    .join(" ") || "Doctor"}
+                  {invoiceDoctorName(inv)}
                 </p>
               </div>
             )}

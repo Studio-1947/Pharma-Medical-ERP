@@ -7,6 +7,14 @@ export const invoiceItemSchema = z.object({
   batchId: z.string().uuid().optional(),
   quantity: z.number().int().min(1),
   discountPct: z.string().regex(/^\d+(\.\d{1,2})?$/).default("0"),
+  // Optional bill-time correction. When absent, the medicine catalogue GST
+  // rate remains authoritative; when supplied, the server validates, uses and
+  // persists this rate for this invoice line only.
+  taxPct: z
+    .string()
+    .regex(/^\d+(\.\d{1,2})?$/)
+    .refine((value) => Number(value) <= 100, "GST rate must be between 0 and 100")
+    .optional(),
   // batchId REMOVED — server performs FEFO (BILL-06)
   // unitPrice REMOVED — server reads mrpAtEntry from batch (BILL-07)
   // taxPct REMOVED — server reads medicine.taxPercent from DB
