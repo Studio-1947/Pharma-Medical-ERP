@@ -31,6 +31,18 @@ function getStoredToken(key: "pharmerp_access_token" | "pharmerp_refresh_token")
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const token = getStoredToken("pharmerp_access_token");
   if (token) config.headers["Authorization"] = `Bearer ${token}`;
+
+  // The client defaults to JSON for ordinary API calls. A FormData body is
+  // different: the browser must create Content-Type itself because it also
+  // supplies the unique multipart boundary Fastify uses to find the file.
+  // Keeping application/json here makes req.isMultipart() false and rejects
+  // otherwise valid prescription images before the controller can read them.
+  if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+    // `false` is AxiosHeaders' explicit "do not set or rewrite this header"
+    // marker. Merely deleting it lets Axios apply its generic POST fallback
+    // (`application/x-www-form-urlencoded`) before the browser sees it.
+    config.headers.set("Content-Type", false);
+  }
   return config;
 });
 

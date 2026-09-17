@@ -49,6 +49,32 @@ async function failingRequest(client: Awaited<ReturnType<typeof loadClient>>) {
 }
 
 describe("api client: API unreachable", () => {
+  it("lets the browser set multipart content type and boundary for FormData", async () => {
+    const client = await loadClient();
+    let requestConfig: any;
+    client.defaults.adapter = async (config) => {
+      requestConfig = config;
+      return {
+        data: { key: "prescriptions/test.jpg" },
+        status: 200,
+        statusText: "OK",
+        headers: {},
+        config,
+      };
+    };
+
+    const form = new FormData();
+    form.append("file", new File(["scan"], "prescription.jpg", { type: "image/jpeg" }));
+    await client.post("/prescriptions/upload", form);
+
+    expect(requestConfig.data).toBe(form);
+    // Axios uses false as its sentinel for a header the browser owns. It is
+    // omitted from the wire, where XMLHttpRequest/fetch adds multipart plus
+    // the generated boundary.
+    expect(requestConfig.headers.get("Content-Type")).toBe(false);
+    expect(requestConfig.headers.get("Authorization")).toBe("Bearer access-token");
+  });
+
   it("uses the same-origin API prefix when the build variable is empty", async () => {
     vi.stubEnv("NEXT_PUBLIC_API_URL", "");
     const client = await loadClient();
