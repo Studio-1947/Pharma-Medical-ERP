@@ -188,6 +188,9 @@ export function OtcCounterSale({
   const [inactiveMrpValue, setInactiveMrpValue] = useState("");
   const [inactiveMrpLoading, setInactiveMrpLoading] = useState(false);
   const [inactiveMrpError, setInactiveMrpError] = useState<string | null>(null);
+  /** Inline repair for older strip records imported without units-per-strip. */
+  const [stripSizeDrafts, setStripSizeDrafts] = useState<Record<string, string>>({});
+  const [savingStripSizeId, setSavingStripSizeId] = useState<string | null>(null);
 
   const confirmInactiveMrp = async () => {
     if (!inactiveMrpTarget) return;
@@ -218,6 +221,43 @@ export function OtcCounterSale({
       setInactiveMrpLoading(false);
     }
   };
+
+  const enableLooseSale = async (idx: number) => {
+    const line = lines[idx];
+    if (!line) return;
+    const stripSize = Number(stripSizeDrafts[line.medicine.id] ?? "");
+    if (!Number.isInteger(stripSize) || stripSize <= 1) {
+      toastError("Enter tablets per strip", "Use a whole number greater than 1, such as 10 or 15.");
+      return;
+    }
+
+    setSavingStripSizeId(line.medicine.id);
+    try {
+      await apiClient.patch(`/inventory/medicines/${line.medicine.id}`, { stripSize });
+      updateLine(idx, {
+        medicine: { ...line.medicine, stripSize },
+        saleUnit: "pack",
+        quantity: 1,
+      });
+      setStripSizeDrafts((prev) => {
+        const next = { ...prev };
+        delete next[line.medicine.id];
+        return next;
+      });
+      await invalidateMedicineViews(qc);
+      toastSuccess(
+        "Loose sale enabled",
+        `${line.medicine.name} now has ${stripSize} units per strip. Choose a full strip or loose units below.`,
+      );
+    } catch (err: any) {
+      toastError(
+        "Could not save strip size",
+        err?.response?.data?.message ?? "Check the value and try again.",
+      );
+    } finally {
+      setSavingStripSizeId(null);
+    }
+  };
   const [search, setSearch] = useState("");
   // Schedule H at the counter: either a prescription is attached now, or a
   // manager vouches for one and the bill carries the debt until it arrives.
@@ -246,6 +286,8 @@ export function OtcCounterSale({
     setReferredByDoctorId(initialReferredByDoctorId ?? "");
     setNotes("");
     setSearch("");
+    setStripSizeDrafts({});
+    setSavingStripSizeId(null);
     setBilledInvoiceId(null);
     setPrescriptionId(initialPrescriptionId);
     setRxLabel(null);
@@ -1340,6 +1382,47 @@ export function OtcCounterSale({
                     {!r.loading && !outOfStock && (
                       <>
                         {/* Sale unit — only meaningful when a pack holds more than one */}
+                        {mode === "bill" && r.canSellLoose && r.stripSize <= 1 && (
+                          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-3">
+                            <label
+                              htmlFor={`otc-strip-size-${r.line.medicine.id}`}
+                              className="block text-xs font-bold text-amber-900 mb-1"
+                            >
+                              Enable loose sale — units per strip
+                            </label>
+                            <p className="text-[11px] text-amber-700 mb-2">
+                              Currently set as one unit per strip. Enter the printed strip size once; it will be saved for future bills.
+                            </p>
+                            <div className="flex gap-2">
+                              <input
+                                id={`otc-strip-size-${r.line.medicine.id}`}
+                                aria-label={`Units per strip for ${r.line.medicine.name}`}
+                                type="number"
+                                min={2}
+                                step={1}
+                                inputMode="numeric"
+                                value={stripSizeDrafts[r.line.medicine.id] ?? ""}
+                                onChange={(e) =>
+                                  setStripSizeDrafts((prev) => ({
+                                    ...prev,
+                                    [r.line.medicine.id]: e.target.value,
+                                  }))
+                                }
+                                placeholder="e.g. 10"
+                                className="min-w-0 flex-1 text-sm border border-amber-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500/30"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => enableLooseSale(r.idx)}
+                                disabled={savingStripSizeId === r.line.medicine.id}
+                                className="shrink-0 rounded-lg bg-amber-700 px-3 py-2 text-xs font-bold text-white hover:bg-amber-800 disabled:opacity-60"
+                              >
+                                {savingStripSizeId === r.line.medicine.id ? "Saving…" : "Save & choose"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
                         {mode === "bill" && r.canSellLoose && r.stripSize > 1 && (
                           <div>
                             <p

@@ -17,11 +17,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 const post = vi.fn();
 const get = vi.fn();
+const patch = vi.fn();
 
 vi.mock("@/lib/api-client", () => ({
   apiClient: {
     get: (...a: unknown[]) => get(...a),
     post: (...a: unknown[]) => post(...a),
+    patch: (...a: unknown[]) => patch(...a),
   },
   queryKeys: {
     invoices: { all: () => ["invoices"] },
@@ -164,6 +166,7 @@ beforeEach(() => {
     return Promise.resolve({ data: BATCHES });
   });
   post.mockResolvedValue({ data: { invoice: { id: "inv-9", invoiceNo: "BRN01-1" } } });
+  patch.mockResolvedValue({ data: {} });
 });
 
 const DOCTORS = [
@@ -199,6 +202,25 @@ async function confirmCheckout(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("OTC counter sale", () => {
+  it("can save a missing strip size from the bill and reveal loose units", async () => {
+    const user = userEvent.setup();
+    renderModal({ ...MEDICINE, stripSize: "1" });
+
+    const unitsPerStrip = await screen.findByLabelText(
+      "Units per strip for Paracetamol 500 mg",
+    );
+    expect(screen.queryByRole("button", { name: /Loose tablets/i })).not.toBeInTheDocument();
+
+    await user.type(unitsPerStrip, "10");
+    await user.click(screen.getByRole("button", { name: /Save & choose/i }));
+
+    await waitFor(() =>
+      expect(patch).toHaveBeenCalledWith("/inventory/medicines/med-1", { stripSize: 10 }),
+    );
+    expect(await screen.findByRole("button", { name: "Full Strip (10 tablets)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Loose tablets" })).toBeInTheDocument();
+  });
+
   it("labels divisible stock as tablets and explains a full-strip shortage", async () => {
     get.mockImplementation((url: string) => {
       if (url.includes("med-1")) {
