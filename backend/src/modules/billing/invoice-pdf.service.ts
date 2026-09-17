@@ -161,9 +161,9 @@ export class InvoicePdfService {
         .trim();
       if (referringDoctor) {
         doc.fontSize(7.5).font("Helvetica-Bold").fillColor(GRAY)
-          .text("DOCTOR", col1X, metaY + 38, { lineBreak: false });
+          .text("PRESCRIBED / REFERRED BY", col1X, metaY + 38, { lineBreak: false });
         doc.fontSize(8.5).font("Helvetica").fillColor(BLACK)
-          .text(referringDoctor, col1X + 46, metaY + 38, { width: PW * 0.4, lineBreak: false });
+          .text(`Dr. ${referringDoctor.replace(/^Dr\.?\s+/i, "")}`, col1X + 116, metaY + 38, { width: PW * 0.28, lineBreak: false });
       }
 
       const colWidths = [PW * 0.33, PW * 0.14, PW * 0.1, PW * 0.1, PW * 0.1, PW * 0.1, PW * 0.13];
