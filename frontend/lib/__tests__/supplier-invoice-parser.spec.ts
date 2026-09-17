@@ -23,10 +23,12 @@ describe("supplier invoice OCR parser", () => {
 
   it("extracts editable supplier invoice header fields", () => {
     expect(parseSupplierInvoiceMetadata(
-      "M/s MEDICUS DISTRIBUTORS\nGSTIN: 19ABOFM5738A1Z0\nInvoice No: A000198 Date: 16-09-2026",
+      "M/s MEDICUS DISTRIBUTORS\nMatigara, Siliguri\nPhone: 9832672407\nGSTIN: 19ABOFM5738A1Z0\nInvoice No: A000198 Date: 16-09-2026",
     )).toEqual({
       supplierName: "MEDICUS DISTRIBUTORS",
       gstNo: "19ABOFM5738A1Z0",
+      phone: "9832672407",
+      address: "Matigara, Siliguri",
       invoiceNo: "A000198",
       invoiceDate: "2026-09-16",
     });

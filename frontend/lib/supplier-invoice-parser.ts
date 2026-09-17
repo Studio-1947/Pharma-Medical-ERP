@@ -18,6 +18,8 @@ export interface SupplierInvoiceRow {
 export interface SupplierInvoiceMetadata {
   supplierName: string;
   gstNo: string;
+  phone: string;
+  address: string;
   invoiceNo: string;
   invoiceDate: string;
 }
@@ -103,5 +105,8 @@ export function parseSupplierInvoiceMetadata(text: string): SupplierInvoiceMetad
   const supplierName =
     lines.find((line) => /(?:distributor|pharma|medical|agency|enterprise|supplier)/i.test(line))
       ?.replace(/^(?:m\/s\.?\s*)/i, "") ?? "";
-  return { supplierName, gstNo: gstNo.toUpperCase(), invoiceNo, invoiceDate: invoiceDate(dateRaw) };
+  const phone = compact.match(/(?:phone|ph\.?|mobile)\s*[:.-]?\s*([+()\d][+()\d\s-]{6,19})/i)?.[1]?.trim() ?? "";
+  const supplierLine = lines.findIndex((line) => line === supplierName || line.includes(supplierName));
+  const address = supplierLine >= 0 ? (lines[supplierLine + 1] ?? "") : "";
+  return { supplierName, gstNo: gstNo.toUpperCase(), phone, address, invoiceNo, invoiceDate: invoiceDate(dateRaw) };
 }

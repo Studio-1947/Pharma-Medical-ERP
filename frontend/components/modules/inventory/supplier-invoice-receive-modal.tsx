@@ -48,6 +48,10 @@ export function SupplierInvoiceReceiveModal({ open, onClose, onComplete }: {
   const [supplierId, setSupplierId] = useState("");
   const [invoiceNo, setInvoiceNo] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
+  const [newSupplierOpen, setNewSupplierOpen] = useState(false);
+  const [newSupplier, setNewSupplier] = useState({ name: "", code: "", phone: "", gstNo: "", address: "" });
+  const [supplierError, setSupplierError] = useState("");
+  const [savingSupplier, setSavingSupplier] = useState(false);
 
   const { data: supplierResponse } = useQuery({
     queryKey: ["supplier-invoice-suppliers"],
@@ -75,12 +79,37 @@ export function SupplierInvoiceReceiveModal({ open, onClose, onComplete }: {
     setMessage("Reading invoice image. This can take up to a minute on the first scan...");
     setProgress(0);
     try {
-      const { recognize } = await import("tesseract.js");
-      const result = await recognize(file, "eng", {
+      const { createWorker, PSM } = await import("tesseract.js");
+      const worker = await createWorker("eng", undefined, {
         logger: (event) => {
           if (event.status === "recognizing text") setProgress(Math.round((event.progress ?? 0) * 100));
         },
       });
+      let result;
+      try {
+        await worker.setParameters({
+          tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
+          preserve_interword_spaces: "1",
+          user_defined_dpi: "300",
+        });
+        result = await worker.recognize(file, { rotateAuto: true });
+        if (parseSupplierInvoiceText(result.data.text).length === 0) {
+          setMessage("The table pass found no complete rows. Trying automatic layout detection…");
+          await worker.setParameters({
+            tessedit_pageseg_mode: PSM.AUTO,
+            preserve_interword_spaces: "1",
+          });
+          const fallback = await worker.recognize(file, { rotateAuto: true });
+          if (
+            parseSupplierInvoiceText(fallback.data.text).length >=
+            parseSupplierInvoiceText(result.data.text).length
+          ) {
+            result = fallback;
+          }
+        }
+      } finally {
+        await worker.terminate();
+      }
       setRawText(result.data.text);
       const metadata = parseSupplierInvoiceMetadata(result.data.text);
       setInvoiceNo(metadata.invoiceNo);
@@ -90,6 +119,13 @@ export function SupplierInvoiceReceiveModal({ open, onClose, onComplete }: {
         (metadata.supplierName && candidate.name.toLowerCase().includes(metadata.supplierName.toLowerCase())),
       );
       if (supplier) setSupplierId(supplier.id);
+      setNewSupplier((current) => ({
+        name: metadata.supplierName || current.name,
+        code: current.code || metadata.supplierName.replace(/[^A-Z0-9]/gi, "").slice(0, 12).toUpperCase(),
+        phone: metadata.phone || current.phone,
+        gstNo: metadata.gstNo || current.gstNo,
+        address: metadata.address || current.address,
+      }));
       const parsed = parseSupplierInvoiceText(result.data.text);
       setRows(await matchRows(parsed));
       setMessage(parsed.length
@@ -108,9 +144,46 @@ export function SupplierInvoiceReceiveModal({ open, onClose, onComplete }: {
     const metadata = parseSupplierInvoiceMetadata(rawText);
     if (metadata.invoiceNo) setInvoiceNo(metadata.invoiceNo);
     if (metadata.invoiceDate) setInvoiceDate(metadata.invoiceDate);
+    setNewSupplier((current) => ({
+      name: metadata.supplierName || current.name,
+      code: current.code || metadata.supplierName.replace(/[^A-Z0-9]/gi, "").slice(0, 12).toUpperCase(),
+      phone: metadata.phone || current.phone,
+      gstNo: metadata.gstNo || current.gstNo,
+      address: metadata.address || current.address,
+    }));
     setRows(await matchRows(parsed));
     setMessage(`${parsed.length} row${parsed.length === 1 ? "" : "s"} found in the corrected text.`);
     setBusy(false);
+  }
+
+  async function createSupplierFromBill() {
+    if (!newSupplier.name.trim() || !newSupplier.code.trim() || !newSupplier.phone.trim()) {
+      setSupplierError("Supplier name, code and phone are required. Correct any OCR mistakes before saving.");
+      return;
+    }
+    setSavingSupplier(true);
+    setSupplierError("");
+    try {
+      const response: any = await apiClient.post("/procurement/suppliers", {
+        name: newSupplier.name.trim(),
+        code: newSupplier.code.trim().toUpperCase(),
+        phone: newSupplier.phone.trim(),
+        ...(newSupplier.gstNo.trim() ? { gstNo: newSupplier.gstNo.trim().toUpperCase() } : {}),
+        ...(newSupplier.address.trim() ? { address: newSupplier.address.trim() } : {}),
+      });
+      const created = response?.data?.data ?? response?.data ?? response;
+      if (!created?.id) throw new Error("Supplier was created but no ID was returned.");
+      setSupplierId(created.id);
+      setNewSupplierOpen(false);
+      await queryClient.invalidateQueries({ queryKey: ["supplier-invoice-suppliers"] });
+      setMessage(`${created.name ?? newSupplier.name} was added and selected. Continue reviewing the bill.`);
+    } catch (error: any) {
+      const errors = error?.response?.data?.errors;
+      const first = errors && Object.entries(errors)[0] as [string, string[]] | undefined;
+      setSupplierError(first ? `${first[0]}: ${first[1]?.[0] ?? "invalid"}` : error?.response?.data?.message ?? error?.message ?? "Could not create supplier.");
+    } finally {
+      setSavingSupplier(false);
+    }
   }
 
   function addBlankRow() {
@@ -244,6 +317,25 @@ export function SupplierInvoiceReceiveModal({ open, onClose, onComplete }: {
               Invoice date
               <input aria-label="Invoice date" type="date" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} className="mt-1 w-full rounded-lg border bg-white p-2 text-xs" />
             </label>
+            <div className="sm:col-span-3 flex justify-start">
+              <button type="button" onClick={() => setNewSupplierOpen((value) => !value)} className="inline-flex items-center gap-1 rounded-lg border border-emerald-200 bg-white px-3 py-1.5 text-xs font-bold text-emerald-800">
+                <Plus size={13} /> Supplier not listed? Add from this bill
+              </button>
+            </div>
+            {newSupplierOpen && (
+              <div className="sm:col-span-3 rounded-xl border border-emerald-200 bg-emerald-50/70 p-3">
+                <p className="mb-2 text-xs font-bold text-emerald-900">Review extracted supplier details before saving</p>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  <label className="text-[11px] font-bold">Supplier name *<input aria-label="New supplier name" value={newSupplier.name} onChange={(e) => setNewSupplier((value) => ({ ...value, name: e.target.value }))} className="mt-1 w-full rounded border bg-white p-2 text-xs" /></label>
+                  <label className="text-[11px] font-bold">Supplier code *<input aria-label="New supplier code" value={newSupplier.code} onChange={(e) => setNewSupplier((value) => ({ ...value, code: e.target.value.toUpperCase() }))} className="mt-1 w-full rounded border bg-white p-2 text-xs" /></label>
+                  <label className="text-[11px] font-bold">Phone *<input aria-label="New supplier phone" value={newSupplier.phone} onChange={(e) => setNewSupplier((value) => ({ ...value, phone: e.target.value }))} className="mt-1 w-full rounded border bg-white p-2 text-xs" /></label>
+                  <label className="text-[11px] font-bold">GSTIN<input aria-label="New supplier GSTIN" value={newSupplier.gstNo} onChange={(e) => setNewSupplier((value) => ({ ...value, gstNo: e.target.value.toUpperCase() }))} className="mt-1 w-full rounded border bg-white p-2 text-xs" /></label>
+                  <label className="text-[11px] font-bold sm:col-span-2">Address<input aria-label="New supplier address" value={newSupplier.address} onChange={(e) => setNewSupplier((value) => ({ ...value, address: e.target.value }))} className="mt-1 w-full rounded border bg-white p-2 text-xs" /></label>
+                </div>
+                {supplierError && <p className="mt-2 text-xs font-semibold text-red-700">{supplierError}</p>}
+                <button type="button" disabled={savingSupplier} onClick={() => void createSupplierFromBill()} className="mt-3 rounded-lg bg-emerald-700 px-3 py-2 text-xs font-bold text-white disabled:opacity-60">{savingSupplier ? "Saving supplier…" : "Save and select supplier"}</button>
+              </div>
+            )}
           </div>
         )}
 

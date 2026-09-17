@@ -10,8 +10,13 @@ vi.mock("@/lib/api-client", () => ({
 }));
 vi.mock("@/hooks/use-branch", () => ({ useActiveBranchId: () => ({ branchId: "branch-1", needsSelection: false }) }));
 vi.mock("tesseract.js", () => ({
-  recognize: vi.fn().mockResolvedValue({
-    data: { text: "1. 10+1 10'S MYSCOM-LC TAB BIO RD-6604 11/27 21060909 109.00 83.06 4.00 2.50 2.50 830.60" },
+  PSM: { SINGLE_BLOCK: "6", AUTO: "3" },
+  createWorker: vi.fn().mockResolvedValue({
+    setParameters: vi.fn(),
+    recognize: vi.fn().mockResolvedValue({
+      data: { text: "1. 10+1 10'S MYSCOM-LC TAB BIO RD-6604 11/27 21060909 109.00 83.06 4.00 2.50 2.50 830.60" },
+    }),
+    terminate: vi.fn(),
   }),
 }));
 
@@ -55,5 +60,34 @@ describe("supplier invoice bulk receiving", () => {
       })],
     }));
     expect(onComplete).toHaveBeenCalled();
+  });
+
+  it("creates and selects a supplier from the bill when it is not listed", async () => {
+    vi.clearAllMocks();
+    get.mockImplementation((url: string) => url === "/procurement/suppliers"
+      ? Promise.resolve({ data: [] })
+      : Promise.resolve({ data: [{ id: "med-1", name: "Myscom-LC Tablet", dosageForm: "Tablet", unit: "Strip", stripSize: 10 }] }));
+    post.mockImplementation((url: string) => url === "/procurement/suppliers"
+      ? Promise.resolve({ data: { id: "sup-new", name: "Medicus Distributors" } })
+      : Promise.resolve({ data: {} }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<QueryClientProvider client={client}><SupplierInvoiceReceiveModal open onClose={() => {}} onComplete={() => {}} /></QueryClientProvider>);
+
+    fireEvent.change(screen.getByLabelText(/Photograph printed bill/i), {
+      target: { files: [new File(["image"], "invoice.jpg", { type: "image/jpeg" })] },
+    });
+    await screen.findByText(/Will add 110 tablets to stock/);
+    await userEvent.click(screen.getByRole("button", { name: /Supplier not listed/i }));
+    await userEvent.type(screen.getByLabelText("New supplier name"), "Medicus Distributors");
+    await userEvent.type(screen.getByLabelText("New supplier code"), "MEDICUS");
+    await userEvent.type(screen.getByLabelText("New supplier phone"), "9832672407");
+    await userEvent.click(screen.getByRole("button", { name: /Save and select supplier/i }));
+
+    await waitFor(() => expect(post).toHaveBeenCalledWith("/procurement/suppliers", expect.objectContaining({
+      name: "Medicus Distributors",
+      code: "MEDICUS",
+      phone: "9832672407",
+    })));
+    expect(await screen.findByText(/was added and selected/i)).toBeInTheDocument();
   });
 });
